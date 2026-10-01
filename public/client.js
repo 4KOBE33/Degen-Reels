@@ -4,6 +4,8 @@
   const canvas = $('game');
   const ctx = canvas.getContext('2d');
   const socket = io({ autoConnect: false });
+  // Set by the single-file solo build, where the game runs in the page.
+  const SOLO = !!window.DEGEN_SOLO;
 
   let cfg = null;
   let myId = null;
@@ -25,6 +27,7 @@
 
   const params = new URLSearchParams(location.search);
   $('room').value = params.get('room') || '';
+  $('room').hidden = SOLO;
   try { $('name').value = localStorage.getItem('degen-name') || ''; } catch (e) { /* storage blocked */ }
 
   function join() {
@@ -40,10 +43,11 @@
       myId = res.id;
       roomCode = res.room;
       cfg = res.config;
-      history.replaceState(null, '', `?room=${roomCode}`);
+      if (!SOLO) history.replaceState(null, '', `?room=${roomCode}`);
       $('join').hidden = true;
       $('hud').hidden = false;
       $('inviteText').textContent = `Room ${roomCode}`;
+      $('invite').hidden = SOLO;
       buildWagerButtons();
       buildCarpet();
       requestAnimationFrame(frame);

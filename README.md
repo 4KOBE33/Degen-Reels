@@ -21,7 +21,13 @@ Bots (🤖) fill the table until there are at least 3 players, so you can play s
 
 **Controls:** WASD or arrow keys to move · mouse to aim · click or Space to shoot · 1/2/3 to bet
 
-## Run it
+## Play with friends (one click)
+
+[![Deploy to Render](https://render.com/images/deploy-to-render-button.svg)](https://render.com/deploy?repo=https://github.com/4kobe33/degen-reels)
+
+Click the button, sign in to Render with GitHub, and click **Deploy**. You get a link like `https://degen-reels.onrender.com` that anyone can open. The free plan goes to sleep after about 15 minutes with nobody playing, so the first visit after that takes up to a minute to load.
+
+## Run it on your computer
 
 ```bash
 npm install
@@ -39,6 +45,7 @@ Then open http://localhost:3000. Click **Copy invite link** to share your room. 
 - `server/room.js`: The authoritative game simulation: phases, movement, bullets, chips, and bots.
 - `server/index.js`: Express and Socket.io server, plus room codes.
 - `public/client.js`: Input, networking, canvas rendering, HUD, and the slot machine.
+- `scripts/build-solo.js`: Packs everything into one HTML page that runs solo against bots with no server (`npm run build:solo`).
 
 ## Ideas for next versions
 

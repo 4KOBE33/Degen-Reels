@@ -61,7 +61,7 @@ const OBSTACLES = [
   { x: 1640, y: 560, w: 60, h: 80, kind: 'slots' },
 ];
 
-module.exports = {
+const config = {
   TICK_RATE: 30,
   ARENA,
   OBSTACLES,
@@ -85,3 +85,18 @@ module.exports = {
   MODIFIERS,
   FILLER_SYMBOLS,
 };
+
+// The parts of the config the client needs to draw the game.
+config.clientConfig = {
+  arena: ARENA,
+  obstacles: OBSTACLES,
+  playerRadius: config.PLAYER_RADIUS,
+  weapons: WEAPONS,
+  weaponTiers: WEAPON_TIERS,
+  wagers: WAGERS,
+  jackpot: JACKPOT,
+  fillerSymbols: FILLER_SYMBOLS,
+  phaseTimes: config.PHASE_TIMES,
+};
+
+module.exports = config;

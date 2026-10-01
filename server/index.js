@@ -22,19 +22,6 @@ function randomCode() {
   return code;
 }
 
-// The parts of the config the client needs to draw the game.
-const clientConfig = {
-  arena: C.ARENA,
-  obstacles: C.OBSTACLES,
-  playerRadius: C.PLAYER_RADIUS,
-  weapons: C.WEAPONS,
-  weaponTiers: C.WEAPON_TIERS,
-  wagers: C.WAGERS,
-  jackpot: C.JACKPOT,
-  fillerSymbols: C.FILLER_SYMBOLS,
-  phaseTimes: C.PHASE_TIMES,
-};
-
 io.on('connection', (socket) => {
   let room = null;
 
@@ -56,7 +43,7 @@ io.on('connection', (socket) => {
     }
     room = target;
     const player = room.addHuman(socket, name);
-    ack({ id: player.id, room: code, config: clientConfig });
+    ack({ id: player.id, room: code, config: C.clientConfig });
   });
 
   socket.on('input', (input) => room && room.setInput(socket.id, input));
