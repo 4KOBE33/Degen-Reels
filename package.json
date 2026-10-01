@@ -1,0 +1,19 @@
+{
+  "name": "degen-reels",
+  "version": "0.1.0",
+  "description": "Cartoony multiplayer casino shooter: gamble for your gun, shoot for their chips.",
+  "main": "server/index.js",
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "UNLICENSED",
+  "private": true,
+  "dependencies": {
+    "express": "^4.22.3",
+    "socket.io": "^4.8.4"
+  }
+}
