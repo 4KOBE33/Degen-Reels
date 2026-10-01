@@ -2,9 +2,12 @@
   --ink: #1b0f2b;
   --gold: #ffd23f;
   --red: #e63946;
-  --felt: #1f8a4c;
   --cream: #fff6e0;
   --purple: #3a1d5c;
+  --pink: #ff3fa4;
+  --display: 'Luckiest Guy', 'Arial Black', sans-serif;
+  --body: 'Nunito', system-ui, sans-serif;
+  color-scheme: dark;
 }
 
 * { box-sizing: border-box; }
@@ -13,65 +16,72 @@ html, body {
   margin: 0;
   height: 100%;
   overflow: hidden;
-  background: #120821;
-  font-family: 'Nunito', system-ui, sans-serif;
+  background: #1a0f2e;
   color: var(--cream);
+  font-family: var(--body);
   user-select: none;
 }
 
-canvas { display: block; position: fixed; inset: 0; cursor: crosshair; }
+#app, #app canvas { position: fixed; inset: 0; display: block; }
 
 [hidden] { display: none !important; }
 
-h1, h2, .kicker, .marquee, .btn, #phase, .logo {
-  font-family: 'Luckiest Guy', 'Nunito', sans-serif;
-  letter-spacing: 1px;
-}
+h1, h2, .btn, .label, .chips, #weapon, #prompt, #toast, #center h2 { font-family: var(--display); font-weight: 400; letter-spacing: 1px; }
 
-.screen, .overlay {
+.screen {
   position: fixed;
   inset: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   padding: 16px;
+  background: radial-gradient(circle at 50% 40%, rgba(26, 15, 46, 0.2), rgba(26, 15, 46, 0.8));
+  overflow-y: auto;
 }
-.screen { background: radial-gradient(circle at 50% 30%, #5b1f3a, #120821 70%); }
-.overlay { background: rgba(18, 8, 33, 0.55); pointer-events: none; }
-.overlay .card { pointer-events: auto; }
+.screen.dim { background: rgba(26, 15, 46, 0.55); cursor: pointer; }
 
 .card {
   background: var(--purple);
   border: 5px solid var(--ink);
-  border-radius: 22px;
-  box-shadow: 0 8px 0 var(--ink), 0 0 0 4px var(--gold) inset;
-  padding: 28px;
+  border-radius: 24px;
+  box-shadow: 0 9px 0 var(--ink), 0 0 0 4px var(--gold) inset;
+  padding: 26px;
   width: 100%;
-  max-width: 380px;
+  max-width: 420px;
   text-align: center;
 }
-.card.wide { max-width: 640px; }
 
 .logo {
-  margin: 0 0 6px;
-  font-size: 64px;
-  line-height: 0.9;
+  margin: 0;
+  font-size: 68px;
+  line-height: 0.88;
   color: var(--gold);
   text-shadow: 4px 4px 0 var(--red), 8px 8px 0 var(--ink);
   transform: rotate(-3deg);
 }
-.tag { margin: 12px 0 20px; font-weight: 800; }
+.tag { margin: 14px 0 16px; font-weight: 900; }
 
 input {
   width: 100%;
-  margin-bottom: 10px;
   padding: 12px 14px;
   border: 4px solid var(--ink);
   border-radius: 12px;
-  font: 800 16px 'Nunito', sans-serif;
+  font: 900 17px var(--body);
   background: var(--cream);
   color: var(--ink);
 }
+
+.label { margin: 14px 0 6px; font-size: 16px; color: #ffb3c1; text-align: left; }
+.swatches, .hats { display: flex; gap: 8px; flex-wrap: wrap; }
+.swatch, .hat {
+  border: 4px solid var(--ink);
+  border-radius: 50%;
+  cursor: pointer;
+  transition: transform 0.1s;
+}
+.swatch { width: 36px; height: 36px; }
+.hat { width: 46px; height: 46px; font-size: 24px; background: var(--cream); border-radius: 14px; }
+.swatch.on, .hat.on { transform: translateY(-4px) scale(1.1); box-shadow: 0 0 0 3px var(--gold); }
 
 .btn {
   border: 4px solid var(--ink);
@@ -79,110 +89,106 @@ input {
   background: var(--gold);
   color: var(--ink);
   cursor: pointer;
-  box-shadow: 0 5px 0 var(--ink);
-  transition: transform 0.05s;
+  box-shadow: 0 6px 0 var(--ink);
 }
-.btn:active { transform: translateY(3px); box-shadow: 0 2px 0 var(--ink); }
-.btn.big { width: 100%; padding: 14px; font-size: 24px; }
-.btn.small { padding: 4px 10px; font-size: 14px; box-shadow: 0 3px 0 var(--ink); }
+.btn:active { transform: translateY(3px); box-shadow: 0 3px 0 var(--ink); }
+.btn:focus-visible, .swatch:focus-visible, .hat:focus-visible { outline: 3px solid var(--pink); outline-offset: 2px; }
+.btn.big { width: 100%; margin-top: 20px; padding: 14px; font-size: 26px; }
 
-.error { color: #ff8a8a; font-weight: 800; min-height: 1em; margin: 8px 0 0; }
-.howto { margin-top: 16px; font-size: 14px; line-height: 1.6; opacity: 0.9; }
+.howto { text-align: left; padding-left: 0; list-style: none; margin: 18px 0 0; font-size: 14px; line-height: 1.5; display: grid; gap: 6px; }
 
-h2 { margin: 4px 0 12px; font-size: 40px; color: var(--gold); text-shadow: 3px 3px 0 var(--ink); }
-.kicker { color: #ffb3c1; font-size: 18px; }
-.sub { font-size: 15px; margin: 10px 0; }
+h2 { margin: 0 0 8px; font-size: 40px; color: var(--gold); text-shadow: 3px 3px 0 var(--ink); }
+.keys { line-height: 1.8; margin: 0; }
 
-.rule {
-  display: inline-block;
-  background: var(--cream);
-  color: var(--ink);
-  border: 4px solid var(--ink);
-  border-radius: 12px;
-  padding: 8px 16px;
-  transform: rotate(-2deg);
-  font-weight: 800;
-}
-.rule b { font-family: 'Luckiest Guy', sans-serif; font-weight: 400; font-size: 20px; color: var(--red); }
-
-.wagers { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin-top: 8px; }
-.wager {
-  background: var(--felt);
-  border: 4px solid var(--ink);
-  border-radius: 14px;
-  padding: 10px 6px;
-  cursor: pointer;
-  color: var(--cream);
-  font: 800 13px 'Nunito', sans-serif;
-  box-shadow: 0 5px 0 var(--ink);
-}
-.wager .title { font-family: 'Luckiest Guy', sans-serif; font-size: 20px; color: var(--gold); }
-.wager .cost { font-size: 16px; margin: 2px 0 6px; }
-.wager .odds { opacity: 0.9; line-height: 1.5; }
-.wager.selected { background: var(--red); transform: translateY(-4px); box-shadow: 0 9px 0 var(--ink); }
-.wager .key { opacity: 0.6; font-size: 11px; }
-
-.machine { max-width: 440px; background: linear-gradient(#c1121f, #7a0b14); }
-.marquee { color: var(--gold); font-size: 26px; text-shadow: 2px 2px 0 var(--ink); margin-bottom: 14px; }
-.reels { display: flex; gap: 10px; justify-content: center; }
-.reel {
-  width: 100px;
-  height: 110px;
-  background: var(--cream);
-  border: 5px solid var(--ink);
-  border-radius: 14px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 58px;
-  overflow: hidden;
-}
-.reel.spinning span { filter: blur(1.5px); }
-.reel.landed { animation: thunk 0.2s; }
-@keyframes thunk { 50% { transform: scale(1.12); } }
-.spin-result { min-height: 64px; margin-top: 16px; font-weight: 800; font-size: 18px; }
-.spin-result .gun { font-family: 'Luckiest Guy', sans-serif; font-size: 30px; color: var(--gold); text-shadow: 2px 2px 0 var(--ink); }
-.spin-result .jackpot { color: #7dffb0; font-family: 'Luckiest Guy', sans-serif; font-size: 22px; }
-
-table { width: 100%; border-collapse: collapse; margin-top: 8px; font-weight: 800; }
-th, td { padding: 6px 8px; text-align: left; }
-th { font-size: 12px; text-transform: uppercase; opacity: 0.7; }
-tr.win td { color: var(--gold); }
-tr.me td:first-child::after { content: ' (you)'; opacity: 0.6; }
+/* ---------- HUD ---------- */
 
 #hud { position: fixed; inset: 0; pointer-events: none; }
 .panel {
   position: absolute;
-  background: rgba(27, 15, 43, 0.82);
-  border: 3px solid var(--ink);
-  border-radius: 12px;
-  padding: 8px 12px;
-  font-weight: 800;
+  background: rgba(27, 15, 43, 0.85);
+  border: 4px solid var(--ink);
+  border-radius: 16px;
+  padding: 10px 14px;
+  font-weight: 900;
 }
-#stats { top: 12px; left: 12px; font-size: 18px; line-height: 1.5; }
-#stats .chips { color: var(--gold); font-size: 26px; font-family: 'Luckiest Guy', sans-serif; }
-#phase { top: 12px; left: 50%; transform: translateX(-50%); text-align: center; font-size: 22px; color: var(--gold); white-space: nowrap; }
-#phase small { display: block; font-family: 'Nunito', sans-serif; font-size: 13px; color: var(--cream); }
-#board { top: 12px; right: 12px; font-size: 14px; min-width: 170px; }
-#board div { display: flex; justify-content: space-between; gap: 12px; }
+
+#stack { left: 16px; bottom: 16px; min-width: 190px; }
+.chips { font-size: 40px; color: var(--gold); text-shadow: 3px 3px 0 var(--ink); line-height: 1; }
+#armor { color: #7dd3fc; margin-top: 4px; }
+.goalbar { height: 10px; margin-top: 8px; background: var(--ink); border-radius: 6px; overflow: hidden; }
+#goal { height: 100%; width: 0; background: linear-gradient(90deg, var(--gold), var(--pink)); transition: width 0.3s; }
+
+#weapon { right: 16px; bottom: 16px; font-size: 24px; }
+#weapon .icon { font-size: 28px; }
+#weapon .ammo { color: var(--gold); margin-left: 6px; }
+
+#board { right: 16px; top: 16px; min-width: 200px; font-size: 14px; }
+#board .title { font-family: var(--display); color: var(--gold); font-size: 15px; margin-bottom: 4px; }
+#board div:not(.title) { display: flex; justify-content: space-between; gap: 14px; }
+#board .me { color: var(--gold); }
 #board .dead { opacity: 0.4; text-decoration: line-through; }
-#feed { position: absolute; bottom: 64px; left: 12px; font-weight: 800; font-size: 14px; text-shadow: 2px 2px 0 var(--ink); }
-#feed div { margin-top: 4px; }
-#invite { bottom: 12px; left: 12px; font-size: 13px; pointer-events: auto; display: flex; gap: 10px; align-items: center; }
-#banner {
-  position: absolute;
-  top: 38%;
-  width: 100%;
-  text-align: center;
-  font-family: 'Luckiest Guy', sans-serif;
-  font-size: 44px;
-  color: var(--gold);
-  text-shadow: 4px 4px 0 var(--ink);
+
+#feed { position: absolute; left: 16px; top: 16px; font-weight: 900; font-size: 15px; text-shadow: 2px 2px 0 var(--ink); }
+#feed div { margin-bottom: 4px; }
+
+#crosshair { position: absolute; left: 50%; top: 50%; width: 0; height: 0; }
+#crosshair i { position: absolute; background: #fff; border: 2px solid var(--ink); border-radius: 3px; }
+#crosshair i:nth-child(1) { width: 6px; height: 14px; left: -3px; top: -22px; }
+#crosshair i:nth-child(2) { width: 6px; height: 14px; left: -3px; top: 8px; }
+#crosshair i:nth-child(3) { width: 14px; height: 6px; left: -22px; top: -3px; }
+#crosshair i:nth-child(4) { width: 14px; height: 6px; left: 8px; top: -3px; }
+
+#hitmarker {
+  position: absolute; left: 50%; top: 50%;
+  transform: translate(-50%, -50%) scale(0.6);
+  font: 40px var(--display);
+  color: #fff; text-shadow: 2px 2px 0 var(--ink);
+  opacity: 0;
 }
-#banner small { display: block; font-family: 'Nunito', sans-serif; font-weight: 800; font-size: 18px; color: var(--cream); }
+#hitmarker.show { animation: hit 0.2s ease-out; }
+@keyframes hit { 0% { opacity: 1; transform: translate(-50%, -50%) scale(1.3); } 100% { opacity: 0; transform: translate(-50%, -50%) scale(0.8); } }
+
+#prompt {
+  position: absolute; left: 50%; top: 62%;
+  transform: translateX(-50%);
+  background: var(--cream); color: var(--ink);
+  border: 4px solid var(--ink); border-radius: 14px;
+  padding: 8px 16px; font-size: 20px; white-space: nowrap;
+  box-shadow: 0 5px 0 var(--ink);
+}
+#prompt b { background: var(--gold); border: 3px solid var(--ink); border-radius: 8px; padding: 0 8px; font-weight: 400; }
+
+#toast {
+  position: absolute; left: 50%; top: 14%;
+  transform: translate(-50%, -10px);
+  font-size: 26px; color: var(--cream);
+  text-shadow: 3px 3px 0 var(--ink);
+  text-align: center; width: min(90vw, 760px);
+  opacity: 0; transition: opacity 0.2s, transform 0.2s;
+}
+#toast.show { opacity: 1; transform: translate(-50%, 0); }
+#toast.big { font-size: 36px; color: var(--gold); }
+
+#vignette { position: absolute; inset: 0; box-shadow: inset 0 0 160px 40px rgba(230, 57, 70, 0.75); opacity: 0; }
+#vignette.show { animation: hurt 0.4s ease-out; }
+@keyframes hurt { 0% { opacity: 1; } 100% { opacity: 0; } }
+
+#center {
+  position: absolute; left: 50%; top: 40%;
+  transform: translate(-50%, -50%);
+  text-align: center; font-weight: 900; font-size: 18px;
+  text-shadow: 2px 2px 0 var(--ink);
+}
+#center h2 { font-size: 64px; }
+#center table { margin: 10px auto; border-collapse: collapse; background: rgba(27, 15, 43, 0.85); border: 4px solid var(--ink); border-radius: 12px; }
+#center td { padding: 6px 14px; text-align: left; }
+#center tr.win td { color: var(--gold); }
 
 @media (max-width: 700px) {
   #board { display: none; }
-  .wagers { grid-template-columns: 1fr; }
-  .logo { font-size: 48px; }
+  .logo { font-size: 52px; }
+  #center h2 { font-size: 40px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  #hitmarker.show, #vignette.show { animation-duration: 0.01s; }
 }

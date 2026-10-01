@@ -3,5 +3,5 @@ services:
     name: degen-reels
     runtime: node
     plan: free
-    buildCommand: npm install
-    startCommand: npm start
+    buildCommand: npm install && npm run build
+    startCommand: node server/index.js

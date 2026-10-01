@@ -4,9 +4,9 @@
   "description": "Cartoony multiplayer casino shooter: gamble for your gun, shoot for their chips.",
   "main": "server/index.js",
   "scripts": {
-    "start": "node server/index.js",
-    "dev": "node --watch server/index.js",
-    "build:solo": "node scripts/build-solo.js"
+    "build": "esbuild src/main.js --bundle --minify --format=iife --target=es2020 --outfile=public/game.js",
+    "build:artifact": "npm run build && node scripts/build-artifact.js",
+    "start": "npm run build && node server/index.js"
   },
   "engines": {
     "node": ">=18"
@@ -14,7 +14,8 @@
   "license": "UNLICENSED",
   "private": true,
   "dependencies": {
+    "esbuild": "^0.28.2",
     "express": "^4.22.3",
-    "socket.io": "^4.8.4"
+    "three": "^0.169.0"
   }
 }
