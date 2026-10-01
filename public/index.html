@@ -20,20 +20,25 @@
       <div id="colors" class="swatches"></div>
       <div class="label">Hat</div>
       <div id="hats" class="hats"></div>
-      <button id="play" class="btn big">ENTER THE CASINO</button>
+      <p id="hatHint" class="hint"></p>
+      <button id="play" class="btn big">START A RUN</button>
+      <p id="record" class="record"></p>
       <ul class="howto">
-        <li>🎰 Walk up to a slot machine and press <b>E</b>. It costs chips and gives you a random gun.</li>
-        <li>🪙 Your chips are your health. Get hit and they spill on the floor for anyone to grab.</li>
-        <li>🏆 First to <b>500 chips</b> cashes out and wins.</li>
+        <li>🪙 <b>Chips are your health.</b> Get hit and they spill on the floor for anyone to grab.</li>
+        <li>🎰 Gamble for guns at the slots. Win chips at <b>roulette</b>, <b>blackjack</b> and <b>crash</b>.</li>
+        <li>🛗 Pay the <b>elevator fee</b> before closing time to climb to the next floor.</li>
+        <li>💀 Bust once and the run is over. Back to Floor 1.</li>
       </ul>
     </div>
   </div>
 
   <div id="hud" hidden>
+    <div id="floorbar" class="panel"><span id="floorName"></span><span id="timer"></span></div>
     <div id="stack" class="panel">
       <div class="chips">🪙 <span id="chips">0</span></div>
       <div id="armor" hidden></div>
       <div class="goalbar"><div id="goal"></div></div>
+      <div id="goalText"></div>
     </div>
     <div id="weapon" class="panel"></div>
     <div id="board" class="panel"></div>
@@ -43,13 +48,26 @@
     <div id="prompt" hidden></div>
     <div id="toast"></div>
     <div id="vignette"></div>
-    <div id="center" hidden></div>
+    <div id="table" class="panel" hidden></div>
+    <div id="intro"></div>
+  </div>
+
+  <div id="fade"></div>
+
+  <div id="runover" class="screen dim" hidden>
+    <div class="card">
+      <h2 id="runTitle"></h2>
+      <p id="runLine"></p>
+      <p id="runUnlocks" class="unlocks"></p>
+      <button id="runAgain" class="btn big">NEW RUN</button>
+      <button id="toMenu" class="btn ghost">Change your look</button>
+    </div>
   </div>
 
   <div id="paused" class="screen dim" hidden>
     <div class="card">
       <h2>CLICK TO PLAY</h2>
-      <p class="keys"><b>WASD</b> move · <b>Mouse</b> aim · <b>Click</b> shoot<br><b>Space</b> jump · <b>Shift</b> sprint · <b>E</b> pull slots · <b>Esc</b> pause</p>
+      <p class="keys"><b>WASD</b> move · <b>Mouse</b> aim · <b>Click</b> shoot<br><b>Space</b> jump · <b>Shift</b> sprint · <b>E</b> use / leave · <b>Esc</b> pause<br>At tables: <b>1 2 3</b> to play · <b>scroll</b> or <b>Z X</b> to change your bet</p>
     </div>
   </div>
 

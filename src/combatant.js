@@ -1,6 +1,6 @@
 // Anyone in the casino who can fight: you or a bot.
 import * as THREE from 'three';
-import { PLAYER, START_CHIPS, WEAPONS } from './config.js';
+import { PLAYER, START_CHIPS, WEAPONS, RARITIES } from './config.js';
 import { createCharacter } from './character.js';
 import { resolve } from './physics.js';
 import { sfx } from './audio.js';
@@ -36,10 +36,18 @@ export class Combatant {
     this.setWeapon('fists');
   }
 
-  setWeapon(kind) {
+  setWeapon(kind, rarity = 0, ammo = null) {
     this.weapon = kind;
-    this.ammo = WEAPONS[kind].ammo;
-    this.char.setWeapon(kind);
+    this.rarity = kind === 'fists' ? 0 : rarity;
+    const base = WEAPONS[kind].ammo;
+    this.ammo = ammo !== null ? ammo : (Number.isFinite(base) ? Math.round(base * RARITIES[this.rarity].ammo) : base);
+    this.char.setWeapon(kind, RARITIES[this.rarity].color);
+  }
+
+  // e.g. "Epic Boomstick"
+  get weaponName() {
+    const name = WEAPONS[this.weapon].name;
+    return this.rarity ? `${RARITIES[this.rarity].name} ${name}` : name;
   }
 
   get forward() {
@@ -68,14 +76,15 @@ export class Combatant {
 
     this.vel.y -= PLAYER.gravity * dt;
     this.pos.addScaledVector(this.vel, dt);
-    const r = resolve(this.pos, this.vel, PLAYER.radius, this.game.world.colliders);
+    const r = resolve(this.pos, this.vel, PLAYER.radius, this.game.world);
     this.onGround = r.onGround;
     if (r.landed > 5) this.char.land(r.landed);
     this.cooldown -= dt;
 
-    if (!this.alive) {
+    // Busted rivals lie there a moment, then get dragged out by security.
+    if (!this.alive && !this.isPlayer) {
       this.respawnIn -= dt;
-      if (this.respawnIn <= 0) this.game.respawn(this);
+      if (this.respawnIn <= 0) this.game.removeCombatant(this);
     }
 
     // Feed the animation with movement relative to where you're facing.

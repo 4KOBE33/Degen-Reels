@@ -1,6 +1,6 @@
 // Bot brains: gamble when they're unarmed, grab loose chips, and pick fights.
 import * as THREE from 'three';
-import { WEAPONS, MACHINES } from './config.js';
+import { WEAPONS } from './config.js';
 
 const tmp = new THREE.Vector3();
 
@@ -34,13 +34,13 @@ export class BotBrain {
 
     // Unarmed (or stuck with a spoon) and can afford it: go gamble.
     const wantsGun = c.weapon === 'fists' || (c.weapon === 'spoon' && Math.random() < 0.15);
-    if (wantsGun && c.chips > MACHINES[0].cost + 15) {
-      const budget = c.chips > 130 ? 2 : c.chips > 70 ? 1 : 0;
+    if (wantsGun && c.chips > game.machines[0].cost + 15) {
+      const budget = c.chips > game.machines[0].cost * 12 ? 2 : c.chips > game.machines[0].cost * 6 ? 1 : 0;
       let best = null;
       let bestScore = Infinity;
       for (const m of game.machines) {
-        if (m.busy || MACHINES.indexOf(m.tier) > budget) continue;
-        const score = Math.hypot(m.useSpot.x - c.pos.x, m.useSpot.z - c.pos.z) - MACHINES.indexOf(m.tier) * 6;
+        if (m.busy || m.tierIndex > budget || c.chips <= m.cost + 15) continue;
+        const score = Math.hypot(m.useSpot.x - c.pos.x, m.useSpot.z - c.pos.z) - m.tierIndex * 6;
         if (score < bestScore) { bestScore = score; best = m; }
       }
       if (best) {
@@ -48,6 +48,20 @@ export class BotBrain {
         this.machine = best;
         return;
       }
+    }
+
+    // A better gun lying on the floor nearby? Grab it.
+    let gun = null;
+    let gunD = 14;
+    for (const p of game.pickups) {
+      if (c.weapon !== 'fists' && p.rarity <= c.rarity) continue;
+      const d = Math.hypot(p.spot.x - c.pos.x, p.spot.z - c.pos.z);
+      if (d < gunD) { gunD = d; gun = p; }
+    }
+    if (gun) {
+      this.mode = 'gun';
+      this.gun = gun;
+      return;
     }
 
     // Pick a target: whoever hit us last if they're close, otherwise the nearest.
@@ -72,6 +86,22 @@ export class BotBrain {
       this.mode = 'loot';
       this.loot = loot;
       return;
+    }
+
+    // Sometimes sit down at a table for a hand, when nobody's close.
+    if ((!target || bestD > 14) && c.chips > game.floor.bets[0] * 4 && Math.random() < 0.12) {
+      const seats = game.tables.flatMap((t) => t.seats).filter((st) => !st.user);
+      let seat = null;
+      let seatD = 30;
+      for (const st of seats) {
+        const d = Math.hypot(st.spot.x - c.pos.x, st.spot.z - c.pos.z);
+        if (d < seatD) { seatD = d; seat = st; }
+      }
+      if (seat) {
+        this.mode = 'table';
+        this.seat = seat;
+        return;
+      }
     }
 
     if (target) {
@@ -116,6 +146,22 @@ export class BotBrain {
         return;
       }
       c.sprint = true;
+    } else if (this.mode === 'gun' && this.gun && game.pickups.includes(this.gun)) {
+      goal = this.gun.spot;
+      if (Math.hypot(goal.x - c.pos.x, goal.z - c.pos.z) < 1.2) {
+        game.takeGun(c, this.gun);
+        this.mode = 'wander';
+        this.gun = null;
+        return;
+      }
+    } else if (this.mode === 'table' && this.seat) {
+      goal = this.seat.spot;
+      if (Math.hypot(goal.x - c.pos.x, goal.z - c.pos.z) < 0.8) {
+        if (!this.seat.user) this.seat.use(c);
+        this.mode = 'wander';
+        this.seat = null;
+        return;
+      }
     } else if (this.mode === 'loot' && this.loot && game.chips.list.includes(this.loot)) {
       goal = this.loot.mesh.position;
     } else if (this.mode === 'fight' && this.target && this.target.alive) {

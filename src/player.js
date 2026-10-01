@@ -1,6 +1,8 @@
 // Your keyboard/mouse controls and the over-the-shoulder camera.
 import * as THREE from 'three';
+
 const SENSITIVITY = 0.0022;
+const TABLE_KEYS = { 1: '1', 2: '2', 3: '3', z: 'betDown', x: 'betUp' };
 const AUTO = new Set(['smg', 'fists', 'spoon']);
 const CAM_OFFSET = new THREE.Vector3(1.15, 0.6, 4.3);
 
@@ -21,6 +23,7 @@ export class PlayerController {
       const k = e.key.toLowerCase();
       this.keys[k] = true;
       if (k === 'e' && !e.repeat) this.interactPressed = true;
+      if (TABLE_KEYS[k] && !e.repeat) this.tableKey = TABLE_KEYS[k];
       if (k === ' ') e.preventDefault();
     });
     window.addEventListener('keyup', (e) => { this.keys[e.key.toLowerCase()] = false; });
@@ -30,6 +33,10 @@ export class PlayerController {
       if (e.button === 0) this.firing = true;
     });
     window.addEventListener('mouseup', (e) => { if (e.button === 0) this.firing = false; });
+    // Scroll changes your bet while you're at a table.
+    window.addEventListener('wheel', (e) => {
+      if (this.c && this.c.busy && this.c.busy.onKey) this.tableKey = e.deltaY > 0 ? 'betDown' : 'betUp';
+    }, { passive: true });
     window.addEventListener('mousemove', (e) => {
       if (!this.locked) return;
       this.c.yaw -= e.movementX * SENSITIVITY;
@@ -81,10 +88,15 @@ export class PlayerController {
       if (this.game.fire(c, origin, dir) && !AUTO.has(weapon)) this.firing = false;
     }
 
-    const m = this.game.nearbyMachine(c);
-    this.game.hud.prompt(m && c.alive && !c.busy && !this.game.intermission
-      ? (m.busy ? 'Machine in use' : `<b>E</b> Pull the lever · 🪙 ${m.tier.cost} · ${m.tier.name}`)
-      : null);
+    // Number keys and scrolling go to whatever table you're playing.
+    if (this.tableKey) {
+      if (c.busy && c.busy.onKey && c.alive) c.busy.onKey(c, this.tableKey);
+      this.tableKey = null;
+    }
+
+    const it = c.alive && !c.busy && !this.game.intermission ? this.game.nearbyInteractable(c) : null;
+    this.game.hud.prompt(it ? it.prompt(c) : null);
+    this.game.hud.panel(c.busy && c.busy.panel && c.alive ? c.busy.panel(c) : null);
   }
 
   // The ray through the crosshair, starting at your character (not behind them).

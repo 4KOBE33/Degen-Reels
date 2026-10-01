@@ -116,8 +116,8 @@ export class ChipSystem {
         }
       }
       // Keep chips inside the room.
-      p.x = Math.max(-31, Math.min(31, p.x));
-      p.z = Math.max(-21, Math.min(21, p.z));
+      p.x = Math.max(-world.halfW + 1, Math.min(world.halfW - 1, p.x));
+      p.z = Math.max(-world.halfD + 1, Math.min(world.halfD - 1, p.z));
     }
   }
 }

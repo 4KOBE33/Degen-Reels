@@ -4,28 +4,28 @@ A 3D cartoon casino shooter. **Gamble for your gun. Shoot for their chips.**
 
 Chunky bean-shaped characters brawl inside the *Lucky Dump Casino*. Everyone starts with fists and 100 chips.
 
-## How it plays
+## How a run works
 
-- **Gamble for a gun:** Walk up to a slot machine and press **E**. Each pull costs chips and gives you a random gun. Pricier machines have better odds. Three of a kind is a **JACKPOT**: armor, plus a stream of chips sprays out of the machine at you.
-- **Chips are your health:** When you get hit, your chips spray out across the floor as real 3D poker chips, and anyone can grab them. Hit 0 and you're **BUST**. You fall over, then respawn with a 40-chip loan from the house.
-- **Guns run dry:** When you're out of ammo you're back to fists, so it's back to the slots.
-- **Win:** The first player to **500 chips** cashes out and wins the round.
+You start on **Floor 1** with 100 chips and your fists. Each floor has an **elevator fee** and a **closing time**. Pay the fee at the elevator before the clock runs out to ride up, and your chips, gun and armor come with you. Bust, or get caught at closing time, and the run is over: back to Floor 1.
 
-| Machine | Cost | Best odds for |
-|---|---|---|
-| Penny Slots | 10 | Spoons and pistols |
-| Lucky 7s | 25 | SMGs and shotguns |
-| Whale | 50 | Rockets |
+| Floor | Size | Fee | Time | Rivals | Bets |
+|---|---|---|---|---|---|
+| 1 · The Lucky Dump | 64×44 | 🪙 250 | 4:00 | 4, unarmed | 10–100 |
+| 2 · The Golden Goose | 80×56 | 🪙 600 | 4:30 | 6, some armed | 25–250 |
+| 3 · Diamond Penthouse | 96×64 | 🪙 1200 | 5:00 | 7, armed and armored | 50–500 |
 
-| Weapon | Vibe |
-|---|---|
-| 🥄 Lucky Spoon | Melee. Good luck. |
-| 🔫 Pea Shooter | Reliable pistol, one shot per click |
-| ⚡ Bullet Hose | SMG, hold to spray |
-| 💥 Boomstick | Shotgun, brutal up close |
-| 🚀 Jackpot Launcher | Rockets with splash damage. Rocket-jumping works. |
+Pay the elevator on Floor 3 to **cash out and win the run**.
 
-**Controls:** WASD to move · mouse to aim · click to shoot · Space to jump · Shift to sprint · E to pull the slots · Esc to pause
+- **Chips are your health.** Getting hit sprays your chips across the floor as real 3D poker chips, and anyone can grab them. Busted rivals drop their gun.
+- **🎰 Slots** give you a random gun. Pricier machines and higher floors roll better guns and rarer versions: **Common, Rare, Epic or Legendary**, each with more damage and ammo.
+- **🎡 Roulette:** red or black pays 2x, green pays 14x.
+- **🃏 Blackjack:** hit, stand or double down against the dealer. Blackjack pays 2.5x.
+- **🚀 Crash:** buy in, watch the multiplier climb, and cash out before it crashes.
+- **💰 Cashier:** buy armor and ammo refills.
+- Winnings spray out of the table as chips. Grab them before a rival does.
+- **Unlocks you keep forever:** the cowboy hat (reach Floor 2), the dealer visor (hit a slot jackpot) and the crown (win a run). Your best floor is saved too.
+
+**Controls:** WASD to move · mouse to aim · click to shoot · Space to jump · Shift to sprint · E to use or leave · Esc to pause · at tables: 1 2 3 to play, and scroll or Z/X to change your bet
 
 ## Run it
 
@@ -47,10 +47,14 @@ Then open http://localhost:3000.
 
 | File | What's in it |
 |---|---|
-| `src/config.js` | Every tunable number: weapons, slot odds, chips, timers |
-| `src/game.js` | Shooting, damage, rockets, respawns, rounds |
-| `src/world.js` | The casino layout, lighting, collision |
-| `src/slots.js` | Walk-up slot machines with spinning reels |
+| `src/config.js` | Every tunable number: floors, weapons, rarities, slot odds, prices |
+| `src/game.js` | The run, floors, shooting, damage, rockets, rivals, loot |
+| `src/world.js` | Generates each floor's layout, lighting and collision |
+| `src/slots.js` | Walk-up slot machines with spinning reels and rarity rolls |
+| `src/tables.js` | Roulette and blackjack tables with seats and a dealer |
+| `src/crash.js` | The Crash billboard game |
+| `src/services.js` | The cashier, the elevator, and guns lying on the floor |
+| `src/save.js` | Permanent unlocks and records |
 | `src/character.js` | Bean characters, hats, guns, animation |
 | `src/bots.js` | Bot AI: gamble, loot, fight |
 | `src/player.js` | Your controls and the over-the-shoulder camera |
@@ -60,5 +64,5 @@ Then open http://localhost:3000.
 ## Roadmap
 
 - **Online multiplayer:** Friends in the same casino, gambling and fighting each other
-- **Modes:** A team mode (a casino heist where the robbers fight security) or a battle royale where the casino floor shrinks
-- More casino games: roulette bets, blackjack side games, and a high-stakes vault
+- Squads: team up with friends and climb together, while other squads compete for the same elevator
+- More floors, rare loot (vault keys, golden guns), and more games (poker, dice, a wheel of fortune)

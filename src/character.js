@@ -52,19 +52,21 @@ function buildHat(kind) {
 }
 
 // Gun models point down -Z from the grip. Each has a `muzzle` marker.
-function buildGun(kind) {
+// `tint` recolors the main body for rare guns.
+export function buildGun(kind, tint = null) {
+  const main = (base) => (tint === null ? base : tint);
   const g = new THREE.Group();
   const muzzle = new THREE.Object3D();
   if (kind === 'spoon') {
     const handle = part(new THREE.BoxGeometry(0.06, 0.06, 0.6), 0xd1d5db, { ink: 0.02 });
     handle.position.z = -0.25;
-    const bowl = part(new THREE.SphereGeometry(0.15, 14, 10), 0xe5e7eb, { ink: 0.025 });
+    const bowl = part(new THREE.SphereGeometry(0.15, 14, 10), main(0xe5e7eb), { ink: 0.025 });
     bowl.scale.set(1, 0.45, 1.35);
     bowl.position.z = -0.65;
     g.add(handle, bowl);
     muzzle.position.z = -0.7;
   } else if (kind === 'pistol') {
-    const body = part(new THREE.BoxGeometry(0.14, 0.17, 0.48), 0x4dabff, { ink: 0.025 });
+    const body = part(new THREE.BoxGeometry(0.14, 0.17, 0.48), main(0x4dabff), { ink: 0.025 });
     body.position.set(0, 0.05, -0.16);
     const grip = part(new THREE.BoxGeometry(0.11, 0.24, 0.13), 0x374151, { ink: 0.025 });
     grip.position.set(0, -0.08, 0.02);
@@ -74,7 +76,7 @@ function buildGun(kind) {
     g.add(body, grip, tip);
     muzzle.position.set(0, 0.05, -0.47);
   } else if (kind === 'smg') {
-    const body = part(new THREE.BoxGeometry(0.16, 0.2, 0.72), 0x2ee6d6, { ink: 0.025 });
+    const body = part(new THREE.BoxGeometry(0.16, 0.2, 0.72), main(0x2ee6d6), { ink: 0.025 });
     body.position.set(0, 0.05, -0.22);
     const mag = part(new THREE.BoxGeometry(0.1, 0.3, 0.12), 0x374151, { ink: 0.02 });
     mag.position.set(0, -0.17, -0.2);
@@ -88,14 +90,14 @@ function buildGun(kind) {
   } else if (kind === 'shotgun') {
     const stock = part(new THREE.BoxGeometry(0.13, 0.17, 0.5), 0x8b5a2b, { ink: 0.025 });
     stock.position.set(0, 0, 0.1);
-    const barrel = part(new THREE.BoxGeometry(0.13, 0.13, 0.85), 0x4b5563, { ink: 0.025 });
+    const barrel = part(new THREE.BoxGeometry(0.13, 0.13, 0.85), main(0x4b5563), { ink: 0.025 });
     barrel.position.set(0, 0.05, -0.55);
     const pump = part(new THREE.BoxGeometry(0.16, 0.1, 0.28), 0xb7791f, { ink: 0.02 });
     pump.position.set(0, -0.04, -0.6);
     g.add(stock, barrel, pump);
     muzzle.position.set(0, 0.05, -1.0);
   } else if (kind === 'rocket') {
-    const tube = part(new THREE.CylinderGeometry(0.16, 0.16, 1.2, 14), 0x5ee27a, { ink: 0.03 });
+    const tube = part(new THREE.CylinderGeometry(0.16, 0.16, 1.2, 14), main(0x5ee27a), { ink: 0.03 });
     tube.rotation.x = Math.PI / 2;
     tube.position.set(0, 0.12, -0.25);
     const band = part(new THREE.CylinderGeometry(0.17, 0.17, 0.12, 14), 0xffd23f, { ink: 0 });
@@ -227,16 +229,19 @@ export function createCharacter({ color, hat }) {
   };
   let gun = null;
   let weapon = null;
+  let weaponKind = 'fists';
 
   return {
     root,
     body,
     get muzzle() { return gun ? gun.userData.muzzle : rightHand; },
-    setWeapon(kind) {
-      if (kind === weapon) return;
-      weapon = kind;
+    setWeapon(kind, tint = null) {
+      const key = `${kind}|${tint}`;
+      if (key === weapon) return;
+      weapon = key;
+      weaponKind = kind;
       if (gun) gunMount.remove(gun);
-      gun = kind === 'fists' ? null : buildGun(kind);
+      gun = kind === 'fists' ? null : buildGun(kind, tint);
       if (gun) gunMount.add(gun);
     },
     setTag(name, chips, armor) { tag.userData.set(name, chips, armor, cssColor); },
@@ -281,9 +286,9 @@ export function createCharacter({ color, hat }) {
       anim.recoil = Math.max(0, anim.recoil - dt * 8);
       anim.swing = Math.max(0, anim.swing - dt * 4);
       const swingArc = Math.sin(anim.swing * Math.PI) * 1.4;
-      arm.rotation.x = s.pitch + anim.recoil * 0.35 - (weapon === 'fists' || weapon === 'spoon' ? swingArc * 0.6 : 0);
-      arm.rotation.y = weapon === 'fists' || weapon === 'spoon' ? swingArc * 0.6 : 0;
-      arm.position.z = -0.2 + anim.recoil * 0.12 - (weapon === 'fists' ? swingArc * 0.25 : 0);
+      arm.rotation.x = s.pitch + anim.recoil * 0.35 - (weaponKind === 'fists' || weaponKind === 'spoon' ? swingArc * 0.6 : 0);
+      arm.rotation.y = weaponKind === 'fists' || weaponKind === 'spoon' ? swingArc * 0.6 : 0;
+      arm.position.z = -0.2 + anim.recoil * 0.12 - (weaponKind === 'fists' ? swingArc * 0.25 : 0);
       leftHand.position.y = 0.9 + Math.sin(anim.phase) * 0.06 * moving;
       leftHand.position.z = -0.15 + Math.cos(anim.phase) * 0.12 * moving;
 

@@ -1,10 +1,9 @@
 // Tiny character physics: gravity, solid boxes/cylinders you can bump into or stand on.
-import { WORLD } from './config.js';
-
 const STEP = 0.3;
 
 // Colliders are { type: 'box', minX, maxX, minZ, maxZ, top } or { type: 'circle', x, z, r, top }.
-export function resolve(pos, vel, radius, colliders) {
+export function resolve(pos, vel, radius, world) {
+  const colliders = world.colliders;
   let ground = 0;
   for (const c of colliders) {
     if (c.type === 'box') {
@@ -51,8 +50,8 @@ export function resolve(pos, vel, radius, colliders) {
     }
   }
 
-  const maxX = WORLD.halfW - 0.5 - radius;
-  const maxZ = WORLD.halfD - 0.5 - radius;
+  const maxX = world.halfW - 0.5 - radius;
+  const maxZ = world.halfD - 0.5 - radius;
   pos.x = Math.max(-maxX, Math.min(maxX, pos.x));
   pos.z = Math.max(-maxZ, Math.min(maxZ, pos.z));
 

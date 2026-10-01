@@ -1,85 +1,233 @@
-// Owns the world and everyone in it: shooting, damage, rockets, respawns and rounds.
+// Owns the current floor and everyone on it: the run, shooting, damage, rockets, rivals and loot.
 import * as THREE from 'three';
 import {
-  WEAPONS, START_CHIPS, LOAN_CHIPS, WIN_CHIPS, RESPAWN_TIME, BOT_COUNT, COLORS, HATS, BOT_NAMES,
+  WEAPONS, RARITIES, START_CHIPS, FLOORS, RIVAL_ARRIVAL, COLORS, HATS, BOT_NAMES,
 } from './config.js';
 import { buildWorld } from './world.js';
-import { buildSlotRow } from './slots.js';
+import { buildSlotRow, rollRarity } from './slots.js';
+import { RouletteTable, BlackjackTable } from './tables.js';
+import { CrashMachine } from './crash.js';
+import { buildCashier, Elevator, GunPickup } from './services.js';
 import { ChipSystem } from './chips.js';
 import { Fx } from './fx.js';
 import { Combatant } from './combatant.js';
 import { BotBrain } from './bots.js';
 import { part } from './toon.js';
+import { save } from './save.js';
 import { sfx } from './audio.js';
 
 const raycaster = new THREE.Raycaster();
 const tmp = new THREE.Vector3();
+const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 
-function shuffle(arr) {
-  const a = arr.slice();
-  for (let i = a.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [a[i], a[j]] = [a[j], a[i]];
-  }
-  return a;
+// Free GPU memory from a floor we're leaving.
+function disposeScene(scene) {
+  scene.traverse((o) => {
+    if (o.geometry) o.geometry.dispose();
+    const m = o.material;
+    if (m && m.map && m.map.userData && m.map.userData.canvas) m.map.dispose();
+  });
 }
 
 export class Game {
-  constructor(scene, hud) {
-    this.scene = scene;
+  constructor(hud) {
     this.hud = hud;
-    this.world = buildWorld(scene);
-    this.fx = new Fx(scene);
+    this.listener = new THREE.Vector3();
+    this.shake = 0;
+    // True while the elevator is moving between floors: everything holds still.
+    this.intermission = 0;
+    this.player = null;
+    this.run = null;
+    this.loadFloor(0);
+  }
+
+  // ---------- floors ----------
+
+  loadFloor(index) {
+    if (this.player) this.scene.remove(this.player.char.root);
+    if (this.scene) disposeScene(this.scene);
+
+    this.scene = new THREE.Scene();
+    this.floorIndex = index;
+    this.floor = FLOORS[index];
+    this.world = buildWorld(this.scene, this.floor, index + 1);
+    this.fx = new Fx(this.scene);
     this.chips = new ChipSystem(this);
     this.machines = buildSlotRow(this);
+    const { sites } = this.world;
+    this.tables = [
+      ...sites.roulette.map((s) => new RouletteTable(this, s.x, s.z)),
+      ...sites.blackjack.map((s) => new BlackjackTable(this, s.x, s.z)),
+      ...sites.crash.map((s) => new CrashMachine(this, s.x, s.z)),
+    ];
+    this.cashier = buildCashier(this);
+    this.elevator = new Elevator(this);
     this.world.bake();
+
+    this.pickups = [];
+    this.rockets = [];
     this.combatants = [];
     this.bots = [];
-    this.rockets = [];
-    this.shake = 0;
-    this.intermission = 0;
-    this.listener = new THREE.Vector3();
+    this.timeLeft = this.floor.time;
+    this.warned = {};
+    this.arrivalIn = RIVAL_ARRIVAL;
+
+    if (this.player) {
+      const p = this.player;
+      this.scene.add(p.char.root);
+      this.combatants.push(p);
+      p.pos.set(this.world.arrival.x, 0, this.world.arrival.z);
+      p.vel.set(0, 0, 0);
+      p.yaw = 0;
+      p.pitch = 0;
+      p.busy = null;
+    }
+    for (let i = 0; i < this.floor.rivals; i++) this.spawnRival(false);
   }
 
-  addPlayer(name, color, hat) {
-    const c = new Combatant(this, { name, color, hat, isPlayer: true });
-    c.colorHex = color;
-    this.combatants.push(c);
-    this.player = c;
-    this.respawn(c, START_CHIPS);
-    return c;
+  get interactables() {
+    return [
+      ...this.machines,
+      ...this.tables.flatMap((t) => t.seats),
+      ...this.cashier,
+      this.elevator,
+      ...this.pickups,
+    ];
   }
 
-  addBots() {
-    const colors = shuffle(COLORS);
-    const names = shuffle(BOT_NAMES);
-    for (let i = 0; i < BOT_COUNT; i++) {
-      const c = new Combatant(this, { name: names[i], color: colors[i % colors.length], hat: HATS[Math.floor(Math.random() * HATS.length)] });
-      this.combatants.push(c);
-      this.bots.push(new BotBrain(this, c));
-      this.respawn(c, START_CHIPS);
+  // ---------- runs ----------
+
+  startRun(name, color, hat) {
+    save.update((d) => { d.runs++; });
+    this.player = null;
+    this.loadFloor(0);
+    const p = new Combatant(this, { name, color, hat, isPlayer: true });
+    this.player = p;
+    this.combatants.push(p);
+    p.pos.set(this.world.arrival.x, 0, this.world.arrival.z);
+    p.chips = START_CHIPS;
+    this.run = { over: false, kills: 0, earned: 0, started: performance.now() };
+    this.hud.floorIntro(this.floorIndex, this.floor);
+  }
+
+  rideElevator(c, fee) {
+    if (this.intermission || !this.run || this.run.over) return;
+    c.chips -= fee;
+    sfx.cashout();
+    if (this.floorIndex === FLOORS.length - 1) {
+      this.victory();
+      return;
+    }
+    const next = this.floorIndex + 1;
+    this.unlocked(save.update((d) => { d.bestFloor = Math.max(d.bestFloor, next + 1); }));
+    this.intermission = 1;
+    this.hud.elevatorRide(next, () => {
+      this.loadFloor(next);
+      this.intermission = 0;
+      this.hud.floorIntro(next, this.floor);
+    });
+  }
+
+  victory() {
+    this.run.over = true;
+    this.intermission = 1;
+    const newHats = save.update((d) => { d.wins++; d.bestFloor = Math.max(d.bestFloor, FLOORS.length); });
+    this.fx.confetti(this.player.pos.clone().setY(3), 150);
+    this.hud.showRunOver({ won: true, floor: this.floorIndex + 1, chips: this.player.chips, kills: this.run.kills, newHats });
+  }
+
+  gameOver(reason, by) {
+    if (!this.run || this.run.over) return;
+    this.run.over = true;
+    const newHats = save.update((d) => { d.busts++; });
+    this.hud.showRunOver({ won: false, reason, by, floor: this.floorIndex + 1, kills: this.run.kills, newHats });
+  }
+
+  // Tell the player about any hats they just unlocked.
+  unlocked(hats) {
+    for (const hat of hats) {
+      this.hud.toast(`🔓 UNLOCKED: the ${hat} hat!`, 'big');
+      this.feed(`🔓 You unlocked the ${hat} hat`);
     }
   }
 
-  // ---------- spawning ----------
+  // ---------- rivals ----------
 
-  respawn(c, chips) {
-    const others = this.combatants.filter((o) => o !== c && o.alive);
-    const spots = this.world.spawnPoints
-      .map(([x, z]) => ({ x, z, d: Math.min(...others.map((o) => Math.hypot(o.pos.x - x, o.pos.z - z)), 99) }))
-      .sort((a, b) => b.d - a.d);
-    const spot = spots[Math.floor(Math.random() * Math.min(3, spots.length))];
+  spawnRival(atElevator) {
+    const taken = new Set(this.combatants.map((c) => c.name));
+    const name = pick(BOT_NAMES.filter((n) => !taken.has(n))) || 'Some Guy';
+    const c = new Combatant(this, { name, color: pick(COLORS), hat: pick(HATS) });
+    const f = this.floor;
+    c.chips = Math.round(f.rivalChips * (0.7 + Math.random() * 0.6));
+    c.armor = f.rivalArmor;
+    if (f.rivalGuns.length && Math.random() < 0.75) c.setWeapon(pick(f.rivalGuns), rollRarity(f.rarityBoost));
+
+    let spot;
+    if (atElevator) spot = { x: this.world.arrival.x + (Math.random() - 0.5) * 4, z: this.world.arrival.z };
+    else {
+      const far = this.world.spawnPoints.filter(([x, z]) => !this.player || Math.hypot(x - this.player.pos.x, z - this.player.pos.z) > 14);
+      const [x, z] = pick(far.length ? far : this.world.spawnPoints);
+      spot = { x, z };
+    }
     c.pos.set(spot.x, 0, spot.z);
-    c.vel.set(0, 0, 0);
-    c.yaw = Math.atan2(spot.x, spot.z);
-    c.pitch = 0;
-    const loan = chips === undefined && c.chips < LOAN_CHIPS;
-    c.chips = chips !== undefined ? chips : Math.max(c.chips, LOAN_CHIPS);
-    c.armor = 0;
-    c.alive = true;
-    c.busy = null;
-    c.setWeapon('fists');
-    if (c.isPlayer && loan) this.hud.toast(`The house spotted you ${LOAN_CHIPS} chips. Don't make it weird.`);
+    c.yaw = Math.random() * Math.PI * 2;
+    this.combatants.push(c);
+    this.bots.push(new BotBrain(this, c));
+    if (atElevator) this.feed(`🛗 ${name} walked in with 🪙${c.chips}`);
+    return c;
+  }
+
+  removeCombatant(c) {
+    this.scene.remove(c.char.root);
+    this.combatants = this.combatants.filter((o) => o !== c);
+    this.bots = this.bots.filter((b) => b.c !== c);
+  }
+
+  // ---------- interaction ----------
+
+  nearbyInteractable(c) {
+    let best = null;
+    let bestD = Infinity;
+    for (const it of this.interactables) {
+      const d = Math.hypot(it.spot.x - c.pos.x, it.spot.z - c.pos.z);
+      if (d < (it.range || 1.6) && d < bestD && it.prompt(c)) { bestD = d; best = it; }
+    }
+    return best;
+  }
+
+  interact(c) {
+    if (!c.alive || this.intermission) return;
+    if (c.busy) {
+      if (c.busy.leave) c.busy.leave(c);
+      return;
+    }
+    const it = this.nearbyInteractable(c);
+    if (!it) return;
+    const refusal = it.use(c);
+    if (refusal && c.isPlayer) {
+      this.hud.toast(refusal);
+      sfx.deny();
+    }
+  }
+
+  takeGun(c, pickup) {
+    if (!this.pickups.includes(pickup)) return;
+    this.dropGun(c);
+    c.setWeapon(pickup.kind, pickup.rarity, pickup.ammo);
+    pickup.remove();
+    this.pickups = this.pickups.filter((p) => p !== pickup);
+    if (c.isPlayer) {
+      sfx.win();
+      this.hud.toast(`Picked up the ${c.weaponName}`, pickup.rarity >= 2 ? 'big' : '');
+    }
+  }
+
+  dropGun(c) {
+    if (c.weapon === 'fists' || c.ammo <= 0) return;
+    const at = c.pos.clone();
+    at.x += (Math.random() - 0.5) * 1.5;
+    at.z += (Math.random() - 0.5) * 1.5;
+    this.pickups.push(new GunPickup(this, at, c.weapon, c.rarity, c.ammo));
   }
 
   // ---------- combat ----------
@@ -101,6 +249,7 @@ export class Game {
     const w = WEAPONS[c.weapon];
     if (!c.alive || c.busy || c.cooldown > 0 || this.intermission) return false;
     c.cooldown = w.rate;
+    const damage = w.damage * RARITIES[c.rarity].damage;
     const muzzle = c.char.muzzle.getWorldPosition(new THREE.Vector3());
 
     if (w.melee) {
@@ -117,7 +266,7 @@ export class Game {
         o.vel.addScaledVector(fwd, 7);
         o.vel.y += 3;
         sfx.bonk(o.pos, this.listener);
-        this.damage(o, w.damage, c, o.pos.clone().setY(o.pos.y + 1.4));
+        this.damage(o, damage, c, o.pos.clone().setY(o.pos.y + 1.4));
       }
       return true;
     }
@@ -138,15 +287,15 @@ export class Game {
         d.z += (Math.random() - 0.5) * 2 * w.spread;
         d.normalize();
         const hit = this.raycast(origin, d, w.range, c);
-        this.fx.tracer(muzzle, hit.point);
-        if (hit.target) this.damage(hit.target, w.damage, c, hit.point);
+        this.fx.tracer(muzzle, hit.point, c.rarity ? new THREE.Color(RARITIES[c.rarity].css).getHex() : 0xffe066);
+        if (hit.target) this.damage(hit.target, damage, c, hit.point);
         else if (hit.hit) this.fx.puff(hit.point, 0xfff6e0, 0.12);
       }
     }
 
     if (c.ammo <= 0) {
       c.setWeapon('fists');
-      if (c.isPlayer) this.hud.toast('Out of ammo! Hit the slots for a new gun.');
+      if (c.isPlayer) this.hud.toast('Out of ammo! Hit the slots or the cashier.');
     }
     return true;
   }
@@ -162,7 +311,7 @@ export class Game {
     mesh.position.copy(pos);
     mesh.lookAt(pos.clone().sub(dir));
     this.scene.add(mesh);
-    this.rockets.push({ mesh, dir: dir.clone(), owner, life: 3, trail: 0 });
+    this.rockets.push({ mesh, dir: dir.clone(), owner, rarity: owner.rarity, life: 3, trail: 0 });
   }
 
   updateRockets(dt) {
@@ -173,7 +322,7 @@ export class Game {
       const step = speed * dt;
       const hit = this.raycast(r.mesh.position, r.dir, step, r.owner);
       if (hit.hit || r.life <= 0) {
-        this.explode(hit.hit ? hit.point.addScaledVector(r.dir, -0.2) : r.mesh.position.clone(), r.owner);
+        this.explode(hit.hit ? hit.point.addScaledVector(r.dir, -0.2) : r.mesh.position.clone(), r.owner, r.rarity);
         this.scene.remove(r.mesh);
         this.rockets.splice(i, 1);
         continue;
@@ -187,7 +336,7 @@ export class Game {
     }
   }
 
-  explode(point, owner) {
+  explode(point, owner, rarity = 0) {
     const w = WEAPONS.rocket;
     this.fx.explosion(point, w.splash);
     sfx.boom(point, this.listener);
@@ -203,7 +352,8 @@ export class Game {
       c.vel.add(push);
       c.vel.y += 7 * k;
       c.onGround = false;
-      this.damage(c, w.damage * (1 - (d / w.splash) * 0.6) * (c === owner ? 0.4 : 1), owner, c.pos.clone().setY(c.pos.y + 1.6));
+      const dmg = w.damage * RARITIES[rarity].damage * (1 - (d / w.splash) * 0.6) * (c === owner ? 0.4 : 1);
+      this.damage(c, dmg, owner, c.pos.clone().setY(c.pos.y + 1.6));
     }
   }
 
@@ -233,68 +383,31 @@ export class Game {
 
   bust(c, attacker) {
     c.alive = false;
-    c.respawnIn = RESPAWN_TIME;
     c.armor = 0;
-    c.setWeapon('fists');
+    if (c.busy && c.busy.leave) c.busy.leave(c);
+    c.busy = null;
     sfx.bust(c.pos, this.listener);
     this.fx.confetti(c.pos.clone().setY(c.pos.y + 1.4), 25);
     if (attacker && attacker !== c) {
       attacker.kills++;
+      if (attacker.isPlayer && this.run) this.run.kills++;
       this.feed(`${attacker.name} busted ${c.name}`);
     } else {
       this.feed(`${c.name} went bust`);
     }
-    if (c.isPlayer) this.hud.showBust(attacker && attacker !== c ? attacker.name : null);
-  }
-
-  // ---------- slots ----------
-
-  nearbyMachine(c) {
-    let best = null;
-    let bestD = 1.8;
-    for (const m of this.machines) {
-      const d = Math.hypot(m.useSpot.x - c.pos.x, m.useSpot.z - c.pos.z);
-      if (d < bestD) { bestD = d; best = m; }
-    }
-    return best;
-  }
-
-  interact(c) {
-    const m = this.nearbyMachine(c);
-    if (!m || !c.alive || c.busy || this.intermission) return;
-    const refusal = m.pull(c);
-    if (refusal && c.isPlayer) {
-      this.hud.toast(refusal);
-      sfx.deny();
+    if (c.isPlayer) {
+      c.setWeapon('fists');
+      this.gameOver('bust', attacker && attacker !== c ? attacker.name : null);
+    } else {
+      // Their gun stays on the floor for whoever wants it.
+      this.dropGun(c);
+      c.setWeapon('fists');
+      c.respawnIn = 6;
     }
   }
-
-  // ---------- rounds ----------
 
   feed(text) {
     this.hud.feed(text);
-  }
-
-  checkWinner() {
-    if (this.intermission) return;
-    const winner = this.combatants.find((c) => c.alive && c.chips >= WIN_CHIPS);
-    if (!winner) return;
-    this.intermission = 6;
-    this.hud.showCashout(winner, this.combatants);
-    this.fx.confetti(winner.pos.clone().setY(winner.pos.y + 2), 120);
-    sfx.cashout();
-    this.feed(`🏆 ${winner.name} cashed out with ${winner.chips} chips!`);
-  }
-
-  resetRound() {
-    this.chips.clear();
-    for (const r of this.rockets) this.scene.remove(r.mesh);
-    this.rockets = [];
-    for (const c of this.combatants) {
-      c.kills = 0;
-      this.respawn(c, START_CHIPS);
-    }
-    this.hud.hideCenter();
   }
 
   // ---------- loop ----------
@@ -302,22 +415,47 @@ export class Game {
   update(dt) {
     if (this.player) this.player.head(this.listener);
     for (const b of this.bots) b.update(dt);
-    for (const c of this.combatants) {
+    for (const c of this.combatants.slice()) {
       c.update(dt);
       c.wantJump = false;
     }
     for (const m of this.machines) m.update(dt);
+    for (const t of this.tables) t.update(dt);
+    this.elevator.update(dt);
+    for (const p of this.pickups) p.update(dt);
+    this.pickups = this.pickups.filter((p) => {
+      if (p.age < 90) return true;
+      p.remove();
+      return false;
+    });
     this.updateRockets(dt);
     this.chips.update(dt);
     this.world.update(dt);
     this.fx.update(dt);
     this.shake = Math.max(0, this.shake - dt * 1.5);
 
-    if (this.intermission) {
-      this.intermission = Math.max(0, this.intermission - dt);
-      if (!this.intermission) this.resetRound();
-    } else {
-      this.checkWinner();
+    // Fresh rivals keep walking in.
+    this.arrivalIn -= dt;
+    if (this.arrivalIn <= 0) {
+      this.arrivalIn = RIVAL_ARRIVAL;
+      if (this.combatants.filter((c) => !c.isPlayer && c.alive).length < this.floor.rivals) this.spawnRival(true);
+    }
+
+    // Closing time.
+    if (this.run && !this.run.over && !this.intermission) {
+      this.timeLeft -= dt;
+      for (const mark of [60, 30, 10]) {
+        if (this.timeLeft <= mark && !this.warned[mark]) {
+          this.warned[mark] = true;
+          this.hud.toast(`⏰ Closing in ${mark} seconds! Pay the elevator or you're out.`, 'big');
+          sfx.deny();
+        }
+      }
+      if (this.timeLeft <= 0) {
+        this.timeLeft = 0;
+        this.player.alive = false;
+        this.gameOver('closing');
+      }
     }
   }
 }
