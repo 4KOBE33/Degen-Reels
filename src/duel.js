@@ -5,6 +5,7 @@
 import * as THREE from 'three';
 import { save } from './save.js';
 import { itemInfo, makeGun, addToStash, rollRarity } from './items.js';
+import { netTeleport } from './netsmooth.js';
 import { Combatant } from './combatant.js';
 import { RaiderBrain } from './bots.js';
 import { randomLook } from './looks.js';
@@ -296,6 +297,7 @@ export class Duel {
       if (c.human && this.net) this.net.net.to(c.owner, { k: 'tp', p: [pos.x, 0, pos.z], yaw, pin: pin ? 1 : 0 });
       c.pos.copy(pos);
       c.netPos = pos.clone();
+      netTeleport(c, pos, yaw);
       return;
     }
     c.pin = pin ? pos.clone() : null;

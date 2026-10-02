@@ -25,8 +25,20 @@ export function localTime(from, t) {
 }
 export function forgetClock(from) { clocks.delete(from); }
 
+// We moved them ourselves (the Lounge referee putting someone in The Pit): start over from
+// there, and ignore any updates still on their way from before the move.
+export function netTeleport(actor, pos, yaw = actor.yaw || 0) {
+  actor.netBuf = [{ t: performance.now(), x: pos.x, y: pos.y, z: pos.z, yaw }];
+  actor.netHold = { until: performance.now() + 600, x: pos.x, z: pos.z };
+}
+
 // Add an update (time in local ms).
 export function pushSample(actor, t, x, y, z, yaw) {
+  const hold = actor.netHold;
+  if (hold) {
+    if (performance.now() > hold.until) actor.netHold = null;
+    else if (Math.hypot(x - hold.x, z - hold.z) > 4) return; // from before the move
+  }
   const buf = (actor.netBuf ||= []);
   const last = buf[buf.length - 1];
   if (last && t <= last.t) {

@@ -4,6 +4,7 @@ import { WEAPONS, PLAYER, EXTRACT_TIME, ITEMS } from './config.js';
 import { itemInfo, itemTitle, isGun, fullAmmo } from './items.js';
 import { iconHtml } from './icons.js';
 import { keyName } from './keys.js';
+import { save } from './save.js';
 import { levelInfo, TIER_NAMES, lookName } from './progress.js';
 
 const $ = (id) => document.getElementById(id);
@@ -153,6 +154,9 @@ export class Hud {
     $('frost').style.opacity = cold ? Math.max(0, (35 - p.warmth) / 35).toFixed(2) : 0;
     this.set('hpText', `❤️ ${Math.ceil(Math.max(0, p.hp))}${p.armor > 0 ? ` · 🛡️ ${Math.ceil(p.armor)}` : ''}`);
     this.set('raidChips', `🪙 ${p.chips}`);
+    // The key list is for learning: it fades after the first 20 seconds once you've a few raids in.
+    const learning = (save.get().stats.raids || 0) < 5 || raid.elapsed < 20;
+    $('keyhint').classList.toggle('gone', !learning);
     this.set('keyhint', `${keyName('bag')} backpack · ${keyName('map')} map · ${keyName('pov')} camera · ${keyName('heal')} heal · ${keyName('armor')} armor · ${keyName('reload')} reload · ${keyName('throw')} throw · ${keyName('aim')} aim · Esc controls`);
     // Downed banner: bleed-out timer and what you can do about it.
     const dn = $('downed');

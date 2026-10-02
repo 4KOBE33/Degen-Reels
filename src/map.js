@@ -126,11 +126,11 @@ export const MAPS = {
     mapGround: '#eef3f8', hemi: [0xeef6ff, 0x8090b0, 1.8], sun: [0xfff4e6, 2.2], mountains: [0xe2e8f0, 0x94a3b8], glow: 0x2ee6d6, tough: 1.3,
   },
   tequila: {
-    name: 'Temakilla', icon: '🍷', size: 'Huge', danger: 'Medium', half: 300, wilds: 'The Hills',
+    name: 'Temakilla', icon: '🍷', size: 'Huge', danger: 'Hard', half: 300, wilds: 'The Hills',
     blurb: 'Temecula wine country: Old Town\'s Front Street, vineyards on every hill and hot air balloons overhead. The Grand Vine Casino sits up the hill, Château Jackpot keeps the good bottles locked up, and Santa Ana dust storms roll in off the desert.',
     sky: [0x2b3a67, 0x8fb8de, 0xf7c59f], fog: 0xd9c3a5,
     ground: { base: '#c8b27a', a: 'rgba(120,140,60,0.25)', b: 'rgba(255,236,190,0.25)' },
-    mapGround: '#bfae78', hemi: [0xfff1dc, 0x6b5a4a, 1.75], sun: [0xffe2b8, 2.3], mountains: [0x9c7b5b, 0x7a6248], glow: 0xff7eb6, tough: 1.05,
+    mapGround: '#bfae78', hemi: [0xfff1dc, 0x6b5a4a, 1.75], sun: [0xffe2b8, 2.3], mountains: [0x9c7b5b, 0x7a6248], glow: 0xff7eb6, tough: 1.15,
   },
   bunker: {
     name: 'The Bunker', icon: '🥊', size: 'Small', danger: 'Deadly', half: 95, wilds: 'Service Tunnels', indoor: true,
@@ -603,6 +603,68 @@ export function buildMap(scene, mapId = 'vegas') {
       statics.add(col);
       circle(CX + dx, CZ + CD / 2 + 2, 0.9, 10);
     }
+    // The front: a lit marquee over the doors, a red carpet, rows of windows, bulbs along the
+    // roofline and a giant chip on each front corner.
+    const FZ = CZ + CD / 2 + 0.35;
+    const frontTrimMat = toon(trim);
+    const canopy = part(new THREE.BoxGeometry(24, 0.7, 6), frontTrimMat, { ink: 0.03 });
+    canopy.position.set(CX, 7.6, FZ + 3);
+    statics.add(canopy);
+    addRayBlocker(CX - 12, CX + 12, FZ, FZ + 6, 7.25, 7.95);
+    const marquee = part(new THREE.BoxGeometry(24, 1.2, 0.3), 0x1b0f2b, { ink: 0.02 });
+    marquee.position.set(CX, 8.5, FZ + 6);
+    statics.add(marquee);
+    const frontBulbMat = new THREE.MeshBasicMaterial({ color: 0xfff1b8 });
+    const frontBulbGeo = new THREE.SphereGeometry(0.16, 6, 5);
+    for (let i = 0; i <= 24; i++) {
+      for (const [y, z] of [[8.0, FZ + 6.2], [9.0, FZ + 6.2]]) {
+        const b = new THREE.Mesh(frontBulbGeo, frontBulbMat);
+        b.position.set(CX - 12 + i, y, z);
+        statics.add(b);
+      }
+    }
+    flat(CX, FZ + 7, 9, 14, toon(0xb91c1c), 0.045);
+    for (const side of [-1, 1]) {
+      const rope = part(new THREE.BoxGeometry(0.1, 0.1, 10), 0xd4a63a, { ink: 0 });
+      rope.position.set(CX + side * 5.4, 0.9, FZ + 8);
+      statics.add(rope);
+      for (let k = 0; k < 3; k++) {
+        const post = part(new THREE.CylinderGeometry(0.12, 0.16, 1, 8), 0xd4a63a, { ink: 0.01 });
+        post.position.set(CX + side * 5.4, 0.5, FZ + 3 + k * 5);
+        statics.add(post);
+      }
+    }
+    const frontGlass = new THREE.MeshBasicMaterial({ color: 0x2a1b4a });
+    const frontFrameMat = toon(0xfff1b8);
+    for (const side of [-1, 1]) {
+      for (let i = 0; i < 6; i++) {
+        const wx = CX + side * (16 + i * 5.6);
+        for (const wy of [3.2, 6.6]) {
+          const fr = new THREE.Mesh(new THREE.BoxGeometry(3.4, 2.1, 0.12), frontFrameMat);
+          fr.position.set(wx, wy, FZ + 0.02);
+          const pane = new THREE.Mesh(new THREE.PlaneGeometry(3.0, 1.7), frontGlass);
+          pane.position.set(wx, wy, FZ + 0.1);
+          statics.add(fr, pane);
+        }
+      }
+    }
+    for (let x = -CW / 2; x <= CW / 2; x += 2) {
+      const b = new THREE.Mesh(frontBulbGeo, frontBulbMat);
+      b.position.set(CX + x, 10.55, FZ + 0.15);
+      statics.add(b);
+    }
+    for (const side of [-1, 1]) {
+      const chip = part(new THREE.CylinderGeometry(3, 3, 0.8, 24), 0xe63946, { ink: 0.03 });
+      chip.rotation.x = Math.PI / 2;
+      chip.position.set(CX + side * (CW / 2 - 4), 13.4, FZ - 1);
+      const spot = new THREE.Mesh(new THREE.CylinderGeometry(1.5, 1.5, 0.85, 20), frontFrameMat);
+      spot.rotation.x = Math.PI / 2;
+      spot.position.copy(chip.position);
+      const stand = part(new THREE.BoxGeometry(0.5, 3, 0.5), trim, { ink: 0.02 });
+      stand.position.set(CX + side * (CW / 2 - 4), 11, FZ - 1);
+      statics.add(chip, spot, stand);
+    }
+
     // Vault room at the back, behind a locked door.
     // A tight little strongroom: three treasure chests, and whatever's guarding them.
     const VW = 16;
@@ -923,7 +985,16 @@ export function buildMap(scene, mapId = 'vegas') {
     const to = clearSpot(e.x, e.z, 8, 2.5);
     if (to) [e.x, e.z] = to;
   }
+  // Nobody starts in the middle of a road (cars, and it looks silly): step off to the side.
+  const roads = minimap.filter((q) => !q.label && q.w && q.d && Math.max(q.w, q.d) > 60 && Math.min(q.w, q.d) <= 20);
   spawns.forEach((sp, i) => {
+    for (const r of roads) {
+      const inX = Math.abs(sp[0] - r.x) < r.w / 2 + 3;
+      const inZ = Math.abs(sp[1] - r.z) < r.d / 2 + 3;
+      if (!inX || !inZ) continue;
+      if (r.w < r.d) sp[0] = r.x + (sp[0] >= r.x ? 1 : -1) * (r.w / 2 + 7);
+      else sp[1] = r.z + (sp[1] >= r.z ? 1 : -1) * (r.d / 2 + 7);
+    }
     const to = clearSpot(sp[0], sp[1], 2.5, 0.5);
     if (to) spawns[i] = to;
   });
@@ -1580,7 +1651,7 @@ export function buildMap(scene, mapId = 'vegas') {
           if (!['position', 'normal', 'uv'].includes(name)) g.deleteAttribute(name);
         }
         if (!g.attributes.uv) g.setAttribute('uv', new THREE.Float32BufferAttribute(new Float32Array(g.attributes.position.count * 2), 2));
-        buckets.get(key).geos.push(g.index ? g : g.toNonIndexed());
+        buckets.get(key).geos.push(g);
       });
       scene.remove(statics);
       for (const b of buckets.values()) {
