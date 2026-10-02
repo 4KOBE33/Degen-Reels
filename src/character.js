@@ -218,6 +218,11 @@ export function createCharacter({ color, hat }) {
   gunMount.position.set(0, 0.04, -0.3);
   arm.add(gunMount);
 
+  // Headshot zone: the top of the bean, where the eyes and hat are.
+  const headHit = new THREE.Mesh(new THREE.SphereGeometry(0.42, 8, 6), new THREE.MeshBasicMaterial({ visible: false }));
+  headHit.position.set(0, 0.42, -0.05);
+  body.add(headHit);
+
   const tag = makeNameTag();
   tag.position.y = 2.45;
   root.add(tag);
@@ -234,6 +239,7 @@ export function createCharacter({ color, hat }) {
   return {
     root,
     body,
+    headHit,
     get muzzle() { return gun ? gun.userData.muzzle : rightHand; },
     setWeapon(kind, tint = null) {
       const key = `${kind}|${tint}`;

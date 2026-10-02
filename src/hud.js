@@ -34,11 +34,20 @@ export class Hud {
     this.onUse = () => {};
     this.onLeave = () => {};
     this.mini = $('minimap').getContext('2d');
+    this.selected = null; // { where: 'weapon' | 'pack', i }
+    this.onEquip = () => {};
+    this.onUnequip = () => {};
     $('bagList').addEventListener('click', (e) => {
-      const b = e.target.closest('button[data-act]');
+      const b = e.target.closest('[data-act]');
       if (!b) return;
-      if (b.dataset.act === 'drop') this.onDrop(b.dataset.where, Number(b.dataset.i));
-      if (b.dataset.act === 'use') this.onUse(b.dataset.id);
+      const { act, where } = b.dataset;
+      const i = Number(b.dataset.i);
+      if (act === 'select') this.selected = { where, i };
+      if (act === 'drop') { this.onDrop(where, i); this.selected = null; }
+      if (act === 'use') this.onUse(b.dataset.id);
+      if (act === 'equip') { this.onEquip(i); this.selected = null; }
+      if (act === 'unequip') { this.onUnequip(i); this.selected = null; }
+      this.last.bagList = null;
     });
     $('resultsBack').addEventListener('click', () => this.onLeave());
   }
@@ -60,12 +69,21 @@ export class Hud {
     $('armorFill').style.width = `${(p.armor / PLAYER.maxArmor) * 100}%`;
     $('staminaFill').style.width = `${(p.stamina / PLAYER.maxStamina) * 100}%`;
     $('staminaFill').classList.toggle('winded', p.winded);
+    const cold = raid.hazards && raid.hazards.cold;
+    $('warmRow').hidden = !cold;
+    if (cold) {
+      $('warmFill').style.width = `${(p.warmth / PLAYER.maxWarmth) * 100}%`;
+      $('warmFill').className = p.warmth < 25 ? 'freezing' : '';
+      this.set('warmIcon', p.warmSource === 'fire' ? '🔥' : p.warmSource === 'inside' ? '🏠' : p.warmth < 25 ? '🥶' : '❄️');
+    }
+    $('frost').style.opacity = cold ? Math.max(0, (35 - p.warmth) / 35).toFixed(2) : 0;
     this.set('hpText', `❤️ ${Math.ceil(Math.max(0, p.hp))}${p.armor > 0 ? ` · 🛡️ ${Math.ceil(p.armor)}` : ''}`);
     this.set('raidChips', `🪙 ${p.chips}`);
     this.set('quick', [
       ['H', '🩹', p.count('bandage') + p.count('soda')],
       ['F', '🛡️', p.count('plate')],
       ['R', '📦', p.count('ammo')],
+      ...(raid.hazards && raid.hazards.cold ? [['G', '☕', p.count('cocoa')]] : []),
     ].map(([key, icon, n]) => `<span class="${n ? '' : 'none'}"><kbd>${key}</kbd>${icon}${n}</span>`).join(''));
 
     // Weapon slots.
@@ -91,7 +109,7 @@ export class Hud {
         const isNew = grew && i === p.backpack.length - 1;
         slots.push(`<span class="s ${isNew ? 'new' : ''}" style="border-color:${info.css}" title="${escapeHtml(info.name)}">${info.icon}${!isGun(it) && it.qty > 1 ? `<i>${it.qty}</i>` : ''}</span>`);
       }
-      $('packbar').innerHTML = `<div class="t">🎒 Backpack ${p.backpack.length}/${p.capacity} · <kbd>I</kbd> to open</div><div class="slots">${slots.join('')}</div>`;
+      $('packbar').innerHTML = `<div class="t">🎒 Backpack ${p.backpack.length}/${p.capacity} · <kbd>Q</kbd> to open</div><div class="slots">${slots.join('')}</div>`;
     }
 
     // Timer, zone and exits.
@@ -133,59 +151,145 @@ export class Hud {
   drawMinimap(raid) {
     const ctx = this.mini;
     const size = 180;
+    const c = size / 2;
     const p = raid.player;
-    const view = 140; // meters across
+    const view = 150; // meters across
     const img = raid.minimap;
     const scale = img.width / (raid.map.half * 2);
+    const toMini = (x, z) => [((x - p.pos.x) / view + 0.5) * size, ((z - p.pos.z) / view + 0.5) * size];
+    const clampEdge = (x, y, pad) => {
+      const dx = x - c;
+      const dy = y - c;
+      const d = Math.hypot(dx, dy);
+      if (d <= c - pad) return [x, y, false];
+      return [c + (dx / d) * (c - pad), c + (dy / d) * (c - pad), true];
+    };
     ctx.save();
     ctx.clearRect(0, 0, size, size);
     ctx.beginPath();
-    ctx.arc(size / 2, size / 2, size / 2, 0, Math.PI * 2);
+    ctx.arc(c, c, c, 0, Math.PI * 2);
     ctx.clip();
-    const sx = (p.pos.x + raid.map.half - view / 2) * scale;
-    const sz = (p.pos.z + raid.map.half - view / 2) * scale;
-    ctx.fillStyle = '#c99457';
+    ctx.fillStyle = raid.map.mapGround || '#e7c08a';
     ctx.fillRect(0, 0, size, size);
-    ctx.drawImage(img, sx, sz, view * scale, view * scale, 0, 0, size, size);
-    const toMini = (x, z) => [((x - p.pos.x) / view + 0.5) * size, ((z - p.pos.z) / view + 0.5) * size];
-    // Exits (clamped to the edge if off-screen).
+    ctx.drawImage(img, (p.pos.x + raid.map.half - view / 2) * scale, (p.pos.z + raid.map.half - view / 2) * scale, view * scale, view * scale, 0, 0, size, size);
+
+    // Range ring.
+    ctx.strokeStyle = 'rgba(27,15,43,0.18)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.arc(c, c, size * 0.25, 0, Math.PI * 2);
+    ctx.stroke();
+
+    // View cone.
+    ctx.save();
+    ctx.translate(c, c);
+    ctx.rotate(-p.yaw);
+    const cone = ctx.createRadialGradient(0, 0, 4, 0, 0, 60);
+    cone.addColorStop(0, 'rgba(255,246,224,0.55)');
+    cone.addColorStop(1, 'rgba(255,246,224,0)');
+    ctx.fillStyle = cone;
+    ctx.beginPath();
+    ctx.moveTo(0, 0);
+    ctx.arc(0, 0, 60, -Math.PI / 2 - 0.55, -Math.PI / 2 + 0.55);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+
+    // Rare loot nearby (Epic and up) glows on the map.
+    for (const pk of raid.pickups) {
+      if (pk.spot.distanceTo(p.pos) > view / 2) continue;
+      const css = pk.item.id === 'gun' ? ['', '', '#c084fc', '#ffc83d'][pk.item.rarity] : (pk.item.id === 'clover' || pk.item.id === 'crown' ? '#ffc83d' : '');
+      if (!css) continue;
+      const [x, y] = toMini(pk.spot.x, pk.spot.z);
+      ctx.fillStyle = css;
+      ctx.strokeStyle = '#1b0f2b';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI * 2;
+        const r = i % 2 ? 2 : 5;
+        ctx.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r);
+      }
+      ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+    }
+
+    // Machines you could hear (within 40m).
+    for (const m of raid.machines) {
+      if (!m.alive || m.isBoss || m.pos.distanceTo(p.pos) > 40) continue;
+      const [x, y] = toMini(m.pos.x, m.pos.z);
+      ctx.fillStyle = m.type === 'gator' ? '#4d7c0f' : '#ff5d5d';
+      ctx.strokeStyle = '#1b0f2b';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.arc(x, y, 3, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
+    if (raid.boss && raid.boss.alive) {
+      const [bx, by] = clampEdge(...toMini(raid.boss.pos.x, raid.boss.pos.z), 10);
+      ctx.font = '16px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('👑', bx, by);
+    }
+
+    // Open exits, pinned to the rim with a distance when they're off the map.
+    ctx.font = "bold 10px Nunito, sans-serif";
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
     for (const e of raid.extracts) {
       if (!e.active) continue;
-      let [x, y] = toMini(e.x, e.z);
-      const dx = x - size / 2;
-      const dy = y - size / 2;
-      const d = Math.hypot(dx, dy);
-      if (d > size / 2 - 8) { x = size / 2 + (dx / d) * (size / 2 - 8); y = size / 2 + (dy / d) * (size / 2 - 8); }
+      const [x, y, edge] = clampEdge(...toMini(e.x, e.z), 11);
       ctx.fillStyle = '#5ee27a';
       ctx.strokeStyle = '#1b0f2b';
       ctx.lineWidth = 2;
       ctx.beginPath();
-      ctx.arc(x, y, 6, 0, Math.PI * 2);
+      ctx.moveTo(x, y - 7);
+      ctx.lineTo(x + 7, y);
+      ctx.lineTo(x, y + 7);
+      ctx.lineTo(x - 7, y);
+      ctx.closePath();
       ctx.fill();
       ctx.stroke();
+      if (edge) {
+        const d = Math.round(Math.hypot(e.x - p.pos.x, e.z - p.pos.z));
+        const lx = c + (x - c) * 0.78;
+        const ly = c + (y - c) * 0.78;
+        ctx.fillStyle = 'rgba(27,15,43,0.8)';
+        ctx.fillRect(lx - 14, ly - 6, 28, 12);
+        ctx.fillStyle = '#5ee27a';
+        ctx.fillText(`${d}m`, lx, ly + 0.5);
+      }
     }
-    // Enemies you could plausibly hear: within 35m.
-    for (const m of raid.machines) {
-      if (!m.alive || m.pos.distanceTo(p.pos) > 35) continue;
-      const [x, y] = toMini(m.pos.x, m.pos.z);
-      ctx.fillStyle = m.isBoss ? '#ffc83d' : '#ff5d5d';
-      ctx.fillRect(x - (m.isBoss ? 5 : 2.5), y - (m.isBoss ? 5 : 2.5), m.isBoss ? 10 : 5, m.isBoss ? 10 : 5);
-    }
+
     // You.
-    ctx.translate(size / 2, size / 2);
+    ctx.translate(c, c);
     ctx.rotate(-p.yaw);
     ctx.fillStyle = '#fff6e0';
     ctx.strokeStyle = '#1b0f2b';
-    ctx.lineWidth = 2;
+    ctx.lineWidth = 2.5;
     ctx.beginPath();
-    ctx.moveTo(0, -8);
-    ctx.lineTo(6, 6);
+    ctx.moveTo(0, -9);
+    ctx.lineTo(7, 7);
     ctx.lineTo(0, 3);
-    ctx.lineTo(-6, 6);
+    ctx.lineTo(-7, 7);
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
     ctx.restore();
+
+    // North marker on the rim.
+    ctx.fillStyle = '#1b0f2b';
+    ctx.beginPath();
+    ctx.arc(c, 9, 8, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#ffd23f';
+    ctx.font = "bold 11px Nunito, sans-serif";
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('N', c, 9.5);
   }
 
   drawBigMap(raid) {
@@ -195,54 +299,129 @@ export class Hud {
     const size = canvas.width;
     const s = size / (raid.map.half * 2);
     const tx = (v) => (v + raid.map.half) * s;
-    ctx.drawImage(raid.minimap, 0, 0, size, size);
+    ctx.drawImage(raid.bigmap, 0, 0, size, size);
+
+    // Exits: green open, red closed, each with a name tag.
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
     for (const e of raid.extracts) {
+      const x = tx(e.x);
+      const y = tx(e.z);
       ctx.fillStyle = e.active ? '#5ee27a' : '#ff5d5d';
       ctx.strokeStyle = '#1b0f2b';
       ctx.lineWidth = 3;
       ctx.beginPath();
-      ctx.arc(tx(e.x), tx(e.z), 10, 0, Math.PI * 2);
+      ctx.moveTo(x, y - 12);
+      ctx.lineTo(x + 12, y);
+      ctx.lineTo(x, y + 12);
+      ctx.lineTo(x - 12, y);
+      ctx.closePath();
       ctx.fill();
       ctx.stroke();
-      ctx.fillStyle = '#1b0f2b';
-      ctx.font = 'bold 15px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText(`${e.name}${e.active ? '' : ' (closed)'}`, tx(e.x), tx(e.z) + (e.z > 0 ? -16 : 26));
+      const label = e.active ? e.name : `${e.name} (closed)`;
+      ctx.font = '900 15px Nunito, system-ui, sans-serif';
+      const w = ctx.measureText(label).width + 14;
+      const ly = e.z > 0 ? y - 26 : y + 26;
+      const lx = Math.max(w / 2 + 4, Math.min(size - w / 2 - 4, x));
+      ctx.fillStyle = e.active ? 'rgba(20,83,45,0.92)' : 'rgba(127,29,29,0.85)';
+      ctx.beginPath();
+      ctx.roundRect(lx - w / 2, ly - 11, w, 22, 11);
+      ctx.fill();
+      ctx.fillStyle = '#fff6e0';
+      ctx.fillText(label, lx, ly + 1);
     }
     if (raid.boss && raid.boss.alive) {
-      ctx.font = '22px sans-serif';
+      ctx.font = '30px sans-serif';
       ctx.fillText('👑', tx(raid.boss.pos.x), tx(raid.boss.pos.z));
     }
     const p = raid.player;
     ctx.save();
     ctx.translate(tx(p.pos.x), tx(p.pos.z));
+    ctx.fillStyle = 'rgba(255,246,224,0.35)';
+    ctx.beginPath();
+    ctx.arc(0, 0, 20, 0, Math.PI * 2);
+    ctx.fill();
     ctx.rotate(-p.yaw);
     ctx.fillStyle = '#fff6e0';
     ctx.strokeStyle = '#1b0f2b';
-    ctx.lineWidth = 3;
+    ctx.lineWidth = 3.5;
     ctx.beginPath();
-    ctx.moveTo(0, -12);
-    ctx.lineTo(9, 9);
-    ctx.lineTo(0, 4);
-    ctx.lineTo(-9, 9);
+    ctx.moveTo(0, -14);
+    ctx.lineTo(10, 10);
+    ctx.lineTo(0, 5);
+    ctx.lineTo(-10, 10);
     ctx.closePath();
     ctx.fill();
     ctx.stroke();
     ctx.restore();
   }
 
+  // Arc Raiders-style inventory: loadout on the left, backpack grid in the middle, details on the right.
   renderBag(p) {
-    const row = (item, where, i) => {
+    const slotCard = (item, where, i, big = false) => {
+      const sel = this.selected && this.selected.where === where && this.selected.i === i;
+      if (!item) {
+        return `<div class="islot empty ${big ? 'big' : ''}">${big ? `<span class="hint">Weapon ${i + 1}</span>` : ''}</div>`;
+      }
       const info = itemInfo(item);
-      const usable = !isGun(item) && ['heal', 'armor'].includes(info.def.kind);
-      return `<div class="bagrow"><span style="color:${info.css}">${itemTitle(item)}</span>${isGun(item) ? `<small>${item.ammo} ammo</small>` : ''}<span class="v">🪙${info.value}</span>
-        ${usable ? `<button class="btn tiny" data-act="use" data-id="${item.id}">Use</button>` : ''}
-        <button class="btn tiny ghost" data-act="drop" data-where="${where}" data-i="${i}">Drop</button></div>`;
+      const qty = !isGun(item) && item.qty > 1 ? `<span class="qty">×${item.qty}</span>` : '';
+      const ammo = isGun(item) ? `<span class="qty">${item.ammo}</span>` : '';
+      return `<button class="islot r${info.rarity} ${big ? 'big' : ''} ${sel ? 'sel' : ''} ${where === 'weapon' && i === p.active ? 'active' : ''}" data-act="select" data-where="${where}" data-i="${i}" style="--rc:${info.css}">
+        <span class="ic">${info.icon}</span>${big ? `<span class="nm">${escapeHtml(info.name)}</span>` : ''}${qty}${ammo}<i class="rbar"></i></button>`;
     };
+
+    // Left: weapons and vitals.
+    const left = `<section class="invcol"><h3>Loadout</h3>
+      ${p.weapons.map((g, i) => slotCard(g, 'weapon', i, true)).join('')}
+      <div class="vit"><span>❤️ Health</span><b>${Math.ceil(p.hp)}/${p.maxHp}</b><div class="bar hp"><div style="width:${(p.hp / p.maxHp) * 100}%"></div></div></div>
+      <div class="vit"><span>🛡️ Armor</span><b>${Math.ceil(p.armor)}/${PLAYER.maxArmor}</b><div class="bar armor"><div style="width:${(p.armor / PLAYER.maxArmor) * 100}%"></div></div></div>
+      <div class="vit"><span>🏃 Stamina</span><b>${Math.ceil(p.stamina)}</b><div class="bar stamina"><div style="width:${(p.stamina / PLAYER.maxStamina) * 100}%"></div></div></div>
+      <div class="vit chipsline"><span>🪙 Raid chips</span><b>${p.chips}</b></div>
+    </section>`;
+
+    // Middle: the backpack grid.
+    const cells = [];
+    for (let i = 0; i < p.capacity; i++) cells.push(slotCard(p.backpack[i], 'pack', i));
+    const mid = `<section class="invcol"><h3>Backpack <small>${p.backpack.length}/${p.capacity}</small></h3><div class="igrid">${cells.join('')}</div>
+      <p class="hint">Click an item to see it. Everything here is lost if you die.</p></section>`;
+
+    // Right: details for the selected item.
+    let detail = '<div class="idetail empty"><span class="ic">🎒</span><p>Select an item to see what it does.</p></div>';
+    const sel = this.selected;
+    const item = sel ? (sel.where === 'weapon' ? p.weapons[sel.i] : p.backpack[sel.i]) : null;
+    if (item) {
+      const info = itemInfo(item);
+      const rarityName = ['Common', 'Rare', 'Epic', 'Legendary'][info.rarity];
+      let stats = '';
+      let actions = '';
+      if (isGun(item)) {
+        const w = WEAPONS[item.kind];
+        const dmg = Math.round(w.damage * [1, 1.15, 1.3, 1.5][item.rarity]);
+        stats = `<div class="stat"><span>Damage</span><b>${dmg}${w.pellets > 1 ? ` ×${w.pellets}` : ''}</b></div>
+          <div class="stat"><span>Fire rate</span><b>${(1 / w.rate).toFixed(1)}/s</b></div>
+          <div class="stat"><span>Range</span><b>${w.range || 'Splash'}${w.range ? 'm' : ''}</b></div>
+          <div class="stat"><span>Ammo</span><b>${item.ammo}</b></div>`;
+        actions = sel.where === 'pack'
+          ? `<button class="btn" data-act="equip" data-i="${sel.i}">Equip</button>`
+          : `<button class="btn" data-act="unequip" data-i="${sel.i}">To backpack</button>`;
+      } else {
+        stats = `<p class="desc">${escapeHtml(info.def.desc || '')}</p>`;
+        if (['heal', 'armor', 'warm'].includes(info.def.kind)) actions = `<button class="btn" data-act="use" data-id="${item.id}">Use</button>`;
+      }
+      actions += `<button class="btn ghost" data-act="drop" data-where="${sel.where}" data-i="${sel.i}">Drop</button>`;
+      detail = `<div class="idetail" style="--rc:${info.css}">
+        <div class="bigicon r${info.rarity}">${info.icon}</div>
+        <div class="rname">${rarityName}${!isGun(item) && item.qty > 1 ? ` · ×${item.qty}` : ''}</div>
+        <h3 style="color:${info.css}">${escapeHtml(info.name)}</h3>
+        ${stats}
+        <div class="stat value"><span>Sells for</span><b>🪙 ${info.value}</b></div>
+        <div class="acts">${actions}</div></div>`;
+    }
+    const right = `<section class="invcol"><h3>Details</h3>${detail}</section>`;
+
     const total = [...p.weapons.filter(Boolean), ...p.backpack].reduce((n, it) => n + itemInfo(it).value, 0) + p.chips;
-    this.set('bagList', `<h3>Weapons</h3>${p.weapons.map((g, i) => (g ? row(g, 'weapon', i) : '<div class="bagrow empty">Empty slot</div>')).join('')}
-      <h3>Backpack ${p.backpack.length}/${p.capacity}</h3>${p.backpack.map((it, i) => row(it, 'pack', i)).join('') || '<div class="bagrow empty">Nothing yet. Go find something shiny.</div>'}
-      <p class="haul">Carrying 🪙 ${p.chips} chips · haul worth <b>🪙 ${total}</b> if you get out alive</p>`);
+    this.set('invHaul', `Haul worth <b>🪙 ${total}</b> if you get out alive`);
+    this.set('bagList', left + mid + right);
   }
 
   prompt(html) {
@@ -273,11 +452,12 @@ export class Hud {
     this.slow = 0;
   }
 
-  hitmarker(kill) {
+  hitmarker(kill, crit) {
     const el = $('hitmarker');
-    el.classList.remove('show', 'kill');
+    el.classList.remove('show', 'kill', 'crit');
     void el.offsetWidth;
     el.classList.add('show');
+    if (crit) el.classList.add('crit');
     if (kill) el.classList.add('kill');
   }
 

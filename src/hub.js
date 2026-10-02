@@ -55,6 +55,10 @@ export class Hub {
       this.render();
     });
     $('hubBody').addEventListener('click', (e) => this.onClick(e));
+    // Cash out on press, not release: every millisecond counts.
+    $('hubBody').addEventListener('pointerdown', (e) => {
+      if (e.target.closest('[data-act="cashout"]')) { e.preventDefault(); this.cashOutCrash(); }
+    });
     $('hubBody').addEventListener('input', (e) => this.onInput(e));
     $('deploy').addEventListener('click', () => this.deploy());
     this.render();
@@ -88,6 +92,7 @@ export class Hub {
       settings: () => this.renderSettings(),
     }[this.tab]();
     $('hubBody').innerHTML = body;
+    if (this.tab === 'backroom' && this.game === 'crash') this.drawCrash();
     const lo = d.loadout;
     const hasGun = lo.weapons.some(Boolean);
     const m = MAPS[d.selectedMap];
@@ -178,8 +183,12 @@ export class Hub {
         ${r && r.msg ? `<p class="msg">${r.msg}</p>` : ''}`;
     } else {
       const c = this.crash;
-      game = `${bets}<div class="mult ${c && c.crashed ? 'crashed' : ''}">${c ? `${c.mult.toFixed(2)}x` : '1.00x'}</div>
-        <div class="row">${c && c.running ? `<button class="btn" data-act="cashout">Cash out 🪙${Math.floor(c.bet * c.mult)}</button>` : '<button class="btn" data-act="launch">Launch 🚀</button>'}</div>
+      game = `${c && c.running ? '' : bets}<canvas id="crashGraph" class="crashgraph" width="520" height="200"></canvas>
+        <div id="crashMult" class="mult ${c && c.crashed ? 'crashed' : ''}">${c ? `${c.mult.toFixed(2)}x` : '1.00x'}</div>
+        <div class="row">${c && c.running
+    ? `<button id="crashBtn" class="btn big cashout" data-act="cashout">CASH OUT 🪙${Math.floor(c.bet * c.mult)}</button>`
+    : '<button class="btn big" data-act="launch">LAUNCH 🚀</button>'}</div>
+        <p class="hint">The multiplier climbs until the rocket blows up. Cash out before it does.</p>
         ${c && c.msg ? `<p class="msg">${c.msg}</p>` : ''}`;
     }
     return `<h3>The Back Room</h3><div class="subtabs">${tabs}</div><div class="game">${game}</div>
@@ -387,24 +396,86 @@ export class Hub {
     if (this.crash && this.crash.running) return;
     if (!this.spend(this.bet)) return;
     const u = Math.random();
-    const crashAt = Math.min(50, Math.max(1, Math.floor((0.96 / (1 - u)) * 100) / 100));
-    const c = { bet: this.bet, mult: 1, running: true, crashed: false, crashAt, start: performance.now(), msg: '' };
+    // Most rockets pop early, a few fly for ages. Never crashes the instant it launches.
+    const crashAt = Math.min(50, Math.max(1.05, Math.floor((0.96 / (1 - u)) * 100) / 100));
+    const c = { bet: this.bet, mult: 1, running: true, crashed: false, crashAt, start: performance.now(), msg: '', points: [] };
     this.crash = c;
     sfx.lever();
+    this.render();
+    this.drawCrash();
     const tick = () => {
-      if (!c.running) return;
-      c.mult = Math.exp(0.22 * ((performance.now() - c.start) / 1000));
+      if (!c.running || this.crash !== c) return;
+      const t = (performance.now() - c.start) / 1000;
+      c.mult = Math.exp(0.22 * t);
+      c.points.push([t, c.mult]);
       if (c.mult >= c.crashAt) {
         c.mult = c.crashAt;
         c.running = false;
         c.crashed = true;
-        c.msg = `CRASHED at ${c.crashAt.toFixed(2)}x. Lost 🪙 ${c.bet}.`;
+        c.msg = `💥 CRASHED at ${c.crashAt.toFixed(2)}x. Lost 🪙 ${c.bet}.`;
         sfx.boom();
+        if (this.tab === 'backroom' && this.game === 'crash') this.render();
+        this.drawCrash();
+        return;
       }
-      if (this.tab === 'backroom' && this.game === 'crash') this.render();
-      if (c.running) setTimeout(tick, 60);
+      // Only touch the number and the button text, so the button you're clicking stays put.
+      const mult = document.getElementById('crashMult');
+      const btn = document.getElementById('crashBtn');
+      if (mult) mult.textContent = `${c.mult.toFixed(2)}x`;
+      if (btn) btn.textContent = `CASH OUT 🪙${Math.floor(c.bet * c.mult)}`;
+      this.drawCrash();
+      requestAnimationFrame(tick);
     };
-    tick();
+    requestAnimationFrame(tick);
+  }
+
+  drawCrash() {
+    const canvas = document.getElementById('crashGraph');
+    const c = this.crash;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    const w = canvas.width;
+    const h = canvas.height;
+    ctx.clearRect(0, 0, w, h);
+    ctx.fillStyle = 'rgba(27,15,43,0.85)';
+    ctx.fillRect(0, 0, w, h);
+    ctx.strokeStyle = 'rgba(255,255,255,0.07)';
+    ctx.lineWidth = 1;
+    for (let i = 1; i < 5; i++) {
+      ctx.beginPath();
+      ctx.moveTo(0, (h / 5) * i);
+      ctx.lineTo(w, (h / 5) * i);
+      ctx.stroke();
+    }
+    if (!c || !c.points.length) {
+      ctx.fillStyle = '#fff6e0';
+      ctx.font = "28px 'Luckiest Guy', sans-serif";
+      ctx.textAlign = 'center';
+      ctx.fillText('🚀 Ready for launch', w / 2, h / 2 + 10);
+      return;
+    }
+    const last = c.points[c.points.length - 1];
+    const tMax = Math.max(5, last[0] * 1.1);
+    const mMax = Math.max(2, last[1] * 1.15);
+    const X = (t) => 16 + (t / tMax) * (w - 50);
+    const Y = (m) => h - 14 - ((m - 1) / (mMax - 1)) * (h - 40);
+    ctx.beginPath();
+    ctx.moveTo(X(0), Y(1));
+    for (const [t, m] of c.points) ctx.lineTo(X(t), Y(m));
+    ctx.lineTo(X(last[0]), h);
+    ctx.lineTo(X(0), h);
+    ctx.closePath();
+    ctx.fillStyle = c.crashed ? 'rgba(230,57,70,0.25)' : 'rgba(94,226,122,0.2)';
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(X(0), Y(1));
+    for (const [t, m] of c.points) ctx.lineTo(X(t), Y(m));
+    ctx.strokeStyle = c.crashed ? '#e63946' : '#5ee27a';
+    ctx.lineWidth = 5;
+    ctx.stroke();
+    ctx.font = '30px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText(c.crashed ? '💥' : '🚀', X(last[0]), Y(last[1]) - 4);
   }
 
   cashOutCrash() {
@@ -413,9 +484,10 @@ export class Hub {
     c.running = false;
     const win = Math.floor(c.bet * c.mult);
     this.earn(win);
-    c.msg = `Cashed out at ${c.mult.toFixed(2)}x: 🪙 ${win}!`;
+    c.msg = `✅ Cashed out at ${c.mult.toFixed(2)}x: won 🪙 ${win}!`;
     sfx.win();
     this.render();
+    this.drawCrash();
   }
 
   deploy() {

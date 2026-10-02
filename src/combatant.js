@@ -15,6 +15,9 @@ export class Combatant {
     this.char = createCharacter({ color, hat });
     this.char.body.userData.actor = this;
     this.hitMesh = this.char.body;
+    this.critMesh = this.char.headHit;
+    this.critMesh.userData.actor = this;
+    this.critMesh.userData.crit = 1.75;
     raid.scene.add(this.char.root);
 
     this.pos = new THREE.Vector3();
@@ -42,6 +45,8 @@ export class Combatant {
     this.wantJump = false;
     this.aiming = false;
     this.stamina = PLAYER.maxStamina;
+    this.warmth = PLAYER.maxWarmth;
+    this.warmSource = null;
     this.staminaWait = 0;
     this.winded = false;
     this.isSprinting = false;
@@ -95,6 +100,7 @@ export class Combatant {
     if (!this.count(id)) return `No ${def.name}`;
     if (def.kind === 'heal' && this.hp >= this.maxHp) return 'Already at full health';
     if (def.kind === 'armor' && this.armor >= PLAYER.maxArmor) return 'Armor is full';
+    if (def.kind === 'warm' && this.warmth >= PLAYER.maxWarmth && this.hp >= this.maxHp) return 'You\'re already toasty';
     this.using = { id, t: 0, total: def.useTime };
     return null;
   }
@@ -188,6 +194,10 @@ export class Combatant {
         if (this.takeOne(this.using.id)) {
           if (def.kind === 'heal') this.hp = Math.min(this.maxHp, this.hp + def.heal);
           if (def.kind === 'armor') this.armor = Math.min(PLAYER.maxArmor, this.armor + def.armor);
+          if (def.kind === 'warm') {
+            this.warmth = Math.min(PLAYER.maxWarmth, this.warmth + def.warmth);
+            this.hp = Math.min(this.maxHp, this.hp + def.heal);
+          }
           if (this.isPlayer) sfx.heal();
         }
         this.using = null;

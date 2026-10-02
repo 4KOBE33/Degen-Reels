@@ -79,6 +79,17 @@ export const sfx = {
   },
   swing(pos, listener) { noise({ dur: 0.15, vol: 0.12 * falloff(pos, listener), freq: 600, to: 2500, q: 4 }); },
   hit() { tone({ freq: 1400, to: 1800, dur: 0.05, type: 'triangle', vol: 0.12 }); },
+  honk(pos, listener) {
+    const v = Math.max(0.3, falloff(pos, listener));
+    tone({ freq: 392, dur: 0.18, type: 'square', vol: 0.12 * v });
+    tone({ freq: 494, dur: 0.18, type: 'square', vol: 0.1 * v });
+    tone({ freq: 392, dur: 0.25, type: 'square', vol: 0.12 * v, delay: 0.24 });
+    tone({ freq: 494, dur: 0.25, type: 'square', vol: 0.1 * v, delay: 0.24 });
+  },
+  crit() {
+    tone({ freq: 2200, to: 2900, dur: 0.07, type: 'square', vol: 0.09 });
+    tone({ freq: 1100, to: 1500, dur: 0.1, type: 'triangle', vol: 0.12, delay: 0.03 });
+  },
   hurt() { tone({ freq: 300, to: 120, dur: 0.15, type: 'sawtooth', vol: 0.12 }); },
   bonk(pos, listener) { tone({ freq: 500, to: 200, dur: 0.1, type: 'triangle', vol: 0.15 * falloff(pos, listener) }); },
   // Bigger chips make a lower, chunkier clink.

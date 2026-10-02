@@ -11,6 +11,7 @@ import { ChipSystem } from './chips.js';
 import { Fx } from './fx.js';
 import { Combatant } from './combatant.js';
 import { Machine } from './enemies.js';
+import { Hazards } from './hazards.js';
 import { RaiderBrain } from './bots.js';
 import { ItemPickup } from './pickups.js';
 import {
@@ -40,8 +41,10 @@ export class Raid {
     this.containers = this.map.containers.map((c) => new Container(this, c));
     this.buildVaultDoor();
     this.buildExtracts();
+    this.hazards = new Hazards(this);
     this.map.bake();
-    this.minimap = drawMinimap(this.map, 512);
+    this.minimap = drawMinimap(this.map, 512, false);
+    this.bigmap = drawMinimap(this.map, 1024, true);
 
     this.combatants = [];
     this.bots = [];
@@ -135,6 +138,8 @@ export class Raid {
     this.bots = [];
     this.combatants = this.combatants.filter((c) => c.isPlayer);
     for (const s of this.map.enemySpots) this.spawnMachine(s.type, s.x, s.z);
+    // Bayou ponds hide gators.
+    if (this.mapId === 'bayou') for (const pd of this.map.hazards.ponds) this.spawnMachine('gator', pd.x, pd.z);
     for (let i = 0; i < RAIDERS.count; i++) this.spawnRaider();
   }
 
@@ -300,6 +305,31 @@ export class Raid {
     return p;
   }
 
+  // Move a gun from the backpack into a weapon slot (swapping if both are full).
+  equipFromPack(c, i) {
+    const gun = c.backpack[i];
+    if (!isGun(gun)) return 'That isn\'t a gun';
+    const slot = c.weapons[c.active] ? (c.weapons.indexOf(null) >= 0 ? c.weapons.indexOf(null) : c.active) : c.active;
+    const old = c.weapons[slot];
+    c.weapons[slot] = gun;
+    c.backpack.splice(i, 1);
+    if (old) c.backpack.splice(i, 0, old);
+    c.active = slot;
+    c.refreshWeapon();
+    return null;
+  }
+
+  // Stash a weapon in the backpack.
+  unequipToPack(c, slot) {
+    const gun = c.weapons[slot];
+    if (!gun) return null;
+    if (c.backpack.length >= c.capacity) return 'Backpack is full';
+    c.backpack.push(gun);
+    c.weapons[slot] = null;
+    c.refreshWeapon();
+    return null;
+  }
+
   // Drop something from your inventory onto the floor in front of you.
   dropFromInventory(c, where, index) {
     let item;
@@ -324,12 +354,13 @@ export class Raid {
         if (!a.alive || a === ignore) continue;
         if (a.pos.distanceTo(origin) > range + 8) continue;
         targets.push(a.hitMesh);
+        if (a.critMesh) targets.push(a.critMesh);
       }
     }
     raycaster.set(origin, dir);
     raycaster.far = range;
     const hit = raycaster.intersectObjects(targets, false)[0];
-    if (hit) return { hit: true, point: hit.point.clone(), target: hit.object.userData.actor || null, distance: hit.distance };
+    if (hit) return { hit: true, point: hit.point.clone(), target: hit.object.userData.actor || null, crit: hit.object.userData.crit || 1, distance: hit.distance };
     return { hit: false, point: origin.clone().addScaledVector(dir, range), target: null, distance: range };
   }
 
@@ -387,7 +418,7 @@ export class Raid {
         d.normalize();
         const hit = this.raycast(origin, d, w.range, c);
         this.fx.tracer(muzzle, hit.point, c.rarity ? new THREE.Color(RARITIES[c.rarity].css).getHex() : 0xffe066);
-        if (hit.target) this.damage(hit.target, damage, c, hit.point);
+        if (hit.target) this.damage(hit.target, damage * hit.crit, c, hit.point, hit.crit > 1);
         else if (hit.hit) this.fx.puff(hit.point, 0xfff6e0, 0.12);
       }
     }
@@ -484,7 +515,7 @@ export class Raid {
     }
   }
 
-  damage(target, amount, attacker, at) {
+  damage(target, amount, attacker, at, crit = false) {
     if (!target.alive || this.frozen) return;
     if (attacker && attacker !== target && attacker.team === 'machine' && target.team === 'machine') return;
     amount = Math.round(amount);
@@ -493,11 +524,12 @@ export class Raid {
     const absorbed = Math.min(target.armor || 0, Math.round(amount * 0.7));
     target.armor = (target.armor || 0) - absorbed;
     target.hp -= amount - absorbed;
-    this.fx.number(at, `${amount}`, absorbed ? '#7dd3fc' : '#ff5d5d', attacker && attacker.isPlayer ? 1.1 : 0.8);
+    if (crit) this.fx.number(at, `${amount}!`, '#ffd23f', attacker && attacker.isPlayer ? 1.6 : 1);
+    else this.fx.number(at, `${amount}`, absorbed ? '#7dd3fc' : '#ff5d5d', attacker && attacker.isPlayer ? 1.1 : 0.8);
     target.hurt(attacker);
     if (attacker && attacker.isPlayer && target !== attacker) {
-      this.hud.hitmarker(target.hp <= 0);
-      sfx.hit();
+      this.hud.hitmarker(target.hp <= 0, crit);
+      if (crit) sfx.crit(); else sfx.hit();
     }
     if (target.isPlayer) {
       this.hud.hurt();
@@ -531,6 +563,8 @@ export class Raid {
           const hats = save.update((d) => { d.stats.bossKills++; });
           for (const h of hats) this.hud.toast(`🔓 UNLOCKED: the ${h} hat!`, 'big');
         }
+      } else if (target.type === 'gator') {
+        if (Math.random() < def.loot) this.dropAround(at, makeItem('tooth'), 1.5);
       } else if (Math.random() < def.loot) {
         this.dropAround(at, rollLoot(tier), 1.5);
       }
@@ -542,7 +576,7 @@ export class Raid {
     this.fx.confetti(at.clone().setY(1.4), 25);
     if (target.using) target.using = null;
     if (target.isPlayer) {
-      this.feed(`${attacker ? attacker.name : 'Lost Vegas'} busted you`);
+      this.feed(`${attacker ? attacker.name : 'Something'} got you`);
       this.fail('dead', attacker ? attacker.name : null);
       return;
     }
@@ -613,6 +647,7 @@ export class Raid {
     for (const pk of this.pickups) pk.update(dt);
     if (this.vaultOpen && this.vaultDoor.position.y < 14) this.vaultDoor.position.y += dt * 4;
     this.updateRockets(dt);
+    this.hazards.update(dt);
     this.chips.update(dt);
     this.map.update(dt);
     this.map.followShadow(this.focus);

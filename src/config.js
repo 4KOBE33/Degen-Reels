@@ -16,6 +16,12 @@ export const PLAYER = {
   staminaRegen: 22,
   staminaDelay: 0.8,
   windedUntil: 30,
+  // Cold maps: warmth drains outdoors, refills by fires and indoors. At zero you freeze.
+  maxWarmth: 100,
+  coldDrain: 0.9,
+  warmGain: 9,
+  freezeDamage: 3,
+  fireRadius: 6,
 };
 
 // Lost Vegas: the raid map. Half-size in meters.
@@ -56,26 +62,28 @@ export const RARITY_BY_TIER = {
 
 // Everything that isn't a gun.
 export const ITEMS = {
-  bandage: { name: 'Lucky Bandage', icon: '🩹', kind: 'heal', heal: 35, useTime: 1.4, value: 60, stack: 5 },
-  soda: { name: 'Jackpot Soda', icon: '🥤', kind: 'heal', heal: 80, useTime: 2.4, value: 160, stack: 3 },
-  plate: { name: 'Chip Plate', icon: '🛡️', kind: 'armor', armor: 50, useTime: 2, value: 140, stack: 3 },
-  ammo: { name: 'Ammo Box', icon: '📦', kind: 'ammo', value: 50, stack: 5 },
-  cards: { name: 'Marked Deck', icon: '🃏', kind: 'valuable', value: 90, stack: 5 },
-  dice: { name: 'Loaded Dice', icon: '🎲', kind: 'valuable', value: 140, stack: 5 },
-  hat: { name: 'Silk Top Hat', icon: '🎩', kind: 'valuable', value: 260 },
-  watch: { name: 'Gold Watch', icon: '⌚', kind: 'valuable', value: 450 },
-  ring: { name: 'Diamond Ring', icon: '💍', kind: 'valuable', value: 900 },
-  trophy: { name: 'Jackpot Trophy', icon: '🏆', kind: 'valuable', value: 1800 },
-  keycard: { name: 'Vault Keycard', icon: '💳', kind: 'key', value: 700 },
-  clover: { name: 'Four-Leaf Clover', icon: '🍀', kind: 'valuable', value: 6000, legendary: true },
-  crown: { name: "The House's Crown", icon: '👑', kind: 'valuable', value: 25000, legendary: true },
+  bandage: { name: 'Lucky Bandage', icon: '🩹', desc: 'Heals 35 health. Takes a moment to apply.', kind: 'heal', heal: 35, useTime: 1.4, value: 60, stack: 5 },
+  soda: { name: 'Jackpot Soda', icon: '🥤', desc: 'Heals 80 health. Fizzy and slow to chug.', kind: 'heal', heal: 80, useTime: 2.4, value: 160, stack: 3 },
+  plate: { name: 'Chip Plate', icon: '🛡️', desc: 'Adds 50 armor. Armor soaks most of each hit.', kind: 'armor', armor: 50, useTime: 2, value: 140, stack: 3 },
+  ammo: { name: 'Ammo Box', icon: '📦', desc: 'Refills half of your gun\'s ammo. Press R or run dry.', kind: 'ammo', value: 50, stack: 5 },
+  cards: { name: 'Marked Deck', icon: '🃏', desc: 'Sell it to the Fence.', kind: 'valuable', value: 90, stack: 5 },
+  dice: { name: 'Loaded Dice', icon: '🎲', desc: 'Sell it to the Fence.', kind: 'valuable', value: 140, stack: 5 },
+  hat: { name: 'Silk Top Hat', icon: '🎩', desc: 'Sell it to the Fence.', kind: 'valuable', value: 260 },
+  watch: { name: 'Gold Watch', icon: '⌚', desc: 'Sell it to the Fence.', kind: 'valuable', value: 450 },
+  ring: { name: 'Diamond Ring', icon: '💍', desc: 'Worth a lot to the Fence.', kind: 'valuable', value: 900 },
+  trophy: { name: 'Jackpot Trophy', icon: '🏆', desc: 'Worth a fortune to the Fence.', kind: 'valuable', value: 1800 },
+  cocoa: { name: 'Hot Cocoa', icon: '☕', desc: 'Warms you right up (+70 warmth) and heals 10. Lifesaver in the snow.', kind: 'warm', warmth: 70, heal: 10, useTime: 1.6, value: 80, stack: 3 },
+  tooth: { name: 'Gator Tooth', icon: '🦷', desc: 'Pulled from a bayou gator. The Fence loves these.', kind: 'valuable', value: 220, stack: 5 },
+  keycard: { name: 'Vault Keycard', icon: '💳', desc: 'Opens the casino vault. Used up on swipe.', kind: 'key', value: 700 },
+  clover: { name: 'Four-Leaf Clover', icon: '🍀', desc: 'Legendary. Almost nobody finds one.', kind: 'valuable', value: 6000, legendary: true },
+  crown: { name: "The House's Crown", icon: '👑', desc: 'Legendary. Taken from the Pit Boss himself.', kind: 'valuable', value: 25000, legendary: true },
 };
 
 // Loot tables by danger tier (1 outskirts, 2 the strip, 3 the casino, 4 the vault and the boss).
 // Each entry is [weight, what]. 'gun' rolls a gun from GUN_TIERS with a rarity boost.
 export const LOOT = {
-  1: [[30, 'chips'], [18, 'bandage'], [14, 'ammo'], [16, 'cards'], [10, 'dice'], [8, 'gun'], [4, 'plate']],
-  2: [[22, 'chips'], [12, 'bandage'], [8, 'soda'], [12, 'ammo'], [10, 'dice'], [10, 'hat'], [6, 'watch'], [12, 'gun'], [8, 'plate']],
+  1: [[30, 'chips'], [18, 'bandage'], [14, 'ammo'], [16, 'cards'], [10, 'dice'], [8, 'gun'], [4, 'plate'], [6, 'cocoa']],
+  2: [[22, 'chips'], [12, 'bandage'], [8, 'soda'], [12, 'ammo'], [10, 'dice'], [10, 'hat'], [6, 'watch'], [12, 'gun'], [8, 'plate'], [5, 'cocoa']],
   3: [[18, 'chips'], [8, 'soda'], [10, 'ammo'], [10, 'watch'], [8, 'ring'], [2, 'trophy'], [3, 'keycard'], [18, 'gun'], [10, 'plate'], [0.5, 'clover']],
   4: [[14, 'chips'], [10, 'ring'], [8, 'trophy'], [24, 'gun'], [10, 'soda'], [10, 'plate'], [2, 'clover']],
 };
@@ -86,6 +94,8 @@ export const ENEMIES = {
   slotbot: { name: 'Slotbot', hp: 140, speed: 2.6, damage: 6, burst: 3, burstGap: 0.12, rate: 2.2, range: 26, aggro: 24, accuracy: 0.11, chips: [20, 50], loot: 0.5 },
   dicer: { name: 'Dicer', hp: 55, speed: 6.5, damage: 4, burst: 1, burstGap: 0, rate: 1.4, range: 22, aggro: 26, accuracy: 0.13, chips: [8, 20], loot: 0.25 },
   shark: { name: 'Card Shark', hp: 80, speed: 7.5, damage: 16, melee: true, rate: 1.4, range: 2.2, aggro: 18, chips: [10, 30], loot: 0.35 },
+  // Bayou wildlife: lurks underwater in ponds and lunges at anyone who wanders close.
+  gator: { name: 'Gator', hp: 130, speed: 8.5, damage: 18, melee: true, rate: 1.6, range: 2.6, aggro: 10, chips: [0, 15], loot: 0.6 },
   boss: { name: 'The Pit Boss', hp: 3200, speed: 2.2, damage: 4, burst: 10, burstGap: 0.08, rate: 3.4, range: 40, aggro: 45, accuracy: 0.12, chips: [600, 900], loot: 1 },
 };
 

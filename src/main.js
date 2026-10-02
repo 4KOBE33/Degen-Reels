@@ -84,6 +84,8 @@ controller.onPov = (first) => {
 $('povBtn').addEventListener('click', () => controller.togglePov());
 
 hud.onDrop = (where, i) => raid.dropFromInventory(raid.player, where, i);
+hud.onEquip = (i) => { const r = raid.equipFromPack(raid.player, i); if (r) hud.toast(r); };
+hud.onUnequip = (i) => { const r = raid.unequipToPack(raid.player, i); if (r) hud.toast(r); };
 hud.onUse = (id) => {
   const refusal = raid.player.startUsing(id);
   if (refusal) hud.toast(refusal);

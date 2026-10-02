@@ -10,7 +10,24 @@ A 3D cartoon **extraction shooter** set in a casino town gone wrong. Gear up, ra
 | 🏔️ Frostbite Peaks | Large | Hard (machines have 30% more health and damage) | Snowed-in ski town, frozen lake, gondola, the Alpine Ace Lodge |
 | 🐊 Bayou Royale | Medium | Medium | Swamp boardwalks, stilt shacks and the Riverboat Royale paddle-steamer casino |
 
-Every map has a casino with a vault, a Pit Boss event, and four exits (two open per raid).
+Every map has a casino with a vault, a Pit Boss event, and four exits (two open per raid). Each also has its own hazard:
+
+- **Lost Vegas: traffic.** Cars cruise the strip and the cross street, and getting hit hurts. They honk if you're standing in the lane.
+- **Frostbite Peaks: cold.** Your warmth drains outdoors. Stand by a burning barrel 🔥 or get indoors to warm up, or drink ☕ Hot Cocoa (G). At zero warmth you freeze, and frostbite goes straight through armor.
+- **Bayou Royale: gators.** They lurk in every pond with just their eyes showing and lunge at anyone who wanders close. They drop 🦷 Gator Teeth.
+
+## Critical hits
+
+Every enemy has a small weak spot that takes extra damage. A crit pops a yellow number with a "!" and a sharper sound.
+
+| Target | Weak spot | Damage |
+|---|---|---|
+| Slotbot | Glowing eye strip | ×2.2 |
+| Dicer | Rotor hub on top | ×3 |
+| Card Shark | Eye band | ×2 |
+| Gator | Between the eyes | ×2 |
+| Pit Boss | Jackpot screen | ×2.5 |
+| Raiders | Head | ×1.75 |
 
 ## The loop
 
@@ -43,7 +60,7 @@ Unlockable hats: cowboy (extract once), dealer visor (extract 10 times), crown (
 
 ## Controls
 
-WASD move · Space jump · Shift sprint (uses stamina; jumping costs some too) · Mouse aim · Left click shoot · **Right click aim down sights** · E use (**hold** to search) · 1/2/Q swap guns · R reload (uses an Ammo Box) · H heal · F armor plate · I backpack (also Tab or B) · M map · **V first/third person** · Esc pause and settings (**mouse sensitivity**, FOV, volume)
+WASD move · Space jump · Shift sprint (uses stamina; jumping costs some too) · Mouse aim · Left click shoot · **Right click aim down sights** · E use (**hold** to search) · 1/2 or mouse wheel swap guns · R reload (uses an Ammo Box) · H heal · F armor plate · G hot cocoa · Q backpack (also Tab, I or B) · M map · **V first/third person** · Esc pause and settings (**mouse sensitivity**, FOV, volume)
 
 Running, jumping and moving make your shots spray. The crosshair opens up to show it, and aiming down sights tightens it.
 

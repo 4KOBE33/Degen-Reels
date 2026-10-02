@@ -116,21 +116,21 @@ export const MAPS = {
     blurb: 'A sun-baked desert strip. The Lucky Dump Grand casino sits in the middle with a vault in the back.',
     sky: [0x2a1650, 0xb3477a, 0xf6a35c], fog: 0xd77a6a,
     ground: { base: '#e8b878', a: 'rgba(170,110,60,0.18)', b: 'rgba(255,230,180,0.25)' },
-    hemi: [0xffe2c4, 0x7a4a5a, 1.7], sun: [0xffd2a1, 2.3], mountains: [0xa0522d, 0x8b4513], glow: 0xff3fa4, tough: 1,
+    mapGround: '#e7c08a', hemi: [0xffe2c4, 0x7a4a5a, 1.7], sun: [0xffd2a1, 2.3], mountains: [0xa0522d, 0x8b4513], glow: 0xff3fa4, tough: 1,
   },
   frost: {
     name: 'Frostbite Peaks', icon: '🏔️', size: 'Large', danger: 'Hard', half: 140,
     blurb: 'A snowed-in ski town. Machines are tougher up here, and the Alpine Ace Lodge hides the good stuff.',
     sky: [0x1e3a5f, 0x7aa6d6, 0xdbeafe], fog: 0xc7d9ef,
     ground: { base: '#eef2f7', a: 'rgba(148,163,184,0.22)', b: 'rgba(255,255,255,0.7)' },
-    hemi: [0xeef6ff, 0x8090b0, 1.8], sun: [0xfff4e6, 2.2], mountains: [0xe2e8f0, 0x94a3b8], glow: 0x2ee6d6, tough: 1.3,
+    mapGround: '#eef3f8', hemi: [0xeef6ff, 0x8090b0, 1.8], sun: [0xfff4e6, 2.2], mountains: [0xe2e8f0, 0x94a3b8], glow: 0x2ee6d6, tough: 1.3,
   },
   bayou: {
     name: 'Bayou Royale', icon: '🐊', size: 'Medium', danger: 'Medium', half: 130,
     blurb: 'A muggy swamp town wrapped around the Riverboat Royale, a casino on a paddle steamer.',
     sky: [0x173326, 0x5e8a54, 0xe6c97a], fog: 0x9aa97f,
     ground: { base: '#6f8f3c', a: 'rgba(40,70,20,0.3)', b: 'rgba(170,190,90,0.3)' },
-    hemi: [0xf2f7d9, 0x3d5230, 1.7], sun: [0xffe9b0, 2.1], mountains: [0x2f4f2f, 0x3b5d3b], glow: 0xffd23f, tough: 1.1,
+    mapGround: '#86a35a', hemi: [0xf2f7d9, 0x3d5230, 1.7], sun: [0xffe9b0, 2.1], mountains: [0x2f4f2f, 0x3b5d3b], glow: 0xffd23f, tough: 1.1,
   },
 };
 
@@ -396,8 +396,8 @@ export function buildMap(scene, mapId = 'vegas') {
       if (front === 'w') { sg.position.set(x - w / 2 - off, h + 1.6, z); sg.rotation.y = -Math.PI / 2; }
       statics.add(sg);
     }
-    zones.push({ name, x, z, w, d, tier });
-    minimap.push({ x, z, w, d, color: mapColor, label: name });
+    zones.push({ name, x, z, w, d, tier, indoor: roof });
+    minimap.push({ x, z, w, d, color: mapColor, label: name, tier, building: true });
   }
 
   const container = (kind, x, z, tier, rot = 0) => containers.push({ kind, x, z, tier, rot });
@@ -487,12 +487,41 @@ export function buildMap(scene, mapId = 'vegas') {
 
   // A patch of shallow water (walkable, just for looks).
   const waterMat = new THREE.MeshBasicMaterial({ color: 0x3f7f6f, transparent: true, opacity: 0.85 });
+  const ponds = [];
   function pond(x, z, r) {
+    ponds.push({ x, z, r });
     const m = new THREE.Mesh(new THREE.CircleGeometry(r, 24), waterMat);
     m.rotation.x = -Math.PI / 2;
     m.position.set(x, 0.03, z);
     statics.add(m);
     minimap.push({ x, z, w: r * 1.6, d: r * 1.6, color: '#3f7f6f' });
+  }
+
+  // Burning barrel: stand near one to warm up in the cold.
+  const fires = [];
+  const flameMats = [new THREE.MeshBasicMaterial({ color: 0xff7a1a }), new THREE.MeshBasicMaterial({ color: 0xffd23f })];
+  function fire(x, z) {
+    const barrel = part(new THREE.CylinderGeometry(0.55, 0.5, 1.1, 12), 0x3f3f46);
+    barrel.position.set(x, 0.55, z);
+    statics.add(barrel);
+    circle(x, z, 0.55, 1.1);
+    const flames = new THREE.Group();
+    flames.position.set(x, 1.1, z);
+    for (let i = 0; i < 3; i++) {
+      const f = new THREE.Mesh(new THREE.ConeGeometry(0.32 - i * 0.07, 1.0 - i * 0.2, 7), flameMats[i % 2]);
+      f.position.set((Math.random() - 0.5) * 0.3, 0.4, (Math.random() - 0.5) * 0.3);
+      flames.add(f);
+    }
+    scene.add(flames);
+    const seed = Math.random() * 10;
+    animated.push((dt) => {
+      const t = performance.now() / 1000 + seed;
+      flames.children.forEach((f, i) => {
+        f.scale.set(1, 0.8 + Math.sin(t * 9 + i * 2) * 0.25, 1);
+        f.rotation.y += dt * (2 + i);
+      });
+    });
+    fires.push({ x, z });
   }
 
   function mountains(colors) {
@@ -635,7 +664,7 @@ export function buildMap(scene, mapId = 'vegas') {
     H, THREE, statics, zones, minimap, containers, slotSpots, enemySpots, solids,
     part, toon, neonSign, carpetTexture, flat, box, circle, addCollider, addRayBlocker,
     car, palm, cactus, rock, streetLight, billboard, crateStack, building, container, enemies,
-    pine, snowman, cypress, reeds, pond, mountains, scatter, casino,
+    pine, snowman, cypress, reeds, pond, mountains, scatter, casino, fire, ponds, fires,
   };
   const layout = BUILDERS[mapId in BUILDERS ? mapId : 'vegas'](kit);
   mountains(def.mountains);
@@ -660,6 +689,7 @@ export function buildMap(scene, mapId = 'vegas') {
   const map = {
     id: mapId,
     name: def.name,
+    mapGround: def.mapGround,
     // Machines on harder maps have more health and hit harder.
     toughness: def.tough || 1,
     half: H,
@@ -672,6 +702,8 @@ export function buildMap(scene, mapId = 'vegas') {
     enemySpots,
     extracts,
     casino: layout.casino,
+    // Map-specific dangers: traffic lanes, cold and fires, gator ponds.
+    hazards: { ...(layout.hazards || {}), fires, ponds },
     vault: layout.vault,
     spawns,
 
@@ -811,29 +843,111 @@ export function buildMap(scene, mapId = 'vegas') {
   return map;
 }
 
-// The overhead map drawn once into a canvas; the HUD draws markers on top.
-export function drawMinimap(map, size = 512) {
+// The overhead map, drawn once into a canvas. The HUD draws live markers on top.
+// `labels` adds building names (for the full map; the minimap stays uncluttered).
+const SKIP_LABELS = new Set(['Trailer', 'Ski Cabin', 'Stilt Shack', 'Ice Hut', 'Vault']);
+
+function roundRect(c, x, y, w, h, r) {
+  r = Math.min(r, w / 2, h / 2);
+  c.beginPath();
+  c.moveTo(x + r, y);
+  c.arcTo(x + w, y, x + w, y + h, r);
+  c.arcTo(x + w, y + h, x, y + h, r);
+  c.arcTo(x, y + h, x, y, r);
+  c.arcTo(x, y, x + w, y, r);
+  c.closePath();
+}
+
+export function drawMinimap(map, size = 512, labels = false) {
   const canvas = document.createElement('canvas');
   canvas.width = size;
   canvas.height = size;
   const c = canvas.getContext('2d');
   const s = size / (map.half * 2);
-  const tx = (x) => (x + map.half) * s;
-  c.fillStyle = '#d9a86c';
+  const tx = (v) => (v + map.half) * s;
+  const k = size / 512;
+
+  // Ground with a soft vignette and a faint 50m grid.
+  c.fillStyle = map.mapGround || '#e7c08a';
   c.fillRect(0, 0, size, size);
-  for (const r of map.minimap) {
-    c.fillStyle = r.color;
-    c.fillRect(tx(r.x - r.w / 2), tx(r.z - r.d / 2), r.w * s, r.d * s);
-  }
-  c.strokeStyle = 'rgba(27,15,43,0.6)';
+  const vig = c.createRadialGradient(size / 2, size / 2, size * 0.3, size / 2, size / 2, size * 0.75);
+  vig.addColorStop(0, 'rgba(0,0,0,0)');
+  vig.addColorStop(1, 'rgba(27,15,43,0.18)');
+  c.fillStyle = vig;
+  c.fillRect(0, 0, size, size);
+  c.strokeStyle = 'rgba(27,15,43,0.06)';
   c.lineWidth = 1;
-  for (const r of map.minimap) if (r.label) c.strokeRect(tx(r.x - r.w / 2), tx(r.z - r.d / 2), r.w * s, r.d * s);
-  c.fillStyle = '#1b0f2b';
-  c.font = `bold ${Math.round(size / 48)}px sans-serif`;
-  c.textAlign = 'center';
+  for (let v = -map.half; v <= map.half; v += 50) {
+    c.beginPath(); c.moveTo(tx(v), 0); c.lineTo(tx(v), size); c.stroke();
+    c.beginPath(); c.moveTo(0, tx(v)); c.lineTo(size, tx(v)); c.stroke();
+  }
+
+  // Ground features first (roads, lots, water), then buildings on top.
   for (const r of map.minimap) {
-    if (!r.label || r.label === 'Trailer') continue;
-    c.fillText(r.label, tx(r.x), tx(r.z + r.d / 2) + size / 40);
+    if (r.building) continue;
+    const x = tx(r.x - r.w / 2);
+    const y = tx(r.z - r.d / 2);
+    const w = r.w * s;
+    const h = r.d * s;
+    c.fillStyle = r.color;
+    roundRect(c, x, y, w, h, Math.min(w, h) * 0.3);
+    c.fill();
+    // Dashed center line on long, thin roads.
+    const long = Math.max(w, h);
+    const thin = Math.min(w, h);
+    if (long / thin > 6 && !/7f6f|6b5c|bfe3/i.test(r.color)) {
+      c.strokeStyle = 'rgba(255,214,63,0.75)';
+      c.lineWidth = Math.max(1, 1.2 * k);
+      c.setLineDash([6 * k, 6 * k]);
+      c.beginPath();
+      if (w > h) { c.moveTo(x, y + h / 2); c.lineTo(x + w, y + h / 2); } else { c.moveTo(x + w / 2, y); c.lineTo(x + w / 2, y + h); }
+      c.stroke();
+      c.setLineDash([]);
+    }
+  }
+
+  for (const r of map.minimap) {
+    if (!r.building) continue;
+    const x = tx(r.x - r.w / 2);
+    const y = tx(r.z - r.d / 2);
+    const w = Math.max(3, r.w * s);
+    const h = Math.max(3, r.d * s);
+    const rad = Math.min(4 * k, w / 3, h / 3);
+    // Shadow, body, top highlight, ink outline.
+    c.fillStyle = 'rgba(27,15,43,0.25)';
+    roundRect(c, x + 2 * k, y + 2.5 * k, w, h, rad);
+    c.fill();
+    c.fillStyle = r.color;
+    roundRect(c, x, y, w, h, rad);
+    c.fill();
+    c.fillStyle = 'rgba(255,255,255,0.18)';
+    roundRect(c, x, y, w, h * 0.35, rad);
+    c.fill();
+    c.strokeStyle = r.tier >= 3 ? '#ffd23f' : 'rgba(27,15,43,0.75)';
+    c.lineWidth = (r.tier >= 3 ? 2.5 : 1.2) * k;
+    roundRect(c, x, y, w, h, rad);
+    c.stroke();
+  }
+
+  if (labels) {
+    const seen = new Set();
+    c.font = `900 ${Math.round(13 * k)}px Nunito, system-ui, sans-serif`;
+    c.textAlign = 'center';
+    c.textBaseline = 'middle';
+    for (const r of map.minimap) {
+      if (!r.label || SKIP_LABELS.has(r.label) || seen.has(r.label)) continue;
+      seen.add(r.label);
+      const text = r.label;
+      const tw = c.measureText(text).width + 12 * k;
+      const th = 18 * k;
+      const lx = tx(r.x);
+      const ly = Math.min(size - th, tx(r.z + r.d / 2) + th * 0.9);
+      c.fillStyle = r.tier >= 3 ? 'rgba(122,16,40,0.92)' : 'rgba(27,15,43,0.82)';
+      roundRect(c, lx - tw / 2, ly - th / 2, tw, th, th / 2);
+      c.fill();
+      c.fillStyle = r.tier >= 3 ? '#ffd23f' : '#fff6e0';
+      c.fillText(text, lx, ly + 1);
+    }
   }
   return canvas;
 }
@@ -1063,14 +1177,27 @@ function lostVegas(k) {
   }
   for (let i = 0; i < 6; i++) enemies('dicer', (Math.random() * 2 - 1) * 140, (Math.random() * 2 - 1) * 140, 1);
 
-  return { ...cas, extracts, spawns: [[-150, 150], [150, 150], [-150, -130], [150, -130], [-160, -20], [160, -20], [80, 165], [-80, 165], [-150, 95], [150, 95]] };
+  return {
+    ...cas,
+    extracts,
+    spawns: [[-150, 150], [150, 150], [-150, -130], [150, -130], [-160, -20], [160, -20], [80, 165], [-80, 165], [-150, 95], [150, 95]],
+    // Cars cruise the strip and the cross street. Don't stand in the road.
+    hazards: {
+      lanes: [
+        { axis: 'z', at: 3.5, from: -16, to: 172, dir: 1 },
+        { axis: 'z', at: -3.5, from: -16, to: 172, dir: -1 },
+        { axis: 'x', at: 43.5, from: -172, to: 172, dir: 1 },
+        { axis: 'x', at: 36.5, from: -172, to: 172, dir: -1 },
+      ],
+    },
+  };
 }
 
 function frostbitePeaks(k) {
   const {
     H, THREE, statics, zones, minimap, slotSpots, part, toon, neonSign, flat, box, circle,
     car, rock, streetLight, billboard, crateStack, building, container, enemies, casino,
-    pine, snowman, scatter,
+    pine, snowman, scatter, fire,
   } = k;
   const path = toon(0xb8c4d6);
   flat(0, 75, 14, 130, path);
@@ -1191,6 +1318,10 @@ function frostbitePeaks(k) {
   enemies('slotbot', 0, 60, 1);
   enemies('dicer', 0, 110, 2, 20);
 
+  // Burning barrels to warm up at, spread so you can hop between them.
+  for (const [x, z] of [[-15, 30], [15, 50], [-8, 100], [8, 128], [-60, 30], [65, 30], [-90, -65], [100, -70], [70, 80], [-40, 82], [40, 112],
+    [-110, 0], [110, 0], [-100, 110], [100, 115], [-60, -110], [40, -110], [0, -5], [-125, 45], [-120, -85], [110, -100]]) fire(x, z);
+
   const extracts = [
     { name: 'Gondola', x: 115, z: -112 },
     { name: 'Snowmobile Trail', x: -128, z: 60 },
@@ -1211,6 +1342,7 @@ function frostbitePeaks(k) {
     ...cas,
     extracts,
     spawns: [[-120, 120], [120, 125], [-125, -30], [125, -30], [-60, 130], [60, 130], [125, 20], [-125, 20]],
+    hazards: { cold: true },
   };
 }
 

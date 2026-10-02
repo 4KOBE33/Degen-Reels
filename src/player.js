@@ -1,6 +1,6 @@
 // Your keyboard/mouse controls and the over-the-shoulder camera.
 //   WASD move · Space jump · Shift sprint · Mouse aim · Left click shoot · Right click aim down sights
-//   1/2 or Q swap guns · R reload · E use (hold to search) · H heal · F armor plate · I (or Tab/B) bag · M map
+//   1/2 or mouse wheel swap guns · R reload · E use (hold to search) · H heal · F armor plate · Q (or Tab/I/B) bag · M map
 //   V switch first/third person
 import * as THREE from 'three';
 import { WEAPONS } from './config.js';
@@ -42,11 +42,11 @@ export class PlayerController {
       if (k === 'e') this.pressE = true;
       if (k === '1') c.switchTo(0);
       if (k === '2') c.switchTo(1);
-      if (k === 'q') c.switchTo(c.active ? 0 : 1);
       if (k === 'r') this.say(c.reload(), 'Reloading…');
       if (k === 'h') this.say(c.startUsing(c.count('bandage') ? 'bandage' : 'soda'), null);
       if (k === 'f') this.say(c.startUsing('plate'), null);
-      if (k === 'tab' || k === 'i' || k === 'b') this.onToggle('bag');
+      if (k === 'g') this.say(c.startUsing('cocoa'), null);
+      if (k === 'q' || k === 'tab' || k === 'i' || k === 'b') this.onToggle('bag');
       if (k === 'm') this.onToggle('map');
       if (k === 'v') this.togglePov();
     });
@@ -62,6 +62,12 @@ export class PlayerController {
       if (e.button === 2) this.aimHeld = false;
     });
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+    // Mouse wheel swaps guns.
+    window.addEventListener('wheel', (e) => {
+      if (!this.locked || !this.c || !this.c.alive || !this.raid.active) return;
+      if (Math.abs(e.deltaY) < 1) return;
+      this.c.switchTo(this.c.active ? 0 : 1);
+    }, { passive: true });
     window.addEventListener('mousemove', (e) => {
       if (!this.locked || !this.c) return;
       // Slower turning while aiming down sights.

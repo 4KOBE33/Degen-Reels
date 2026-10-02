@@ -49,6 +49,7 @@
       <div class="bar hp"><div id="hpFill"></div></div>
       <div class="bar armor"><div id="armorFill"></div></div>
       <div class="bar stamina"><div id="staminaFill"></div></div>
+      <div id="warmRow" class="warmrow" hidden><span id="warmIcon">🔥</span><div class="bar warmth"><div id="warmFill"></div></div></div>
       <div class="row2"><span id="raidChips"></span><span id="quick"></span></div>
     </div>
     <div id="weapons" class="panel"></div>
@@ -61,22 +62,27 @@
     <div id="toast"></div>
     <div id="extracting" hidden></div>
     <div id="vignette"></div>
+    <div id="frost"></div>
     <div id="intro"></div>
-    <div id="keyhint">I backpack · M map · V camera · H heal · F armor · R reload · Right click aim</div>
+    <div id="keyhint">Q backpack · M map · V camera · H heal · F armor · R reload · Right click aim</div>
   </div>
 
-  <div id="bag" class="screen dim" hidden>
-    <div class="card wide">
-      <h2>BACKPACK</h2>
-      <div id="bagList"></div>
-      <button class="btn" data-close>Back to the raid</button>
+  <div id="bag" hidden>
+    <div class="inv">
+      <header class="invhead">
+        <h2>BACKPACK</h2>
+        <div id="invHaul" class="invhaul"></div>
+        <button class="btn" data-close>Back to the raid <kbd>Q</kbd></button>
+      </header>
+      <div id="bagList" class="invbody"></div>
     </div>
   </div>
 
   <div id="bigmap" class="screen dim" hidden>
     <div class="card wide">
       <h2 id="bigmapTitle">MAP</h2>
-      <canvas id="bigmapCanvas" width="560" height="560"></canvas>
+      <canvas id="bigmapCanvas" width="800" height="800"></canvas>
+      <div class="legend"><span><i class="lg exit"></i>Open exit</span><span><i class="lg closed"></i>Closed exit</span><span>▲ You</span><span>👑 Pit Boss</span><span><i class="lg deadly"></i>Deadly zone</span></div>
       <button class="btn" data-close>Back to the raid</button>
     </div>
   </div>
@@ -85,8 +91,8 @@
     <div class="card">
       <h2>PAUSED</h2>
       <p class="keys"><b>WASD</b> move · <b>Mouse</b> aim · <b>Click</b> shoot · <b>Right click</b> aim<br>
-        <b>E</b> use (hold to search) · <b>1 2 Q</b> swap guns · <b>R</b> reload<br>
-        <b>H</b> heal · <b>F</b> armor plate · <b>I</b> backpack · <b>M</b> map · <b>V</b> first/third person<br>
+        <b>E</b> use (hold to search) · <b>1 2</b> or <b>wheel</b> swap guns · <b>R</b> reload<br>
+        <b>H</b> heal · <b>F</b> armor plate · <b>G</b> hot cocoa · <b>Q</b> backpack · <b>M</b> map · <b>V</b> first/third person<br>
         <b>Shift</b> sprint (uses stamina) · Running and jumping wreck your aim</p>
       <div class="pauseBtns"><button id="openBag" class="btn">🎒 Open backpack</button><button id="povBtn" class="btn"></button></div>
       <label class="slider">Mouse sensitivity <b id="psensVal"></b><input type="range" id="psens" min="0.1" max="3" step="0.05"></label>

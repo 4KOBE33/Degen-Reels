@@ -126,6 +126,13 @@ function buildModel(type) {
     parts.hit = new THREE.Mesh(new THREE.BoxGeometry(1.8, 3.1, 1.4), hitMat);
     parts.hit.position.y = 1.6;
     g.add(parts.hit);
+    // Weak spot: the glowing eye strip on a Slotbot, the jackpot screen on the boss.
+    parts.crit = boss
+      ? new THREE.Mesh(new THREE.BoxGeometry(1.35, 0.6, 0.3), hitMat)
+      : new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.3, 0.3), hitMat);
+    parts.crit.position.set(0, boss ? 2.1 : 2.95, -0.62);
+    parts.critMult = boss ? 2.5 : 2.2;
+    g.add(parts.crit);
   } else if (type === 'dicer') {
     const bodyMat = toon(0xffffff, { unique: true, map: pips(), emissive: 0xffffff, emissiveIntensity: 0 });
     const die = part(new THREE.BoxGeometry(0.9, 0.9, 0.9), bodyMat, { ink: 0.04 });
@@ -139,6 +146,54 @@ function buildModel(type) {
     parts.hit = new THREE.Mesh(new THREE.SphereGeometry(0.75, 8, 6), hitMat);
     parts.hit.position.y = 2.4;
     g.add(parts.hit);
+    // Weak spot: the little rotor hub on top. Hard to hit from the ground, so it pays big.
+    parts.crit = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.25, 0.5), hitMat);
+    parts.crit.position.set(0, 3.05, 0);
+    parts.critMult = 3;
+    g.add(parts.crit);
+  } else if (type === 'gator') {
+    const bodyMat = toon(0x4d7c0f, { unique: true, emissive: 0xffffff, emissiveIntensity: 0 });
+    const body = part(new THREE.BoxGeometry(1.1, 0.55, 2.6), bodyMat, { ink: 0.04 });
+    body.position.set(0, 0.45, 0.2);
+    const belly = part(new THREE.BoxGeometry(0.9, 0.2, 2.3), 0xd9f99d, { ink: 0, shadow: false });
+    belly.position.set(0, 0.2, 0.2);
+    const head = part(new THREE.BoxGeometry(0.8, 0.35, 1.3), bodyMat, { ink: 0.035 });
+    head.position.set(0, 0.5, -1.6);
+    const jaw = part(new THREE.BoxGeometry(0.75, 0.18, 1.2), 0x3f6212, { ink: 0.03 });
+    jaw.position.set(0, 0.28, -1.55);
+    const tail = part(new THREE.ConeGeometry(0.45, 2.2, 6), bodyMat, { ink: 0.035 });
+    tail.rotation.x = Math.PI / 2;
+    tail.position.set(0, 0.45, 2.5);
+    g.add(body, belly, head, jaw, tail);
+    const eyes = new THREE.Group();
+    for (const side of [-1, 1]) {
+      const eye = part(new THREE.SphereGeometry(0.13, 8, 6), 0xfacc15, { ink: 0.02, shadow: false });
+      eye.position.set(side * 0.25, 0.75, -1.2);
+      eyes.add(eye);
+    }
+    g.add(eyes);
+    // Ridge spikes down the back.
+    for (let i = 0; i < 5; i++) {
+      const spike = part(new THREE.ConeGeometry(0.1, 0.25, 4), 0x365314, { ink: 0, shadow: false });
+      spike.position.set(0, 0.8, -0.6 + i * 0.5);
+      g.add(spike);
+    }
+    const legs = [];
+    for (const [x, z] of [[-0.6, -0.6], [0.6, -0.6], [-0.6, 0.9], [0.6, 0.9]]) {
+      const leg = part(new THREE.BoxGeometry(0.25, 0.35, 0.35), 0x3f6212, { ink: 0.02 });
+      leg.position.set(x, 0.15, z);
+      g.add(leg);
+      legs.push(leg);
+    }
+    Object.assign(parts, { body, legs, jaw, eye: eyes.children[0], bodyMat, muzzle: new THREE.Vector3(0, 0.5, -2.2) });
+    parts.hit = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.9, 4.2), hitMat);
+    parts.hit.position.set(0, 0.45, 0);
+    g.add(parts.hit);
+    // Weak spot: right between the eyes.
+    parts.crit = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.3, 0.35), hitMat);
+    parts.crit.position.set(0, 0.75, -1.25);
+    parts.critMult = 2.0;
+    g.add(parts.crit);
   } else if (type === 'shark') {
     const bodyMat = toon(0xffffff, { unique: true, emissive: 0xffffff, emissiveIntensity: 0 });
     const card = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.7, 0.1), [bodyMat, bodyMat, bodyMat, bodyMat,
@@ -161,6 +216,11 @@ function buildModel(type) {
     parts.hit = new THREE.Mesh(new THREE.BoxGeometry(1.3, 2.2, 0.6), hitMat);
     parts.hit.position.y = 1.2;
     g.add(parts.hit);
+    // Weak spot: the eye band at the top of the card.
+    parts.crit = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.22, 0.75), hitMat);
+    parts.crit.position.set(0, 2.05, 0);
+    parts.critMult = 2.0;
+    g.add(parts.crit);
   }
   return { group: g, parts };
 }
@@ -181,7 +241,7 @@ export class Machine {
     this.vel = new THREE.Vector3();
     this.home = new THREE.Vector3(x, 0, z);
     this.yaw = Math.random() * Math.PI * 2;
-    this.radius = this.isBoss ? 2.4 : type === 'dicer' ? 0.6 : 0.8;
+    this.radius = this.isBoss ? 2.4 : type === 'dicer' ? 0.6 : type === 'gator' ? 1.0 : 0.8;
     this.target = null;
     this.lostFor = 0;
     this.thinkIn = Math.random() * 0.5;
@@ -200,8 +260,13 @@ export class Machine {
     this.parts = parts;
     parts.hit.userData.actor = this;
     this.hitMesh = parts.hit;
+    if (parts.crit) {
+      parts.crit.userData.actor = this;
+      parts.crit.userData.crit = parts.critMult;
+      this.critMesh = parts.crit;
+    }
     this.bar = hpBar();
-    this.bar.position.y = this.isBoss ? 11.5 : type === 'dicer' ? 3.4 : 3.6;
+    this.bar.position.y = this.isBoss ? 11.5 : type === 'dicer' ? 3.4 : type === 'gator' ? 1.8 : 3.6;
     this.bar.userData.draw(1);
     if (!this.isBoss) group.add(this.bar);
     group.position.copy(this.pos);
@@ -209,7 +274,7 @@ export class Machine {
   }
 
   head(out = new THREE.Vector3()) {
-    const h = this.isBoss ? 6 : this.type === 'dicer' ? 2.4 : 1.8;
+    const h = this.isBoss ? 6 : this.type === 'dicer' ? 2.4 : this.type === 'gator' ? 0.7 : 1.8;
     return out.set(this.pos.x, this.pos.y + h, this.pos.z);
   }
 
@@ -259,7 +324,10 @@ export class Machine {
       this.lostFor = this.seesTarget ? 0 : this.lostFor + 0.4;
       if (this.lostFor > 8) this.target = null;
     }
-    if (!this.target && (!this.wanderTo || Math.random() < 0.05)) {
+    if (this.type === 'gator') {
+      if (this.target && this.target.pos.distanceTo(this.home) > 20) this.target = null;
+      if (!this.target) this.wanderTo = this.home.clone();
+    } else if (!this.target && (!this.wanderTo || Math.random() < 0.05)) {
       this.wanderTo = this.home.clone().add(new THREE.Vector3((Math.random() - 0.5) * 16, 0, (Math.random() - 0.5) * 16));
     }
     if (Math.random() < 0.15) this.strafe *= -1;
@@ -302,11 +370,12 @@ export class Machine {
       this.yaw += angleDiff(this.yaw, wantYaw) * Math.min(1, dt * (this.isBoss ? 2 : 5));
       const facing = Math.abs(angleDiff(this.yaw, wantYaw)) < 0.35;
 
-      if (this.type === 'shark') {
+      if (this.def.melee) {
         if (d > 1.6) { mx = dx / d; mz = dz / d; }
         if (d < def.range && this.cooldown <= 0 && this.windup <= 0) {
           this.cooldown = def.rate;
-          this.parts.blade.rotation.y = -1.2;
+          if (this.parts.blade) this.parts.blade.rotation.y = -1.2;
+          if (this.parts.jaw) this.parts.jaw.rotation.x = 0.6;
           raid.meleeHit(this, t, def.damage);
         }
         if (d < 8 && this.cooldown < def.rate * 0.5) speed *= 1.35;
@@ -387,6 +456,14 @@ export class Machine {
       this.parts.rotor.rotation.y += dt * 30;
     }
     if (this.parts.blade) this.parts.blade.rotation.y += (0 - this.parts.blade.rotation.y) * Math.min(1, dt * 8);
+    if (this.parts.jaw) this.parts.jaw.rotation.x += (0 - this.parts.jaw.rotation.x) * Math.min(1, dt * 6);
+    if (this.type === 'gator') {
+      // Only the eyes poke out of the water while it waits.
+      const lurking = !this.target && this.pos.distanceTo(this.home) < 2.5;
+      this.sink = (this.sink || 0) + ((lurking ? 1 : 0) - (this.sink || 0)) * Math.min(1, dt * 3);
+      this.group.position.y = -0.62 * this.sink;
+      this.bar.visible = this.bar.visible && !lurking;
+    }
     // Eyes glow brighter while winding up to shoot.
     this.parts.eye.material.color.setHex(this.target ? (this.windup > 0 ? 0xffffff : 0xff3fa4) : 0x7dd3fc);
     return true;
