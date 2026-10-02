@@ -232,6 +232,7 @@ export class Session {
       s.k = 'm';
       s.t = a.type;
       if (a.stunned > 0) s.st = 1;
+      if (a.isBoss) { s.bp = a.bossPhase; if (a.invuln > 0) s.iv = 1; }
     } else {
       s.k = 'c';
       s.n = a.name;
@@ -611,6 +612,7 @@ export class Session {
         actor.hp = a.hp;
         if (dropped) actor.hurt(null);
         actor.stunned = a.st ? 1 : 0;
+        if (actor.isBoss && a.bp) { actor.setBossPhase(a.bp); actor.invuln = a.iv ? 1 : 0; }
         if (actor.alive && !a.a) this.machineDied(actor);
       } else {
         actor.hp = a.hp;

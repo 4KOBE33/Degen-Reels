@@ -230,7 +230,12 @@ export class Hud {
     const b = raid.boss;
     const showBoss = b && b.alive && b.pos.distanceTo(p.pos) < 70;
     $('bossbar').hidden = !showBoss;
-    if (showBoss) $('bossFill').style.width = `${(b.hp / b.maxHp) * 100}%`;
+    if (showBoss) {
+      $('bossFill').style.width = `${(b.hp / b.maxHp) * 100}%`;
+      const ph = b.bossPhase || 1;
+      this.set('bossName', `👑 THE PIT BOSS · ${['', 'PHASE 1: HIT THE SCREEN', 'PHASE 2: OVERCLOCKED · HIT HIS BACK', 'PHASE 3: TILT · HIT THE CROWN SOCKET'][ph]}${b.invuln > 0 ? ' · 🛡️' : ''}`);
+      $('bossbar').dataset.phase = ph;
+    }
 
     this.toastTimer -= dt;
     if (this.toastTimer <= 0) $('toast').classList.remove('show');

@@ -144,6 +144,15 @@ function buildModel(type) {
       const cannon2 = cannon.clone();
       cannon2.position.x = -0.95;
       g.add(cannon2);
+      // Weak spots that show up later in the fight: a core on his back, then the crown socket.
+      const core = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.75, 0.06), new THREE.MeshBasicMaterial({ color: 0xff9f1c }));
+      core.position.set(0, 2.0, 0.63);
+      core.visible = false;
+      const socket = new THREE.Mesh(new THREE.SphereGeometry(0.32, 12, 8), new THREE.MeshBasicMaterial({ color: 0xff3fa4 }));
+      socket.position.set(0, 3.3, 0);
+      socket.visible = false;
+      g.add(core, socket);
+      Object.assign(parts, { crown, core, socket });
     }
     g.scale.setScalar(s);
     Object.assign(parts, { body, legs, eye, bodyMat, muzzle: new THREE.Vector3(0.95, 1.8, -1.0) });
@@ -377,6 +386,10 @@ export class Machine {
     this.phase = 0;
     this.strafe = Math.random() < 0.5 ? -1 : 1;
     this.wanderTo = null;
+    // The Pit Boss gets meaner as he gets weaker: speed, fire rate and damage per phase.
+    this.bossPhase = 1;
+    this.rage = { speed: 1, rate: 1, dmg: 1 };
+    this.invuln = 0;
 
     const { group, parts } = buildModel(type);
     this.group = group;
@@ -506,7 +519,17 @@ export class Machine {
     const def = this.def;
     let mx = 0;
     let mz = 0;
-    let speed = def.speed;
+    let speed = def.speed * this.rage.speed;
+    this.invuln = Math.max(0, this.invuln - dt);
+    if (this.isBoss) {
+      // Weaker = angrier.
+      const f = this.hp / this.maxHp;
+      const want = f < 0.33 ? 3 : f < 0.66 ? 2 : 1;
+      if (want > this.bossPhase) this.setBossPhase(want);
+      if (this.parts.socket.visible) this.parts.socket.scale.setScalar(1 + Math.sin(performance.now() / 120) * 0.15);
+      if (this.parts.core.visible) this.parts.core.material.color.setHSL(0.08, 1, 0.5 + Math.sin(performance.now() / 150) * 0.15);
+      if (this.invuln > 0) { speed = 0; this.burstLeft = 0; }
+    }
     const t = this.target;
     if (t) {
       const dx = t.pos.x - this.pos.x;
@@ -541,7 +564,7 @@ export class Machine {
         if (this.burstLeft === 0 && this.cooldown <= 0 && this.windup <= 0 && this.seesTarget && facing && d < def.range) {
           this.burstLeft = def.burst;
           this.burstTimer = 0;
-          this.cooldown = def.rate + Math.random() * 0.6;
+          this.cooldown = (def.rate + Math.random() * 0.6) / this.rage.rate;
         }
         if (this.burstLeft > 0) {
           this.burstTimer -= dt;
@@ -554,11 +577,11 @@ export class Machine {
             aim.x += (Math.random() - 0.5) * err * d;
             aim.y += (Math.random() - 0.5) * err * d * 0.6;
             aim.z += (Math.random() - 0.5) * err * d;
-            raid.machineShot(this, origin, aim.sub(origin).normalize(), def.damage);
+            raid.machineShot(this, origin, aim.sub(origin).normalize(), Math.round(def.damage * this.rage.dmg));
           }
         }
       }
-      if (this.isBoss) this.bossMoves(dt, t, d);
+      if (this.isBoss && this.invuln <= 0) this.bossMoves(dt, t, d);
     } else if (this.wanderTo) {
       const dx = this.wanderTo.x - this.pos.x;
       const dz = this.wanderTo.z - this.pos.z;
@@ -633,13 +656,124 @@ export class Machine {
     return m.add(this.group.position);
   }
 
-  // The Pit Boss's special attacks, cycling every few seconds.
+  // Boss phases: where the weak spot is, how hard he goes, what he looks like.
+  setBossPhase(n, announce = true) {
+    if (!this.isBoss || n === this.bossPhase) return;
+    this.bossPhase = n;
+    const p = this.parts;
+    const raid = this.raid;
+    if (n === 1) {
+      // Back to square one (he reset after everyone left).
+      p.crit.position.set(0, 2.1, -0.62);
+      p.crit.scale.set(1, 1, 1);
+      p.core.visible = false;
+      p.socket.visible = false;
+      p.crown.visible = true;
+      p.bodyMat.color.setHex(0xffc83d);
+      this.rage = { speed: 1, rate: 1, dmg: 1 };
+      p.critMult = 2.5;
+      p.crit.userData.crit = p.critMult;
+      return;
+    } else if (n === 2) {
+      // OVERCLOCKED: the screen armors up, a hot core opens on his back.
+      p.crit.position.set(0, 2.0, 0.66);
+      p.crit.scale.set(1, 1.2, 1);
+      p.core.visible = true;
+      p.bodyMat.color.setHex(0xff9f1c);
+      this.rage = { speed: 1.35, rate: 1.35, dmg: 1.25 };
+      p.critMult = 3;
+    } else if (n === 3) {
+      // TILT: the crown blows off. The socket underneath is the only soft spot left.
+      p.crit.position.set(0, 3.3, 0);
+      p.crit.scale.set(0.6, 0.7, 2.6);
+      p.core.visible = false;
+      p.crown.visible = false;
+      p.socket.visible = true;
+      p.bodyMat.color.setHex(0xe63946);
+      this.rage = { speed: 1.7, rate: 1.7, dmg: 1.5 };
+      p.critMult = 3.5;
+    }
+    p.crit.userData.crit = p.critMult;
+    if (!announce) return;
+    this.invuln = 1.6;
+    this.windup = 1.6;
+    this.burstLeft = 0;
+    this.phase = 2;
+    raid.fx.explosion(this.center(new THREE.Vector3()), 6);
+    sfx.alert(this.pos, raid.listener);
+    if (!this.puppet) raid.slam(this, 12, 20);
+    const msg = n === 2
+      ? '🔥 PHASE 2: The Pit Boss is OVERCLOCKED! His screen is armored: shoot the glowing core on his BACK.'
+      : '💥 PHASE 3: TILT! His crown blew off. Hit the socket on TOP of his head, and don\'t stand still.';
+    raid.feed(msg);
+    if (raid.player && raid.player.alive && raid.player.pos.distanceTo(this.pos) < 90) raid.hud.toast(msg, 'big');
+    if (this.puppet) return;
+    // Backup arrives.
+    const call = n === 2 ? ['roller', 'roller'] : ['bouncer', 'dicer', 'dicer'];
+    for (const type of call) {
+      const m = raid.spawnMachine(type, this.pos.x + (Math.random() - 0.5) * 12, this.pos.z + (Math.random() - 0.5) * 12);
+      m.summoned = true;
+      m.target = this.target;
+    }
+  }
+
+  // A full circle of chip bullets.
+  coinRing(count, dmg) {
+    const origin = this.center(new THREE.Vector3());
+    origin.y -= 1.5;
+    for (let i = 0; i < count; i++) {
+      const a = (i / count) * Math.PI * 2 + Math.random() * 0.2;
+      this.raid.machineShot(this, origin, new THREE.Vector3(Math.cos(a), -0.04, Math.sin(a)).normalize(), dmg);
+    }
+    sfx.boom(this.pos, this.raid.listener);
+  }
+
+  // Rockets raining down around the target.
+  jackpotRain(t, n) {
+    for (let i = 0; i < n; i++) {
+      setTimeout(() => {
+        if (!this.alive || !t.alive) return;
+        const aim = t.pos.clone().add(new THREE.Vector3((Math.random() - 0.5) * 9, 0, (Math.random() - 0.5) * 9));
+        const origin = aim.clone().add(new THREE.Vector3((Math.random() - 0.5) * 4, 32, (Math.random() - 0.5) * 4));
+        this.raid.spawnRocket(origin, aim.sub(origin).normalize(), this, 0, 34);
+      }, i * 220);
+    }
+    this.raid.feed('🎰 JACKPOT RAIN!');
+  }
+
+  // The Pit Boss's special attacks, cycling every few seconds. More of them, faster, each phase.
   bossMoves(dt, t, d) {
     this.phase -= dt;
     if (this.phase > 0) return;
-    this.phase = 3.5 + Math.random() * 1.5;
     const raid = this.raid;
     const roll = Math.random();
+    const ph = this.bossPhase;
+    if (ph >= 2) {
+      this.phase = (ph === 3 ? 2.2 : 3.0) + Math.random() * 1.2;
+      if (d < (ph === 3 ? 9 : 7)) raid.slam(this, ph === 3 ? 12 : 9, ph === 3 ? 42 : 34);
+      else if (roll < 0.3) this.coinRing(ph === 3 ? 26 : 18, Math.round(6 * this.rage.dmg));
+      else if (roll < 0.55 && ph === 3) this.jackpotRain(t, 7);
+      else if (roll < 0.55 && raid.machines.filter((m) => m.alive && m.type === 'roller' && m.summoned).length < 3) {
+        for (let i = 0; i < 2; i++) {
+          const m = raid.spawnMachine('roller', this.pos.x + (Math.random() - 0.5) * 8, this.pos.z + (Math.random() - 0.5) * 8);
+          m.summoned = true;
+          m.target = t;
+        }
+        raid.feed('🎡 The Pit Boss spun up Roulette Rollers!');
+      } else {
+        for (let i = 0; i < (ph === 3 ? 5 : 4); i++) {
+          setTimeout(() => {
+            if (!this.alive || !t.alive) return;
+            const origin = this.muzzleWorld();
+            origin.y += 1;
+            const aim = t.pos.clone().add(new THREE.Vector3((Math.random() - 0.5) * 5, 0.5, (Math.random() - 0.5) * 5));
+            raid.spawnRocket(origin, aim.sub(origin).normalize(), this, 0, Math.round(40 * this.rage.dmg));
+          }, i * 260);
+        }
+      }
+      return;
+    }
+    this.phase = 3.5 + Math.random() * 1.5;
     if (d < 7) {
       raid.slam(this, 8, 30);
     } else if (roll < 0.4) {

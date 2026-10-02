@@ -205,6 +205,7 @@ export class Raid {
     else if (lock.on && !this.combatants.some((a) => (a.isPlayer || a.human) && a.alive && this.inCasino(a.pos))) {
       // Everyone who went in is dead: he resets.
       boss.hp = boss.maxHp;
+      boss.setBossPhase(1);
       this.setBossLock(false);
       this.feed('💼 The Pit Boss straightens his tie. Fully healed.');
     }
@@ -1095,6 +1096,14 @@ export class Raid {
       }
       return;
     }
+    // The Pit Boss: shielded while he changes phase; armored everywhere but his weak spot later on.
+    if (target.isBoss) {
+      if (target.invuln > 0) {
+        if (attacker && attacker.isPlayer) this.fx.number(at || target.center(new THREE.Vector3()), 'SHIELDED', '#9ca3af', 1.1);
+        return;
+      }
+      if (target.bossPhase >= 2 && !crit) amount = Math.max(1, Math.round(amount * 0.6));
+    }
     if (this.net && !fromNet) {
       if (!this.map.safe && this.net.blocked(attacker, target)) return;
       // Client: we only decide our own hits. Send them to the host, show them right away.
@@ -1293,13 +1302,19 @@ export class Raid {
         if (c.removeIn <= 0) this.removeCombatant(c);
       }
     }
-    this.machines = this.machines.filter((m) => {
+    // (Anything spawned mid-update, like boss summons, lands after the first n and is kept.)
+    const all = this.machines;
+    const n = all.length;
+    const kept = [];
+    for (let i = 0; i < n; i++) {
+      const m = all[i];
       const keep = m.update(dt);
       if (!keep) this.scene.remove(m.group);
       // Don't draw machines lost in the haze.
       m.group.visible = m.pos.distanceToSquared(this.focus) < this.drawDist * this.drawDist;
-      return keep;
-    });
+      if (keep) kept.push(m);
+    }
+    this.machines = kept.concat(all.slice(n));
     for (const c of this.combatants) if (!c.isPlayer) c.char.root.visible = c.pos.distanceToSquared(this.focus) < this.drawDist * this.drawDist;
     for (const s of this.slots) s.update(dt);
     for (const k of this.containers) k.cull(this.focus);

@@ -770,3 +770,9 @@ table.board tr.me td { background: rgba(255, 210, 63, 0.14); }
 #duelStatus .dline { background: rgba(122, 16, 40, 0.88); border-radius: 20px; padding: 5px 16px; font-weight: 800; }
 #duelStatus .dbig { font: 400 84px var(--display); color: #ffd23f; text-shadow: 0 4px 0 #1b0f2b; margin-top: 30px; }
 #duelStatus .dbig.small { font-size: 48px; }
+#bossbar .bar { position: relative; }
+#bossbar .mark { position: absolute; top: -3px; bottom: -3px; width: 3px; background: var(--ink); }
+#bossbar[data-phase="2"] #bossFill { background: linear-gradient(90deg, #ff9f1c, #e63946); }
+#bossbar[data-phase="3"] #bossFill { background: linear-gradient(90deg, #e63946, #7a1028); animation: bosspulse 0.5s infinite alternate; }
+@keyframes bosspulse { from { filter: brightness(1); } to { filter: brightness(1.5); } }
+#bossbar span { font-size: 15px; }
