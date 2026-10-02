@@ -54,9 +54,9 @@ export const bagBonus = (level = 0) => BAG_UPGRADES.slice(0, level).reduce((n, u
 export const CHIP_VALUE = 5;
 
 export const WEAPONS = {
-  fists: { name: 'Fists', icon: '👊', melee: true, auto: true, damage: 12, rate: 0.45, range: 2.0, ammo: Infinity },
-  spoon: { name: 'Lucky Spoon', icon: '🥄', melee: true, auto: true, damage: 26, rate: 0.4, range: 2.4, ammo: Infinity, value: 40 },
-  bat: { name: 'Pit Boss Bat', icon: '🏏', melee: true, auto: true, damage: 44, rate: 0.75, range: 2.8, ammo: Infinity, value: 220 },
+  fists: { name: 'Fists', icon: '👊', melee: true, auto: true, damage: 30, rate: 0.42, range: 2.6, ammo: Infinity },
+  spoon: { name: 'Lucky Spoon', icon: '🥄', melee: true, auto: true, damage: 62, rate: 0.4, range: 3.0, ammo: Infinity, value: 40 },
+  bat: { name: 'Pit Boss Bat', icon: '🏏', melee: true, auto: true, damage: 100, rate: 0.7, range: 3.4, ammo: Infinity, value: 220 },
   pistol: { name: 'Pea Shooter', icon: '🔫', damage: 16, rate: 0.28, spread: 0.012, pellets: 1, range: 70, ammo: 60, value: 120 },
   revolver: { name: 'Snake Eyes', icon: '🤠', damage: 34, rate: 0.5, spread: 0.006, pellets: 1, range: 85, ammo: 36, value: 420 },
   smg: { name: 'Bullet Hose', icon: '⚡', auto: true, damage: 8, rate: 0.08, spread: 0.035, pellets: 1, range: 50, ammo: 180, value: 300 },

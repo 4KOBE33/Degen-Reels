@@ -951,7 +951,7 @@ export class Raid {
   fire(c, origin, dir) {
     const w = WEAPONS[c.weapon];
     if (!c.alive || c.downed || c.cooldown > 0 || c.using || this.frozen) return false;
-    if (Number.isFinite(c.ammo) && c.ammo <= 0) {
+    if (!w.melee && Number.isFinite(c.ammo) && c.ammo <= 0) {
       const refusal = c.reload();
       if (c.isPlayer) {
         if (refusal) { this.hud.toast('Out of ammo! Find an 📦 Ammo Box or switch guns.'); sfx.deny(); } else this.hud.toast('Reloading…');
@@ -961,7 +961,8 @@ export class Raid {
     }
     c.cooldown = w.rate;
     if (c.isPlayer) c.firedAt = performance.now();
-    const damage = w.damage * RARITIES[c.rarity].damage;
+    // Bots swing a bit softer than people do, so the melee buff doesn't turn every raider into a blender.
+    const damage = w.damage * RARITIES[c.rarity].damage * (w.melee && c.brain ? 0.6 : 1);
     const muzzle = c.char.muzzle.getWorldPosition(new THREE.Vector3());
 
     if (w.melee) {
@@ -974,10 +975,14 @@ export class Raid {
         if (Math.abs(to.y) > 2) continue;
         to.y = 0;
         const d = to.length();
-        if (d > w.range + (o.radius || 0.5) + 0.3 || to.normalize().dot(fwd) < 0.35) continue;
-        if (o.vel) { o.vel.addScaledVector(fwd, 6); o.vel.y += 2; }
+        // A generous swing: anything roughly in front of you and in reach gets hit.
+        if (d > w.range + (o.radius || 0.5) + 0.5 || to.normalize().dot(fwd) < 0.1) continue;
+        if (o.vel) { o.vel.addScaledVector(fwd, 7); o.vel.y += 2.5; }
         sfx.bonk(o.pos, this.listener);
+        // Melee punches through armor: plates only soak half as much of it.
+        this.piercing = true;
         this.damage(o, damage, c, o.center(new THREE.Vector3()));
+        this.piercing = false;
       }
       return true;
     }
@@ -1183,7 +1188,7 @@ export class Raid {
       return;
     }
     // Armor soaks up most of a hit until it breaks.
-    const absorbed = Math.min(target.armor || 0, Math.round(amount * 0.7));
+    const absorbed = Math.min(target.armor || 0, Math.round(amount * (this.piercing ? 0.35 : 0.7)));
     target.armor = (target.armor || 0) - absorbed;
     target.hp -= amount - absorbed;
     if (crit) this.fx.number(at, `${amount}!`, '#ffd23f', attacker && attacker.isPlayer ? 1.6 : 1);
