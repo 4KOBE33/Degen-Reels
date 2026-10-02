@@ -29,7 +29,7 @@ export class RaiderBrain {
     c.brain = this;
     this.hostile = Math.random() < RAIDERS.hostileChance;
     // How good this one is: aim, reactions, movement. Some are cracked.
-    this.skill = 0.55 + Math.random() * 0.45;
+    this.skill = (0.55 + Math.random() * 0.45) * (raid.map.botSkill || 1);
     this.target = null;
     this.goal = null;
     this.goalKind = null;
@@ -326,7 +326,7 @@ export class RaiderBrain {
     const aimed = Math.abs(angleDiff(c.yaw, wantYaw)) < 0.12 + (1 - this.skill) * 0.15;
     const range = w.melee ? w.range + 0.5 : w.range || 60;
     if (this.los && aimed && d < range && this.reaction <= 0 && !c.using) {
-      const err = RAIDERS.accuracy * (1.5 - this.skill) * (0.35 + d / 30) * (c.isSprinting ? 1.6 : 1);
+      const err = RAIDERS.accuracy * (1.5 - this.skill) * (0.35 + d / 30) * (c.isSprinting ? 1.6 : 1) * (this.raid.map.botAim || 1);
       aim.x += (Math.random() - 0.5) * err * d;
       aim.y += (Math.random() - 0.5) * err * d * 0.6;
       aim.z += (Math.random() - 0.5) * err * d;

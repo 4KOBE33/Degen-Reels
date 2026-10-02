@@ -57,7 +57,7 @@ export class Container {
     this.raid = raid;
     this.kind = kind;
     this.def = KINDS[kind];
-    this.tier = Math.min(4, tier + this.def.tierBonus);
+    this.tier = Math.min(4, tier + this.def.tierBonus + (raid.map.lootBonus || 0));
     this.spot = new THREE.Vector3(x, 0, z);
     this.range = 1.9;
     this.opened = false;
@@ -154,7 +154,7 @@ export class Container {
     this.lid.rotation.x = -0.9;
     sfx.open(this.spot, this.raid.listener);
     const [a, b] = this.def.rolls;
-    const n = randInt(a, b);
+    const n = randInt(a, b) + (raid.map.lootRolls || 0);
     for (let i = 0; i < n; i++) {
       const loot = rollLoot(this.tier);
       const at = this.spot.clone().add(new THREE.Vector3((Math.random() - 0.5) * 2, 0, (Math.random() - 0.5) * 2));

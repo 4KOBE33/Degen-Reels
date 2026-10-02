@@ -35,7 +35,7 @@ function marqueeTexture(name, cost) {
 export class SlotMachine {
   constructor(raid, { x, z, rot = 0, tier = 1 }) {
     this.raid = raid;
-    this.tier = tier;
+    this.tier = Math.min(4, tier + (raid.map.lootBonus || 0));
     this.cost = RAID_SLOT_COST[tier];
     this.name = TIER_NAMES[tier];
     this.position = new THREE.Vector3(x, 0, z);

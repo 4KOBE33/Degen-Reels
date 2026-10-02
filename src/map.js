@@ -134,11 +134,14 @@ export const MAPS = {
   },
   bunker: {
     name: 'The Bunker', icon: '🥊', size: 'Small', danger: 'PvP', half: 95, wilds: 'Service Tunnels', indoor: true,
-    blurb: 'An underground high-stakes den. Barely any machines, a pack of raiders who want your stuff, and the best loot per square foot in the game.',
+    blurb: 'An underground high-stakes den. Barely any machines, a pack of raiders who want your stuff, and the BEST loot in the game: every crate is vault-grade.',
     sky: [0x0b0612, 0x120a1c, 0x1b0f2b], fog: 0x120a1c,
     ground: { base: '#3a3046', a: 'rgba(0,0,0,0.25)', b: 'rgba(120,90,150,0.18)' },
     mapGround: '#2b2238', hemi: [0xd8c8ff, 0x3a2a4a, 2.2], sun: [0xffe0f0, 0.6], mountains: null, glow: 0xff3fa4, tough: 1,
     raidTime: 600, raiders: 7, hostile: 0.75,
+    // The best loot in the game (everything a tier up, an extra item per search), and raiders a
+    // notch less sharp so it's a fair fight in close quarters.
+    lootBonus: 1, lootRolls: 1, botSkill: 0.7, botAim: 1.7,
   },
   bayou: {
     name: 'Bayou Royale', icon: '🐊', size: 'Huge', danger: 'Medium', half: 270, wilds: 'The Swamp',
@@ -961,6 +964,10 @@ export function buildMap(scene, mapId = 'vegas') {
     half: H,
     indoor: !!def.indoor,
     raidTime: def.raidTime || null,
+    lootBonus: def.lootBonus || 0,
+    lootRolls: def.lootRolls || 0,
+    botSkill: def.botSkill || 1,
+    botAim: def.botAim || 1,
     raiders: def.raiders || null,
     hostile: def.hostile ?? null,
     statics,
