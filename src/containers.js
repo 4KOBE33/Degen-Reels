@@ -49,7 +49,7 @@ const KINDS = {
   crate: { name: 'Chip Crate', time: 1.2, rolls: [1, 2], tierBonus: 0, color: 0xb7791f, lid: 0x6b3a1e },
   locker: { name: 'Locker', time: 1.6, rolls: [2, 2], tierBonus: 0, color: 0x64748b, lid: 0x94a3b8 },
   safe: { name: 'Safe', time: 2.6, rolls: [2, 3], tierBonus: 1, color: 0x1f2937, lid: 0xd4a63a },
-  vault: { name: 'Vault Box', time: 3.0, rolls: [3, 3], tierBonus: 0, color: 0xd4a63a, lid: 0xffc83d },
+  vault: { name: 'Vault Chest', time: 3.0, rolls: [3, 4], tierBonus: 0, color: 0x6b3a1e, lid: 0x7a4a1e },
 };
 
 export class Container {
@@ -79,6 +79,22 @@ export class Container {
       body.position.y = 1.05;
       g.add(body);
       h = 2.1;
+    } else if (kind === 'vault') {
+      // A proper treasure chest: dark wood, gold bands, a jewel on the lock.
+      const body = part(new THREE.BoxGeometry(1.5, 0.8, 1.0), this.def.color);
+      body.position.y = 0.4;
+      g.add(body);
+      for (const bx of [-0.55, 0, 0.55]) {
+        const band = part(new THREE.BoxGeometry(0.12, 0.84, 1.04), 0xd4a63a, { ink: 0.01 });
+        band.position.set(bx, 0.4, 0);
+        g.add(band);
+      }
+      const lock = part(new THREE.BoxGeometry(0.3, 0.32, 0.08), 0xd4a63a, { ink: 0.01 });
+      lock.position.set(0, 0.62, 0.52);
+      const gem = new THREE.Mesh(new THREE.OctahedronGeometry(0.1), new THREE.MeshBasicMaterial({ color: 0x2ee6d6 }));
+      gem.position.set(0, 0.62, 0.58);
+      g.add(lock, gem);
+      h = 0.8;
     } else {
       const s = kind === 'crate' ? 1.1 : kind === 'safe' ? 1.0 : 1.2;
       const body = part(new THREE.BoxGeometry(s, s, s), this.def.color);
@@ -93,9 +109,18 @@ export class Container {
       h = s;
     }
     raid.map.statics.add(g);
-    raid.map.addCollider({ type: 'box', minX: x - 0.5, maxX: x + 0.5, minZ: z - 0.45, maxZ: z + 0.45, top: y + h, bottom: y || undefined });
+    const hw = kind === 'vault' ? 0.78 : 0.5;
+    raid.map.addCollider({ type: 'box', minX: x - hw, maxX: x + hw, minZ: z - 0.5, maxZ: z + 0.5, top: y + h, bottom: y || undefined });
 
-    this.lid = new THREE.Mesh(new THREE.BoxGeometry(kind === 'locker' ? 0.8 : 0.9, 0.12, kind === 'locker' ? 0.6 : 0.8), toon(this.def.lid));
+    if (kind === 'vault') {
+      // Domed lid with gold trim.
+      this.lid = new THREE.Group();
+      const dome = part(new THREE.CylinderGeometry(0.5, 0.5, 1.5, 16, 1, false, 0, Math.PI), this.def.lid);
+      dome.rotation.z = Math.PI / 2;
+      dome.rotation.y = Math.PI / 2;
+      const rim = part(new THREE.BoxGeometry(1.56, 0.08, 1.06), 0xd4a63a, { ink: 0.01 });
+      this.lid.add(dome, rim);
+    } else this.lid = new THREE.Mesh(new THREE.BoxGeometry(kind === 'locker' ? 0.8 : 0.9, 0.12, kind === 'locker' ? 0.6 : 0.8), toon(this.def.lid));
     this.lid.position.set(x, y + h + 0.06, z);
     this.lid.rotation.y = rot;
     raid.scene.add(this.lid);

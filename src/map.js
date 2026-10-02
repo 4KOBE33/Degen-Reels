@@ -604,24 +604,32 @@ export function buildMap(scene, mapId = 'vegas') {
       circle(CX + dx, CZ + CD / 2 + 2, 0.9, 10);
     }
     // Vault room at the back, behind a locked door.
-    const vz = CZ - CD / 2 + 9;
+    // A tight little strongroom: three treasure chests, and whatever's guarding them.
+    const VW = 16;
+    const VD = 12;
+    const vz = CZ - CD / 2 + VD / 2;
     const vaultWall = toon(0x374151);
-    for (const [x0, x1] of [[-14, -2.5], [2.5, 14]]) {
+    for (const [x0, x1] of [[-VW / 2, -2.5], [2.5, VW / 2]]) {
       const len = x1 - x0;
       const wall = part(new THREE.BoxGeometry(len, 10, 0.8), vaultWall, { ink: 0.04 });
-      wall.position.set(CX + (x0 + x1) / 2, 5, vz + 9);
+      wall.position.set(CX + (x0 + x1) / 2, 5, vz + VD / 2);
       statics.add(wall);
-      box(CX + (x0 + x1) / 2, vz + 9, len, 0.8, 10);
+      box(CX + (x0 + x1) / 2, vz + VD / 2, len, 0.8, 10);
     }
-    for (const sx of [-14, 14]) {
-      const wall = part(new THREE.BoxGeometry(0.8, 10, 18), vaultWall, { ink: 0.04 });
+    for (const sx of [-VW / 2, VW / 2]) {
+      const wall = part(new THREE.BoxGeometry(0.8, 10, VD), vaultWall, { ink: 0.04 });
       wall.position.set(CX + sx, 5, vz);
       statics.add(wall);
-      box(CX + sx, vz, 0.8, 18, 10);
+      box(CX + sx, vz, 0.8, VD, 10);
     }
-    zones.push({ name: 'The Vault', x: CX, z: vz, w: 28, d: 18, tier: 4 });
-    minimap.push({ x: CX, z: vz, w: 28, d: 18, color: '#374151', label: 'Vault' });
-    for (const vx of [-10, -5, 0, 5, 10]) container('vault', CX + vx, vz - 5, 4);
+    // Gold trim and a velvet rug so it feels like a vault.
+    flat(CX, vz, VW - 1, VD - 1, toon(0x7a1028), 0.05);
+    const vaultSign = neonSign('THE VAULT', '#ffd23f', 8);
+    vaultSign.position.set(CX, 6.5, vz + VD / 2 + 0.5);
+    statics.add(vaultSign);
+    zones.push({ name: 'The Vault', x: CX, z: vz, w: VW, d: VD, tier: 4 });
+    minimap.push({ x: CX, z: vz, w: VW, d: VD, color: '#374151', label: 'Vault' });
+    for (const vx of [-4.5, 0, 4.5]) container('vault', CX + vx, vz - 2.5, 4);
 
     // Slot rows along the side walls; every third machine is a working loot slot.
     const slotColors = [0x2a9d8f, 0xe63946, 0x7b2cbf];
@@ -694,7 +702,7 @@ export function buildMap(scene, mapId = 'vegas') {
     if (plaza) plaza(CX, CZ + CD / 2 + 15);
     return {
       casino: { x: CX, z: CZ, w: CW, d: CD, doors },
-      vault: { x: CX, z: vz, doorZ: vz + 9 },
+      vault: { x: CX, z: vz, doorZ: vz + VD / 2 },
     };
   }
 

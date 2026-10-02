@@ -2,7 +2,7 @@
 // then reach an extraction point before time runs out. Die and you lose everything you carried.
 import * as THREE from 'three';
 import {
-  PLAYER, WEAPONS, RARITIES, RAID_TIME, EXTRACT_TIME, EXTRACT_RADIUS, EXTRACT_COOLDOWN, BOSS_TIME, RAIDERS, RAIDER_NAMES, COLORS, HATS, ENEMIES, ITEMS,
+  PLAYER, WEAPONS, bagBonus, RARITIES, RAID_TIME, EXTRACT_TIME, EXTRACT_RADIUS, EXTRACT_COOLDOWN, BOSS_TIME, RAIDERS, RAIDER_NAMES, COLORS, HATS, ENEMIES, ITEMS,
 } from './config.js';
 import { buildMap, drawMinimap, neonSign } from './map.js';
 import { SlotMachine } from './slots.js';
@@ -221,7 +221,23 @@ export class Raid {
     this.nav.cache.clear();
     sfx.jackpot(this.vaultDoor.position, this.listener);
     this.feed(`💳 ${c.name} opened the Vault!`);
-    if (c.isPlayer) this.hud.toast('🔓 THE VAULT IS OPEN', 'big');
+    if (c.isPlayer) this.hud.toast('🔓 THE VAULT IS OPEN… something\'s moving in there!', 'big');
+    // The vault's guards come pouring out at whoever opened it.
+    if (!this.isClient) {
+      const { vault } = this.map;
+      const opener = c && c.alive !== undefined && c.team !== 'machine' ? c : null;
+      setTimeout(() => {
+        if (!this.active && !(this.net && this.net.worldAlive && this.net.worldAlive())) return;
+        this.fx.explosion(new THREE.Vector3(vault.x, 1.5, vault.z), 3);
+        sfx.alert(this.vaultDoor.position, this.listener);
+        this.feed('🚨 VAULT GUARDS!');
+        for (const [type, dx, dz] of [['bouncer', 0, -1], ['shark', -5, 1], ['shark', 5, 1], ['dicer', -3, -3], ['dicer', 3, -3]]) {
+          const m = this.spawnMachine(type, vault.x + dx, vault.z + dz);
+          m.summoned = true;
+          if (opener && opener.alive) { m.target = opener; m.windup = 0.4; }
+        }
+      }, 700);
+    }
   }
 
   closeVault() {
@@ -348,6 +364,7 @@ export class Raid {
     });
 
     const p = new Combatant(this, { name, look, isPlayer: true });
+    p.bagBonus = bagBonus(save.get().bag || 0);
     const [sx, sz] = opts.spawn || pick(this.map.spawns);
     const slot = opts.slot || 0;
     // Dropping back into a raid in progress: right where the leader says.

@@ -57,7 +57,7 @@ export class Combatant {
   get weapon() { return this.gun ? this.gun.kind : 'fists'; }
   get rarity() { return this.gun ? this.gun.rarity : 0; }
   get ammo() { return this.gun ? this.gun.ammo : Infinity; }
-  get capacity() { return BACKPACK_SLOTS; }
+  get capacity() { return BACKPACK_SLOTS + (this.bagBonus || 0); }
 
   refreshWeapon() {
     this.char.setWeapon(this.weapon, RARITIES[this.rarity].color);

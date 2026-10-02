@@ -776,3 +776,10 @@ table.board tr.me td { background: rgba(255, 210, 63, 0.14); }
 #bossbar[data-phase="3"] #bossFill { background: linear-gradient(90deg, #e63946, #7a1028); animation: bosspulse 0.5s infinite alternate; }
 @keyframes bosspulse { from { filter: brightness(1); } to { filter: brightness(1.5); } }
 #bossbar span { font-size: 15px; }
+.bagup { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; background: rgba(27, 15, 43, 0.6); border: 2px solid rgba(255, 210, 63, 0.35); border-radius: 12px; padding: 8px 12px; margin-bottom: 6px; }
+.bagup .bagicon { font-size: 28px; }
+.bagup > span:nth-child(2) { display: grid; flex: 1; }
+.bagup small { opacity: 0.75; font-weight: 800; }
+.bagup .btn { margin: 0; padding: 6px 12px; font-size: 14px; }
+.bagup .btn[disabled] { opacity: 0.5; }
+.bagup .maxed { font: 400 16px var(--display); color: var(--gold); }

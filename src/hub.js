@@ -1,7 +1,7 @@
 // The Hub between raids: stash and loadout, the Back Room (gambling), the Fence (selling),
 // your look, your records (stats, achievements, collection log) and settings.
 // Everything here is plain HTML on top of the 3D backdrop.
-import { HUB_SLOTS, ITEMS, LOOT, QUALITY, RARITY_BY_TIER } from './config.js';
+import { BACKPACK_SLOTS, BAG_UPGRADES, HUB_SLOTS, ITEMS, LOOT, QUALITY, RARITY_BY_TIER, bagBonus } from './config.js';
 import {
   itemInfo, isGun, rollLoot, addToList, addToStash, makeGun, makeItem, fullAmmo,
 } from './items.js';
@@ -306,7 +306,7 @@ export class Hub {
       <div class="maps">${maps}</div>
       <p class="mapinfo"><b>${sel.icon} ${sel.name}</b> <span class="tag d-${sel.danger.toLowerCase()}">${sel.size} · ${sel.danger}</span> ${sel.blurb}</p>
       <div class="cols">
-      <section><h3>Raid loadout</h3><p class="hint">Whatever you bring is lost if you die. Click to send it back to the stash.</p>
+      <section>${this.renderBag()}<h3>Raid loadout</h3><p class="hint">Whatever you bring is lost if you die. Click to send it back to the stash.</p>
         ${freeKit ? '<p class="hint freelock">🔒 Free loadout is locked in: nothing goes in or out until you raid with it.</p>' : noGuns ? '<button class="btn freekit" data-act="freekit">🎁 FREE LOADOUT<small>A random gun, bandages, an Ammo Box and a throwable. Lose it and grab another.</small></button>' : ''}
         <div class="wslots">${lo.weapons.map((g, i) => (g ? this.itemCard(g, 'unequip', i) : `<div class="item empty">Weapon ${i + 1}<br><small>empty</small></div>`)).join('')}</div>
         <div class="grid">${lo.items.map((it, i) => this.itemCard(it, 'unpack', i)).join('')}${Array(Math.max(0, LOADOUT_SLOTS - lo.items.length)).fill('<div class="item empty"></div>').join('')}</div>
@@ -314,6 +314,16 @@ export class Hub {
       <section><h3>Stash</h3><p class="hint">Click to pack it for the raid.</p>
         <div class="grid">${d.stash.items.map((it, i) => this.itemCard(it, 'pack', i)).join('') || '<p class="hint">Empty. Go raid!</p>'}</div>
       </section></div>`;
+  }
+
+  // Backpack upgrades: more room in the raid, for good.
+  renderBag() {
+    const lv = this.data.bag || 0;
+    const slots = BACKPACK_SLOTS + bagBonus(lv);
+    const next = BAG_UPGRADES[lv];
+    const cur = lv ? BAG_UPGRADES[lv - 1] : { name: 'Starter Backpack', icon: '🎒' };
+    return `<div class="bagup"><span class="bagicon">${cur.icon}</span><span><b>${cur.name}</b><small>${slots} backpack slots in raids</small></span>
+      ${next ? `<button class="btn" data-act="bagup" ${this.data.stash.chips < next.cost ? 'disabled' : ''}>Upgrade to ${next.icon} ${next.name} (+${next.slots}) · 🪙 ${fmt(next.cost)}</button>` : '<span class="maxed">MAXED OUT</span>'}</div>`;
   }
 
   renderFence() {
@@ -962,6 +972,16 @@ export class Hub {
         if (this.onSettings) this.onSettings();
         break;
       case 'tutorial': save.update((x) => { x.settings.tutorial = b.dataset.t; }); break;
+      case 'bagup': {
+        const lv = d.bag || 0;
+        const next = BAG_UPGRADES[lv];
+        if (!next) break;
+        if (d.stash.chips < next.cost) { this.toast(`You need 🪙 ${fmt(next.cost)} for the ${next.name}.`); break; }
+        save.update((x) => { x.stash.chips -= next.cost; x.bag = lv + 1; });
+        sfx.jackpot();
+        this.toast(`${next.icon} ${next.name}! Your backpack holds ${BACKPACK_SLOTS + bagBonus(lv + 1)} things now.`);
+        break;
+      }
       case 'quality':
         save.update((x) => { x.settings.quality = b.dataset.q; });
         if (this.onSettings) this.onSettings();

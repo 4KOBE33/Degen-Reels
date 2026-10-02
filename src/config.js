@@ -43,6 +43,14 @@ export const EXTRACT_COOLDOWN = 40;
 // The Pit Boss shows up this many seconds into a raid.
 export const BOSS_TIME = 4 * 60;
 export const BACKPACK_SLOTS = 12;
+// Permanent backpack upgrades, bought in the hub. Each adds slots.
+export const BAG_UPGRADES = [
+  { name: 'Fanny Pack', icon: '👝', slots: 3, cost: 2500 },
+  { name: 'Duffel Bag', icon: '👜', slots: 3, cost: 7500 },
+  { name: 'Hiking Pack', icon: '🎒', slots: 3, cost: 20000 },
+  { name: 'High Roller Briefcase', icon: '💼', slots: 3, cost: 50000 },
+];
+export const bagBonus = (level = 0) => BAG_UPGRADES.slice(0, level).reduce((n, u) => n + u.slots, 0);
 export const CHIP_VALUE = 5;
 
 export const WEAPONS = {
