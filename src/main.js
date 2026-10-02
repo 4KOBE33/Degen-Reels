@@ -41,6 +41,7 @@ window.degen = raid;
 raid.renderer = renderer;
 raid.camera = camera;
 raid.setOverlay = (n) => setOverlay(n);
+raid.openTable = (g) => openTable(g);
 
 function resize() {
   renderer.setSize(window.innerWidth, window.innerHeight);
@@ -107,6 +108,7 @@ function setOverlay(name) {
   $('bag').hidden = name !== 'bag';
   $('bigmap').hidden = name !== 'map';
   $('duelPanel').hidden = name !== 'duel';
+  $('betPanel').hidden = name !== 'bet';
   if (name === 'map') hud.drawBigMap(raid);
   if (name && document.pointerLockElement) document.exitPointerLock();
   if (!name && raid.active) controller.lock();
@@ -135,6 +137,8 @@ window.addEventListener('keydown', (e) => {
     $('bag').hidden = true;
     $('bigmap').hidden = true;
     $('duelPanel').hidden = true;
+    $('betPanel').hidden = true;
+    if (document.body.classList.contains('tablemode')) { hub.closeTable(); return; }
     if (raid.active) $('paused').hidden = false;
   }
 });
@@ -195,6 +199,7 @@ function switchMap(id, seed = null) {
   raid.renderer = renderer;
   raid.camera = camera;
   raid.setOverlay = setOverlay;
+  raid.openTable = openTable;
   controller.raid = raid;
   if (typeof voice !== 'undefined') voice.raid = raid;
   applyQuality();
@@ -337,6 +342,13 @@ const hub = new Hub({
 });
 
 window.hub = hub;
+
+// Lounge tables: the Back Room game, right there on the casino floor.
+function openTable(game) {
+  setOverlay('table');
+  hub.openTable(game);
+}
+hub.onTableClose = () => setOverlay(null);
 $('buildTag').textContent = `Build ${BUILD}`;
 
 hud.onLeave = () => {

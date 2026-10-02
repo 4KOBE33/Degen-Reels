@@ -159,6 +159,7 @@ export class Hub {
       net.on('error', (m) => this.toast(m.text));
     }
     $('deploy').addEventListener('click', () => this.deploy());
+    $('tableClose').addEventListener('click', () => this.closeTable());
     cloud.onUpdate(() => { if (!$('hub').hidden && ['settings', 'leaders'].includes(this.tab)) this.render(); else this.renderHeader(); });
     this.board = null;
     this.boardBy = 'worth';
@@ -166,6 +167,20 @@ export class Hub {
   }
 
   show() { $('hub').hidden = false; this.render(); }
+
+  // Playing a Back Room game at a table in the Lounge: just the game, and a way back.
+  openTable(game) {
+    this.tab = 'backroom';
+    this.game = game;
+    document.body.classList.add('tablemode');
+    this.show();
+  }
+
+  closeTable() {
+    document.body.classList.remove('tablemode');
+    this.hide();
+    if (this.onTableClose) this.onTableClose();
+  }
   hide() { $('hub').hidden = true; }
 
   get data() { return save.get(); }

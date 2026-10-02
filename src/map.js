@@ -2911,6 +2911,36 @@ function theLounge(k) {
   flat(0, 22, 6, 6, toon(0xffd23f), 0.05);
   zones.push({ name: 'High Roller Lounge', x: 0, z: 0, w: H * 2, d: H * 2, tier: 1 });
 
+  // Every Back Room game has a table here, plus the Showdown table for poker.
+  const tables = [
+    { x: -34, z: -32, game: 'blackjack', label: 'BLACKJACK', color: '#5ee27a' },
+    { x: 34, z: -32, game: 'roulette', label: 'ROULETTE', color: '#ff5d5d' },
+    { x: -34, z: 32, game: 'crash', label: 'CRASH', color: '#2ee6d6' },
+    { x: 34, z: 32, game: 'mines', label: 'MINES', color: '#c77dff' },
+    { x: -24, z: 0, game: 'plinko', label: 'PLINKO', color: '#ff9f1c' },
+    { x: 24, z: 0, game: 'poker', label: 'POKER SHOWDOWN', color: '#ffd23f' },
+    { x: 0, z: -34, game: 'slots', label: 'LOOT REELS', color: '#ff3fa4' },
+  ];
+  for (const t of tables) {
+    const sg = neonSign(t.label, t.color, Math.max(6, t.label.length * 0.75));
+    sg.position.set(t.x, 4.2, t.z);
+    statics.add(sg);
+    const sg2 = neonSign(t.label, t.color, Math.max(6, t.label.length * 0.75));
+    sg2.position.set(t.x, 4.2, t.z);
+    sg2.rotation.y = Math.PI;
+    statics.add(sg2);
+  }
+  // Betting windows on both sides of The Pit.
+  for (const bz of [R + 3.5, -R - 3.5]) {
+    const booth = part(new THREE.BoxGeometry(3, 1.2, 0.8), 0xd4a63a, { ink: 0.03 });
+    booth.position.set(0, 0.6, bz + Math.sign(bz) * 1.2);
+    statics.add(booth);
+    box(0, bz + Math.sign(bz) * 1.2, 3, 0.8, 1.2);
+    const bs = neonSign('🎟️ BETS', '#ffd23f', 5);
+    bs.position.set(0, 2.6, bz + Math.sign(bz) * 1.2);
+    if (bz < 0) bs.rotation.y = Math.PI;
+    statics.add(bs);
+  }
   const lights = [[0, 0, 0xff3fa4], [-35, -30, 0xffd23f], [35, -30, 0x2ee6d6], [-35, 30, 0xc77dff], [35, 30, 0xffd23f], [0, 40, 0x5ee27a]];
   return {
     casino: { x: 0, z: 0, w: 0, d: 0, doors: [] },
@@ -2918,7 +2948,7 @@ function theLounge(k) {
     extracts: [],
     lights,
     spawns: [[-40, 40], [40, 40], [-40, -40], [40, -40], [-20, 45], [20, 45], [-45, 0], [45, 0]],
-    lounge: { arena: { x: 0, z: 0, r: R }, champion: { x: 0, z: 22 }, exit: { x: 0, z: H - 3.5 } },
+    lounge: { arena: { x: 0, z: 0, r: R }, champion: { x: 0, z: 22 }, exit: { x: 0, z: H - 3.5 }, tables },
   };
 }
 

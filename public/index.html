@@ -27,6 +27,7 @@
       <button data-tab="settings">⚙️ Settings</button>
     </nav>
     <main id="hubBody" class="hubbody"></main>
+    <button id="tableClose" class="btn big">⬅ BACK TO THE LOUNGE</button>
     <footer class="hubfoot">
       <button id="deploy" class="btn big">DEPLOY</button>
     </footer>
@@ -131,6 +132,7 @@
   <div id="duelPanel" class="screen dim" hidden>
     <div class="card">
       <h2>🥊 Challenge <span id="duelWho"></span></h2>
+      <div id="duelGame" class="subtabs"></div>
       <p class="hint">Pick the stakes. You both put them up; the winner takes the pot. Nobody dies in The Pit.</p>
       <div id="duelChips" class="betchips"></div>
       <label class="duelguns"><input type="checkbox" id="duelGuns"> <span id="duelGunsLabel"></span></label>
@@ -138,6 +140,17 @@
       <div class="resbtns"><button id="duelSend" class="btn big">SEND CHALLENGE</button><button id="duelCancel" class="btn big ghost">Cancel</button></div>
     </div>
   </div>
+  <div id="betPanel" class="screen dim" hidden>
+    <div class="card">
+      <h2>🎟️ Place your bet</h2>
+      <p class="hint">Who's walking out of The Pit?</p>
+      <div id="betWho" class="betwho"></div>
+      <div id="betChips" class="betchips"></div>
+      <p id="betNote" class="hint"></p>
+      <div class="resbtns"><button id="betSend" class="btn big">BET</button><button id="betCancel" class="btn big ghost">Cancel</button></div>
+    </div>
+  </div>
+  <div id="showdown" hidden></div>
   <div id="duelInvite" hidden></div>
   <div id="duelStatus" hidden></div>
 
