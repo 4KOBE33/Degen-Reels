@@ -3,6 +3,7 @@
 const fs = require('fs');
 const http = require('http');
 const path = require('path');
+const crypto = require('crypto');
 const { execSync } = require('child_process');
 const express = require('express');
 const { WebSocketServer } = require('ws');
@@ -19,14 +20,18 @@ app.use(express.static(path.join(__dirname, '..', 'public')));
 app.get('/health', (req, res) => res.json({ ok: true, rooms: rooms.size }));
 
 const server = http.createServer(app);
-const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 512 * 1024 });
+const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 512 * 1024, perMessageDeflate: false });
 
 // ---------- parties ----------
-// room: { code, host, members: Map(id -> { ws, name, look }), ffa, inRaid }
+// room: { code, host, members: Map(id -> { ws, token, name, look, dropTimer }), ffa, inRaid }
 const rooms = new Map();
 let nextId = 1;
 const CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 const MAX_MEMBERS = 6;
+// A dropped connection keeps its place in the party this long, so a blip doesn't kick you out.
+const GRACE_MS = 30000;
+// Game data for a player who's this far behind gets dropped instead of piling up.
+const MAX_BUFFER = 1024 * 1024;
 
 function makeCode() {
   for (;;) {
@@ -36,8 +41,10 @@ function makeCode() {
   }
 }
 
+const open = (ws) => ws && ws.readyState === ws.OPEN;
+
 function send(ws, msg) {
-  if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(msg));
+  if (open(ws)) ws.send(JSON.stringify(msg));
 }
 
 function roster(room) {
@@ -47,47 +54,99 @@ function roster(room) {
     host: room.host,
     ffa: room.ffa,
     inRaid: room.inRaid,
-    members: [...room.members].map(([id, m]) => ({ id, name: m.name, look: m.look })),
+    members: [...room.members].map(([id, m]) => ({ id, name: m.name, look: m.look, away: !open(m.ws) })),
   };
 }
 
 function broadcast(room, msg, except = null) {
-  for (const [id, m] of room.members) if (id !== except) send(m.ws, msg);
+  const s = JSON.stringify(msg);
+  for (const [id, m] of room.members) if (id !== except && open(m.ws)) m.ws.send(s);
+}
+
+function addMember(room, ws, msg) {
+  room.members.set(ws.id, { ws, token: ws.token, name: String(msg.name || 'Raider').slice(0, 16), look: msg.look || null, dropTimer: null });
+  ws.room = room.code;
+}
+
+// Someone is out of the party for good (left, or didn't come back in time).
+function removeMember(room, id) {
+  const m = room.members.get(id);
+  if (!m) return;
+  clearTimeout(m.dropTimer);
+  room.members.delete(id);
+  if (!room.members.size) { rooms.delete(room.code); return; }
+  if (room.host === id) {
+    // The leader left: if a raid was running it's over for everyone; otherwise hand the party over.
+    if (room.inRaid) broadcast(room, { t: 'hostLeft' });
+    room.inRaid = false;
+    room.host = room.members.keys().next().value;
+  } else if (room.inRaid) {
+    const host = room.members.get(room.host);
+    if (host) send(host.ws, { t: 'left', id });
+  }
+  broadcast(room, roster(room));
 }
 
 function leave(ws) {
   const room = ws.room && rooms.get(ws.room);
   ws.room = null;
+  if (room) removeMember(room, ws.id);
+}
+
+// Pass game data along without unpacking it: ">to|payload" in, "<from|payload" out.
+function relay(ws, str) {
+  const room = ws.room && rooms.get(ws.room);
   if (!room) return;
-  room.members.delete(ws.id);
-  if (!room.members.size) { rooms.delete(room.code); return; }
-  if (room.host === ws.id) {
-    // The leader left: if a raid was running it's over for everyone; otherwise hand the party over.
-    if (room.inRaid) broadcast(room, { t: 'hostLeft' });
-    room.inRaid = false;
-    room.host = room.members.keys().next().value;
-  } else if (room.inRaid) send(room.members.get(room.host).ws, { t: 'left', id: ws.id });
-  broadcast(room, roster(room));
+  const bar = str.indexOf('|');
+  if (bar < 0) return;
+  const to = str.slice(1, bar);
+  const out = `<${ws.id}${str.slice(bar)}`;
+  const deliver = (m) => { if (open(m.ws) && m.ws.bufferedAmount < MAX_BUFFER) m.ws.send(out); };
+  if (to === 'all') {
+    for (const [id, m] of room.members) if (id !== ws.id) deliver(m);
+  } else {
+    const target = room.members.get(to === 'host' ? room.host : to);
+    if (target) deliver(target);
+  }
 }
 
 wss.on('connection', (ws) => {
   ws.id = String(nextId++);
+  ws.token = crypto.randomBytes(12).toString('hex');
   ws.alive = true;
   ws.on('pong', () => { ws.alive = true; });
-  send(ws, { t: 'hello', id: ws.id });
+  send(ws, { t: 'hello', id: ws.id, token: ws.token });
 
   ws.on('message', (raw) => {
+    const str = raw.toString();
+    if (str.charCodeAt(0) === 62) { relay(ws, str); return; } // '>'
     let msg;
-    try { msg = JSON.parse(raw); } catch (e) { return; }
+    try { msg = JSON.parse(str); } catch (e) { return; }
     const room = ws.room && rooms.get(ws.room);
     switch (msg.t) {
+      case 'resume': {
+        // Coming back after a dropped connection: take your old place in the party.
+        const r = rooms.get(msg.code);
+        const m = r && r.members.get(String(msg.id));
+        if (!m || m.token !== msg.token) { send(ws, { t: 'resumeFail' }); break; }
+        clearTimeout(m.dropTimer);
+        m.dropTimer = null;
+        if (m.ws && m.ws !== ws) { m.ws.room = null; try { m.ws.terminate(); } catch (e) { /* already gone */ } }
+        ws.id = String(msg.id);
+        ws.token = m.token;
+        ws.room = r.code;
+        m.ws = ws;
+        send(ws, { t: 'hello', id: ws.id, token: ws.token });
+        send(ws, { t: 'resumed' });
+        broadcast(r, roster(r));
+        break;
+      }
       case 'create': {
         leave(ws);
         const code = makeCode();
         const r = { code, host: ws.id, members: new Map(), ffa: false, inRaid: false };
-        r.members.set(ws.id, { ws, name: String(msg.name || 'Raider').slice(0, 16), look: msg.look || null });
         rooms.set(code, r);
-        ws.room = code;
+        addMember(r, ws, msg);
         send(ws, roster(r));
         break;
       }
@@ -97,8 +156,7 @@ wss.on('connection', (ws) => {
         if (r.members.size >= MAX_MEMBERS) { send(ws, { t: 'error', text: 'That party is full.' }); break; }
         if (r.inRaid) { send(ws, { t: 'error', text: 'That party is already in a raid. Wait for them to finish.' }); break; }
         leave(ws);
-        r.members.set(ws.id, { ws, name: String(msg.name || 'Raider').slice(0, 16), look: msg.look || null });
-        ws.room = r.code;
+        addMember(r, ws, msg);
         broadcast(r, roster(r));
         break;
       }
@@ -122,23 +180,19 @@ wss.on('connection', (ws) => {
       case 'end':
         if (room && room.host === ws.id) { room.inRaid = false; broadcast(room, roster(room)); }
         break;
-      case 'to': {
-        // Relay: to a player id, to the leader, or to everyone else.
-        if (!room) break;
-        const out = JSON.stringify({ t: 'msg', from: ws.id, d: msg.d });
-        if (msg.to === 'all') {
-          for (const [id, m] of room.members) if (id !== ws.id && m.ws.readyState === m.ws.OPEN) m.ws.send(out);
-        } else {
-          const target = room.members.get(msg.to === 'host' ? room.host : String(msg.to));
-          if (target && target.ws.readyState === target.ws.OPEN) target.ws.send(out);
-        }
-        break;
-      }
       case 'ping': send(ws, { t: 'pong', at: msg.at }); break;
       default:
     }
   });
-  ws.on('close', () => leave(ws));
+
+  ws.on('close', () => {
+    const room = ws.room && rooms.get(ws.room);
+    const m = room && room.members.get(ws.id);
+    if (!m || m.ws !== ws) return;
+    // Hold their spot for a bit in case they're just reconnecting.
+    m.dropTimer = setTimeout(() => removeMember(room, ws.id), GRACE_MS);
+    broadcast(room, roster(room));
+  });
 });
 
 // Drop dead connections.
@@ -148,7 +202,7 @@ setInterval(() => {
     ws.alive = false;
     ws.ping();
   }
-}, 20000);
+}, 15000);
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {

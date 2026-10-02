@@ -165,8 +165,12 @@ net.on('start', (info) => {
   hub.launch(info);
 });
 net.on('disconnected', () => {
-  if (session && raid.active) hud.toast('🔌 Lost connection to the party server.', 'big');
+  if (session && raid.active) hud.toast('🔌 Lost connection to the party. Couldn\'t get back in.', 'big');
+  // A friend who can't reach the leader any more gets out with what they've got.
+  if (session && session.client) session.hostLeft();
 });
+net.on('reconnecting', () => { if (session && raid.active) hud.toast('📶 Connection hiccup, reconnecting…'); });
+net.on('resumed', () => { if (session && raid.active) hud.toast('📶 Back online'); });
 
 const hub = new Hub({
   net,
@@ -380,16 +384,16 @@ function frame(now) {
   }
 }
 
-function step(now) {
+function step(now, draw = true) {
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now;
   const inRaid = raid.active;
   const paused = inRaid && (!controller.locked || !!overlay);
 
-  if (!paused) {
-    if (inRaid) controller.update(dt);
-    raid.update(dt);
-  }
+  // Party raids never pause: the world is shared, so the pause menu only stops your controls.
+  if (!paused && inRaid) controller.update(dt);
+  else if (inRaid && session && raid.player) { raid.player.move.set(0, 0); raid.player.aiming = false; }
+  if (!paused || session) raid.update(dt);
   if (wasActive && !raid.active) {
     syncPauseSliders();
     setTimeout(() => { if (document.pointerLockElement) document.exitPointerLock(); }, 900);
@@ -428,6 +432,17 @@ function step(now) {
     if (camera.fov !== 60) { camera.fov = 60; camera.updateProjectionMatrix(); }
   }
 
-  renderer.render(raid.scene, camera);
+  if (draw) renderer.render(raid.scene, camera);
 }
 requestAnimationFrame(frame);
+
+// Browsers stop drawing frames in background tabs. In a party that would freeze the world for
+// everyone (or freeze you for them), so a worker keeps the game ticking while the tab is hidden.
+try {
+  const src = 'setInterval(() => postMessage(0), 33);';
+  const ticker = new Worker(URL.createObjectURL(new Blob([src], { type: 'text/javascript' })));
+  ticker.onmessage = () => {
+    if (!document.hidden || !session || session.ended) return;
+    try { step(performance.now(), false); } catch (err) { console.error(err); }
+  };
+} catch (e) { /* workers blocked here: background tabs just pause */ }

@@ -232,9 +232,9 @@ export class Hub {
     }
     const r = net.room;
     const me = net.id;
-    const members = r.members.map((m) => `<span class="pm ${m.id === r.host ? 'lead' : ''}">${m.id === r.host ? '👑' : '🙂'} ${escapeHtml(m.name)}${m.id === me ? ' (you)' : ''}</span>`).join('');
+    const members = r.members.map((m) => `<span class="pm ${m.id === r.host ? 'lead' : ''}">${m.id === r.host ? '👑' : '🙂'} ${escapeHtml(m.name)}${m.id === me ? ' (you)' : ''}${m.away ? ' 📶 reconnecting…' : ''}</span>`).join('');
     return `<section class="party in"><div class="phead"><b>👥 Party <span class="pcode" data-act="pcopy" title="Click to copy">${r.code}</span></b>
-        <small>${net.isHost ? 'You\'re the leader: pick the map and hit DEPLOY SQUAD to drop everyone in together.' : `Waiting for ${escapeHtml((r.members.find((m) => m.id === r.host) || {}).name || 'the leader')} to deploy. Pack your loadout!`}${r.inRaid ? ' · Raid in progress…' : ''}</small></div>
+        <small>${net.isHost ? 'You\'re the leader: pick the map and hit DEPLOY SQUAD to drop everyone in together.' : `Waiting for ${escapeHtml((r.members.find((m) => m.id === r.host) || {}).name || 'the leader')} to deploy. Pack your loadout!`}${r.inRaid ? ' · Raid in progress…' : ''}${net.status === 'reconnecting' ? ' · 📶 Reconnecting…' : ''}</small></div>
       <div class="pmembers">${members}</div>
       <div class="prow">${net.isHost ? `<label class="pffa"><input type="checkbox" data-act="pffa" ${r.ffa ? 'checked' : ''}> Friendly fire (free-for-all)</label>` : `<span class="pffa">${r.ffa ? '⚔️ Friendly fire is ON' : '🤝 Friendly fire is off'}</span>`}
       <button class="btn ghost" data-act="pleave">Leave party</button></div></section>`;

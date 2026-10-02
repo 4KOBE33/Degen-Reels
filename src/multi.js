@@ -17,6 +17,12 @@ const VIEW = 150; // how far around each player the host sends machines and effe
 const v3 = (a) => new THREE.Vector3(a[0], a[1], a[2]);
 const arr = (v) => [Math.round(v.x * 100) / 100, Math.round(v.y * 100) / 100, Math.round(v.z * 100) / 100];
 const r2 = (n) => Math.round(n * 100) / 100;
+const r1 = (n) => Math.round(n * 10) / 10;
+// Fields that rarely change: only sent when they do (or when someone first sees that actor).
+const STICKY = ['n', 'l', 'wn', 't', 'mh'];
+const RESEND = 1000; // still-standing actors are re-sent this often so nobody thinks they vanished
+const FORGET = 3000; // not sent for this long: introduce them again from scratch (clients forget after 4s)
+const MAX_BACKLOG = 192 * 1024; // the leader's upload is this far behind: skip a snapshot
 
 export class Session {
   constructor(raid, net, info) {
@@ -37,6 +43,7 @@ export class Session {
     this.gone = new Set(); // host: players who extracted, died or left
     this.left = new Set(); // host: players who went back to the hub or disconnected (stop sending to them)
     this.watching = new Map(); // host: dead/extracted player -> net id of the squadmate they spectate
+    this.sent = new Map(); // host: per player, what we last told them about each actor
     this.ended = false;
     this.lastSnap = 0;
     this.pickupsById = new Map();
@@ -142,7 +149,7 @@ export class Session {
   }
 
   actorState(a) {
-    const s = { i: this.id(a), x: r2(a.pos.x), y: r2(a.pos.y), z: r2(a.pos.z), yw: r2(a.yaw || 0), hp: Math.round(a.hp), mh: a.maxHp, a: a.alive ? 1 : 0 };
+    const s = { i: this.id(a), x: r1(a.pos.x), y: r1(a.pos.y), z: r1(a.pos.z), yw: r2(a.yaw || 0), hp: Math.round(a.hp), mh: a.maxHp, a: a.alive ? 1 : 0 };
     if (a.team === 'machine') {
       s.k = 'm';
       s.t = a.type;
@@ -151,6 +158,7 @@ export class Session {
       s.k = 'c';
       s.n = a.name;
       s.l = a.look;
+      s.lk = a.lookKey || (a.lookKey = JSON.stringify(a.look || null));
       s.p = r2(a.pitch || 0);
       s.ar = Math.round(a.armor || 0);
       s.d = a.downed ? 1 : 0;
@@ -173,8 +181,41 @@ export class Session {
     return this.raid.combatants.find((c) => this.human(c) && c.alive) || null;
   }
 
+  // Only what changed since we last told this player: unchanged actors are skipped (but re-sent
+  // every second), and names/outfits/weapon names only go out when they change.
+  pack(memberId, full, now) {
+    let mem = this.sent.get(memberId);
+    if (!mem) { mem = new Map(); this.sent.set(memberId, mem); }
+    const out = [];
+    for (const s of full) {
+      const lk = s.lk;
+      delete s.lk;
+      const prev = mem.get(s.i);
+      const fresh = !prev || now - prev.at > FORGET;
+      const sig = `${s.x},${s.y},${s.z},${s.yw},${s.hp},${s.a},${s.p},${s.ar},${s.d},${s.w},${s.r},${s.st}`;
+      if (!fresh && prev.sig === sig && now - prev.at < RESEND) continue;
+      const o = { ...s };
+      const last = fresh ? {} : prev.v;
+      const v = {};
+      for (const k of STICKY) {
+        const val = k === 'l' ? lk : s[k];
+        v[k] = val;
+        if (!fresh && last[k] === val) delete o[k];
+      }
+      mem.set(s.i, { at: now, sig, v });
+      out.push(o);
+    }
+    return out;
+  }
+
   sendSnapshots() {
     const raid = this.raid;
+    // Our upload can't keep up: skip this one (events and reliable messages wait for the next).
+    if (this.net.buffered > MAX_BACKLOG) {
+      if (this.events.length > 300) this.events.splice(0, this.events.length - 300);
+      return;
+    }
+    const now = performance.now();
     const reliable = this.reliable;
     this.reliable = [];
     for (const m of this.members) {
@@ -189,9 +230,9 @@ export class Session {
       const ev = this.events.filter((e) => !e.at || (Math.abs(e.at[0] - c.pos.x) < VIEW && Math.abs(e.at[2] - c.pos.z) < VIEW));
       this.net.to(m.id, {
         k: 'snap',
-        time: r2(raid.timeLeft),
+        time: r1(raid.timeLeft),
         el: r2(raid.elapsed),
-        act: actors,
+        act: this.pack(m.id, actors, now),
         ev,
         rel: reliable,
         ex: raid.extracts.map((e) => (e.active ? [e.call ? r2(e.call.t) : -1, r2(e.cooldown || 0), e.call ? e.call.by.name : ''] : null)),
@@ -421,7 +462,7 @@ export class Session {
       actor.lastSeen = performance.now();
       actor.netPos = new THREE.Vector3(a.x, a.y, a.z);
       actor.netYaw = a.yw;
-      actor.maxHp = a.mh;
+      if (a.mh !== undefined) actor.maxHp = a.mh;
       if (actor.team === 'machine') {
         const dropped = a.hp < actor.hp;
         actor.hp = a.hp;
@@ -434,8 +475,8 @@ export class Session {
         actor.netPitch = a.p;
         actor.netWeapon = a.w;
         actor.netRarity = a.r;
-        actor.netWeaponName = a.wn;
-        actor.name = a.n;
+        if (a.wn !== undefined) actor.netWeaponName = a.wn;
+        if (a.n !== undefined) actor.name = a.n;
         if (a.d && !actor.downed) raid.down(actor, null, true);
         if (!a.d && actor.downed) { actor.downed = false; actor.reviveSpot = null; }
         if (actor.alive && !a.a) { actor.alive = false; actor.downed = false; actor.removeIn = 8; }
@@ -445,7 +486,7 @@ export class Session {
     const now = performance.now();
     for (const [id, actor] of this.byId) {
       if (seen.has(id) || actor === raid.player) continue;
-      if (now - (actor.lastSeen || 0) > 2500) {
+      if (now - (actor.lastSeen || 0) > 4000) {
         if (actor.team === 'machine') { raid.scene.remove(actor.group); raid.machines = raid.machines.filter((m) => m !== actor); } else raid.removeCombatant(actor);
         this.byId.delete(id);
       }
@@ -473,7 +514,7 @@ export class Session {
   makePuppet(a) {
     const raid = this.raid;
     if (a.k === 'm') {
-      if (!a.a) return null;
+      if (!a.a || !a.t) return null;
       const m = new Machine(raid, a.t, a.x, a.z);
       m.puppet = true;
       m.yaw = a.yw;

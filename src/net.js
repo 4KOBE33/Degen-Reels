@@ -13,15 +13,20 @@ function serverUrl() {
   return PUBLIC_SERVER;
 }
 
+// How long to keep trying to get back into the party after the connection drops.
+const RESUME_FOR = 25000;
+
 export class Net {
   constructor() {
     this.ws = null;
     this.id = null;
-    this.room = null; // { code, host, ffa, inRaid, members: [{ id, name, look }] }
-    this.status = 'offline'; // offline | connecting | online
+    this.token = null;
+    this.room = null; // { code, host, ffa, inRaid, members: [{ id, name, look, away }] }
+    this.status = 'offline'; // offline | connecting | online | reconnecting
     this.handlers = {};
     this.queue = [];
-    this.retry = 0;
+    this.resume = null; // { id, token, code, until } while getting back into a party
+    this.retryTimer = null;
   }
 
   on(type, fn) { (this.handlers[type] ||= []).push(fn); }
@@ -30,48 +35,107 @@ export class Net {
   get isHost() { return !!this.room && this.room.host === this.id; }
   get inParty() { return !!(this.room && this.room.code); }
   get partySize() { return this.room && this.room.members ? this.room.members.length : 1; }
+  get buffered() { return this.ws ? this.ws.bufferedAmount : 0; }
+
+  setStatus(s) {
+    this.status = s;
+    this.emit('status', s);
+  }
 
   connect() {
     if (this.ws && (this.status === 'online' || this.status === 'connecting')) return;
-    this.status = 'connecting';
-    this.emit('status', this.status);
+    clearTimeout(this.retryTimer);
+    if (!this.resume) this.setStatus('connecting');
     let ws;
     try {
       ws = new WebSocket(serverUrl());
     } catch (e) {
-      this.status = 'offline';
-      this.emit('status', this.status);
+      this.dropped();
       return;
     }
     this.ws = ws;
     ws.onopen = () => {
-      this.status = 'online';
-      this.retry = 0;
-      for (const m of this.queue) ws.send(m);
-      this.queue = [];
-      this.emit('status', this.status);
+      if (this.resume) {
+        ws.send(JSON.stringify({ t: 'resume', id: this.resume.id, token: this.resume.token, code: this.resume.code }));
+        return; // the queue goes out once we're back in
+      }
+      this.setStatus('online');
+      this.flush();
     };
     ws.onclose = () => {
-      const wasRoom = this.room;
-      this.status = 'offline';
+      if (this.ws !== ws) return;
       this.ws = null;
-      this.room = null;
-      this.emit('status', this.status);
-      if (wasRoom && wasRoom.code) this.emit('disconnected');
+      this.dropped();
     };
     ws.onerror = () => {};
     ws.onmessage = (ev) => {
-      let msg;
-      try { msg = JSON.parse(ev.data); } catch (e) { return; }
-      if (msg.t === 'hello') { this.id = msg.id; return; }
-      if (msg.t === 'room') {
-        this.room = msg.code ? msg : null;
-        this.emit('room', this.room);
+      const str = ev.data;
+      // Game data from another player: "<from|json".
+      if (str.charCodeAt(0) === 60) {
+        const bar = str.indexOf('|');
+        let d;
+        try { d = JSON.parse(str.slice(bar + 1)); } catch (e) { return; }
+        this.emit('msg', { from: str.slice(1, bar), d });
         return;
       }
-      if (msg.t === 'msg') { this.emit('msg', { from: msg.from, d: msg.d }); return; }
-      this.emit(msg.t, msg);
+      let msg;
+      try { msg = JSON.parse(str); } catch (e) { return; }
+      switch (msg.t) {
+        case 'hello':
+          if (!this.resume) { this.id = msg.id; this.token = msg.token; }
+          return;
+        case 'resumed':
+          this.id = this.resume.id;
+          this.resume = null;
+          this.setStatus('online');
+          this.emit('resumed');
+          this.flush();
+          return;
+        case 'resumeFail':
+          this.giveUp();
+          return;
+        case 'room':
+          this.room = msg.code ? msg : null;
+          this.emit('room', this.room);
+          return;
+        default:
+          this.emit(msg.t, msg);
+      }
     };
+  }
+
+  flush() {
+    for (const m of this.queue) this.ws.send(m);
+    this.queue = [];
+  }
+
+  // The connection dropped. In a party: keep trying to get our seat back for a while.
+  dropped() {
+    const now = performance.now();
+    if (this.room && this.room.code && this.id && this.token && !this.resume) {
+      this.resume = { id: this.id, token: this.token, code: this.room.code, until: now + RESUME_FOR, tries: 0 };
+      this.setStatus('reconnecting');
+      this.emit('reconnecting');
+    }
+    if (this.resume) {
+      if (now > this.resume.until) { this.giveUp(); return; }
+      const wait = Math.min(4000, 300 * 2 ** this.resume.tries++);
+      this.retryTimer = setTimeout(() => this.connect(), wait);
+      return;
+    }
+    this.setStatus('offline');
+  }
+
+  // Couldn't get back in: we're out of the party.
+  giveUp() {
+    const had = this.room && this.room.code;
+    this.resume = null;
+    this.room = null;
+    this.queue = [];
+    if (this.ws) { this.ws.onclose = null; try { this.ws.close(); } catch (e) { /* closed */ } this.ws = null; }
+    this.setStatus('offline');
+    this.emit('room', null);
+    if (had) this.emit('disconnected');
   }
 
   raw(msg) {
@@ -88,9 +152,9 @@ export class Net {
   start(info) { this.raw({ t: 'start', ...info }); }
   end() { this.raw({ t: 'end' }); }
 
-  // Send game data to 'host', 'all', or a player id.
+  // Send game data to 'host', 'all', or a player id. Dropped while reconnecting (it's all live data).
   to(to, d) {
-    if (this.ws && this.status === 'online') this.ws.send(JSON.stringify({ t: 'to', to, d }));
+    if (this.ws && this.status === 'online') this.ws.send(`>${to}|${JSON.stringify(d)}`);
   }
 }
 
