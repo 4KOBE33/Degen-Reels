@@ -690,3 +690,5 @@ body.isdowned #vignette { opacity: 0.6 !important; }
 .pffa { font-weight: 800; font-size: 14px; display: flex; gap: 6px; align-items: center; }
 .item { position: relative; }
 .freetag { position: absolute; top: 4px; left: 4px; font: 900 9px var(--body); background: #5ee27a; color: var(--ink); border-radius: 5px; padding: 1px 4px; }
+.hint.freelock { background: rgba(94, 226, 122, 0.12); border: 1px solid rgba(94, 226, 122, 0.4); border-radius: 10px; padding: 8px 10px; color: #c9f7d3; }
+.linkbtn { background: none; border: 0; padding: 0; color: #ffd23f; font: inherit; font-weight: 800; text-decoration: underline; cursor: pointer; }

@@ -89,6 +89,9 @@ function minesMult(bombs, picks) {
   return m;
 }
 
+const FREE_LOCKED = 'The free loadout is locked. Raid with it as is, or put it back to pack your own gear.';
+const hasFreeKit = (lo) => lo.weapons.some((g) => g && g.free) || lo.items.some((it) => it.free);
+
 export class Hub {
   constructor({ onDeploy, onMapChange, onPartyStart = null, net = null }) {
     this.onDeploy = onDeploy;
@@ -264,13 +267,14 @@ export class Hub {
     const d = this.data;
     const lo = d.loadout;
     const noGuns = !lo.weapons.some(Boolean);
+    const freeKit = hasFreeKit(lo);
     const maps = Object.entries(MAPS).map(([id, m]) => `<button class="mapcard ${d.selectedMap === id ? 'on' : ''}" data-act="map" data-m="${id}">
         <span class="icon">${m.icon}</span><b>${m.name}</b><small>${m.size} · ${m.danger}</small><span class="blurb">${m.blurb}</span></button>`).join('');
     return `${this.renderParty()}<p class="howto">Pick a map, drop in, loot what you can, fight off the machines, and reach an open exit before time runs out. <b>Die and you lose everything you brought.</b> The best loot only drops in deadly zones.</p>
       <h3>Choose a map</h3><div class="maps">${maps}</div>
       <div class="cols">
       <section><h3>Raid loadout</h3><p class="hint">Whatever you bring is lost if you die. Click to send it back to the stash.</p>
-        ${noGuns ? '<button class="btn freekit" data-act="freekit">🎁 FREE LOADOUT<small>A random gun, bandages, an Ammo Box and a throwable. Lose it and grab another.</small></button>' : ''}
+        ${freeKit ? '<p class="hint freelock">🔒 Free loadout is locked in: nothing goes in or out. Take it into a raid as is, or <button class="linkbtn" data-act="freeclear">put it back</button> to pack your own gear.</p>' : noGuns ? '<button class="btn freekit" data-act="freekit">🎁 FREE LOADOUT<small>A random gun, bandages, an Ammo Box and a throwable. Lose it and grab another.</small></button>' : ''}
         <div class="wslots">${lo.weapons.map((g, i) => (g ? this.itemCard(g, 'unequip', i) : `<div class="item empty">Weapon ${i + 1}<br><small>empty</small></div>`)).join('')}</div>
         <div class="grid">${lo.items.map((it, i) => this.itemCard(it, 'unpack', i)).join('')}${Array(Math.max(0, LOADOUT_SLOTS - lo.items.length)).fill('<div class="item empty"></div>').join('')}</div>
       </section>
@@ -764,6 +768,7 @@ export class Hub {
     switch (act) {
       case 'pack': {
         const it = d.stash.items[i];
+        if (hasFreeKit(d.loadout)) { this.toast(FREE_LOCKED); break; }
         save.update((x) => {
           if (isGun(it)) {
             const slot = x.loadout.weapons.indexOf(null);
@@ -784,26 +789,37 @@ export class Hub {
         });
         break;
       }
-      // Free-loadout gear can't go in the stash (no selling it); taking it out just puts it back.
+      // The free loadout is locked: nothing goes in or out (so it can't be farmed for gear or chips).
       case 'unequip': {
-        const free = d.loadout.weapons[i] && d.loadout.weapons[i].free;
-        save.update((x) => { if (!free) addToStash(x.stash.items, x.loadout.weapons[i]); x.loadout.weapons[i] = null; });
-        if (free) this.toast('Free loadout gear only exists in a raid. Extract with it to keep it.');
+        if (hasFreeKit(d.loadout)) { this.toast(FREE_LOCKED); break; }
+        save.update((x) => { addToStash(x.stash.items, x.loadout.weapons[i]); x.loadout.weapons[i] = null; });
         break;
       }
       case 'unpack': {
-        const free = d.loadout.items[i] && d.loadout.items[i].free;
-        save.update((x) => { if (!free) addToStash(x.stash.items, x.loadout.items[i]); x.loadout.items.splice(i, 1); });
-        if (free) this.toast('Free loadout gear only exists in a raid. Extract with it to keep it.');
+        if (hasFreeKit(d.loadout)) { this.toast(FREE_LOCKED); break; }
+        save.update((x) => { addToStash(x.stash.items, x.loadout.items[i]); x.loadout.items.splice(i, 1); });
         break;
       }
+      case 'freeclear':
+        // Hand the whole free kit back. Anything you'd packed yourself goes back to the stash.
+        save.update((x) => {
+          for (const g of x.loadout.weapons) if (g && !g.free) addToStash(x.stash.items, g);
+          for (const it of x.loadout.items) if (!it.free) addToStash(x.stash.items, it);
+          x.loadout.weapons = x.loadout.weapons.map(() => null);
+          x.loadout.items = [];
+        });
+        break;
       case 'freekit': {
-        // Free loadout: always available when you've got no gun packed.
+        // Free loadout: only when you've got no gun packed. It replaces the whole loadout (anything you'd
+        // packed goes back to the stash) and is then locked until you raid with it or put it back.
+        if (d.loadout.weapons.some(Boolean)) break;
         const gun = { ...makeGun(['pistol', 'smg', 'shotgun', 'revolver'][Math.floor(Math.random() * 4)], 0), free: true };
         const thrown = ['grenade', 'dice', 'flash', 'sauce', 'sticky', 'smoke'][Math.floor(Math.random() * 6)];
         save.update((x) => {
-          x.loadout.weapons[x.loadout.weapons[0] ? 1 : 0] = gun;
-          for (const it of [makeItem('bandage', 2), makeItem('ammo', 1), makeItem(thrown, 1)]) addToList(x.loadout.items, { ...it, free: true }, LOADOUT_SLOTS);
+          for (const it of x.loadout.items) if (!it.free) addToStash(x.stash.items, it);
+          x.loadout.weapons = x.loadout.weapons.map(() => null);
+          x.loadout.weapons[0] = gun;
+          x.loadout.items = [makeItem('bandage', 2), makeItem('ammo', 1), makeItem(thrown, 1)].map((it) => ({ ...it, free: true }));
         });
         this.toast(`Free loadout packed: ${itemInfo(gun).name} and a ${ITEMS[thrown].name}. Try not to lose it.`);
         break;
