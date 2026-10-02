@@ -517,7 +517,7 @@ function step(now, draw = true) {
   const paused = inRaid && (!controller.locked || !!overlay);
 
   // Party raids never pause: the world is shared, so the pause menu only stops your controls.
-  if (!paused && inRaid) controller.update(dt);
+  if (!paused && inRaid && !kcLive()) controller.update(dt);
   else if (inRaid && session && raid.player) { raid.player.move.set(0, 0); raid.player.aiming = false; }
   if (!paused || session) raid.update(dt);
   if (wasActive && !raid.active) {

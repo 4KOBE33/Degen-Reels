@@ -531,7 +531,9 @@ export class Raid {
   // ---------- kill cam ----------
 
   // You died: swing the camera over to whoever did it before the results come up.
-  startKillcam(victim, killer) {
+  // replay: play back the tape (and hold the world still while it plays). Solo, or a friend's
+  // game in the Lounge; the party leader can't pause the world for everyone.
+  startKillcam(victim, killer, { replay = !this.net } = {}) {
     const real = killer && killer !== victim && killer.pos && killer.alive !== undefined ? killer : null;
     const weapon = !killer ? 'something'
       : killer.team === 'machine' ? ({ shark: 'its blade', gator: 'its jaws', boss: 'the jackpot cannon', dicer: 'dice bullets' }[killer.type] || 'a burst of bullets')
@@ -541,13 +543,32 @@ export class Raid {
       weapon, dealt: Math.round(killer ? this.hurtBy[killer.name] || 0 : 0), angle: Math.atan2(victim.pos.x - (real ? real.pos.x : victim.pos.x), victim.pos.z - (real ? real.pos.z : victim.pos.z + 1)),
     };
     // Solo: play back the last few seconds from over the killer's shoulder.
-    if (!this.net && this.recorder && this.recorder.frames.length > 10) {
+    if (replay && this.recorder && this.recorder.frames.length > 10) {
       const replay = new Replay(this, this.recorder, victim, real);
       if (!replay.done) {
         this.killcam.replay = replay;
         this.killcam.dur = replay.length + 1.8;
+        this.killcam.freeze = true;
       }
     }
+  }
+
+  // Lost a duel in the Lounge: watch how it happened, then you're back on the floor.
+  loungeKillcam(victim, killer) {
+    this.startKillcam(victim, killer, { replay: !this.isHost });
+    this.hud.killcam(this.killcam);
+  }
+
+  // The referee moved us (into or out of The Pit), patched up.
+  applyTp(d) {
+    const p = this.player;
+    if (!p || !p.alive) return;
+    p.pos.set(d.p[0], d.p[1], d.p[2]);
+    p.vel.set(0, 0, 0);
+    p.yaw = d.yaw || 0;
+    p.hp = p.maxHp;
+    p.downed = false;
+    p.rolling = null;
   }
 
   skipKillcam() {
@@ -1242,9 +1263,11 @@ export class Raid {
       if (kc.t >= kc.dur) {
         kc.over = true;
         this.hud.killcam(null);
+        // Lounge: back on your feet (where the referee put you) once the replay's done.
+        if (this.pendingTp) { this.applyTp(this.pendingTp); this.pendingTp = null; }
         if (this.result) this.hud.raidOver(this.result);
-      } else if (solo) {
-        // Solo: the world holds still while the replay plays.
+      } else if (kc.freeze) {
+        // The world holds still while the replay plays.
         this.focus.copy(kc.killer && kc.killer.pos ? kc.killer.pos : kc.victimPos);
         this.listener.copy(this.focus).setY(1.5);
         this.fx.update(dt);

@@ -230,9 +230,14 @@ export class Duel {
   // The losing blow landed (or a friend's game says it did to them).
   lethal(target, attacker) {
     if (!this.referee) {
-      if (target.isPlayer && !this.lostSent && this.fighting) { this.lostSent = true; this.net.send({ k: 'duelLost' }); }
+      if (target.isPlayer && !this.lostSent && this.fighting) {
+        this.lostSent = true;
+        this.net.send({ k: 'duelLost' });
+        this.raid.loungeKillcam(target, attacker);
+      }
       return;
     }
+    if (target.isPlayer && this.cur && this.cur.phase === 'fight') this.raid.loungeKillcam(target, attacker);
     const c = this.cur;
     if (!c || c.phase !== 'fight') return;
     if (target === c.a) this.finish(c.b, c.a);
@@ -313,11 +318,15 @@ export class Duel {
         if (gone(c.a)) this.finish(c.b, c.a);
         else if (gone(c.b)) this.finish(c.a, c.b);
         else if (c.t >= TIME_LIMIT) this.finish(null, null, true);
-      } else if (c.phase === 'over' && c.t >= 3.5) {
-        // Back out to the floor, patched up.
+      } else if (c.phase === 'over' && c.t >= (this.localLoserDone() ? 0.2 : 3.5)) {
+        // Back out to the floor, patched up: the winner by The Pit, the loser respawns somewhere
+        // in the Lounge.
         const ar = this.arena;
+        const spawns = this.raid.map.spawns;
         for (const [x, i] of [[c.a, -1], [c.b, 1]]) {
-          if (!gone(x)) this.place(x, new THREE.Vector3(ar.x + i * 4, 0, ar.z + this.r + 4), 0);
+          const lost = c.winner && x !== c.winner;
+          const sp = spawns[Math.floor(Math.random() * spawns.length)];
+          if (!gone(x)) this.place(x, lost ? new THREE.Vector3(sp[0], 0, sp[1]) : new THREE.Vector3(ar.x + i * 4, 0, ar.z + this.r + 4), lost ? Math.atan2(sp[0], sp[1]) : 0);
           if (x.brain) x.brain.duelTarget = null;
         }
         if (this.champ && this.champ.alive) {
@@ -337,6 +346,13 @@ export class Duel {
       if (this.cur) this.sync(true);
     }
     this.render();
+  }
+
+  // We lost, and our kill cam just finished: no need to stand around.
+  localLoserDone() {
+    const c = this.cur;
+    const kc = this.raid.killcam;
+    return !!(c && c.winner && c.winner !== this.raid.player && (c.a === this.raid.player || c.b === this.raid.player) && kc && kc.over);
   }
 
   // What everyone should see (the host sends it out in snapshots).

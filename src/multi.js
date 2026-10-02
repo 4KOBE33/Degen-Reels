@@ -581,15 +581,9 @@ export class Session {
       case 'duelInvite': if (raid.duel) raid.duel.showInvite(d); break;
       case 'duelResult': if (raid.duel) raid.duel.applyResult(d); break;
       case 'tp':
-        // The referee moved us (into or out of The Pit), patched up.
-        if (p && p.alive) {
-          p.pos.set(d.p[0], d.p[1], d.p[2]);
-          p.vel.set(0, 0, 0);
-          p.yaw = d.yaw || 0;
-          p.hp = p.maxHp;
-          p.downed = false;
-          p.rolling = null;
-        }
+        // Mid kill cam: wait for it to finish before moving.
+        if (raid.killcam && !raid.killcam.over) raid.pendingTp = d;
+        else raid.applyTp(d);
         break;
       default:
     }
