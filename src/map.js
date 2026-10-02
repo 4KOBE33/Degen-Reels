@@ -133,7 +133,7 @@ export const MAPS = {
     mapGround: '#dcae7a', hemi: [0xffe0c2, 0x7a3b4a, 1.7], sun: [0xffc58f, 2.4], mountains: [0xb5654a, 0x8f3f2e], glow: 0xff9f1c, tough: 1.15,
   },
   bunker: {
-    name: 'The Bunker', icon: '🥊', size: 'Small', danger: 'PvP', half: 95, wilds: 'Service Tunnels', indoor: true,
+    name: 'The Bunker', icon: '🥊', size: 'Small', danger: 'Deadly', half: 95, wilds: 'Service Tunnels', indoor: true,
     blurb: 'An underground high-stakes den. Barely any machines, a pack of raiders who want your stuff, and the BEST loot in the game: every crate is vault-grade.',
     sky: [0x0b0612, 0x120a1c, 0x1b0f2b], fog: 0x120a1c,
     ground: { base: '#3a3046', a: 'rgba(0,0,0,0.25)', b: 'rgba(120,90,150,0.18)' },
@@ -204,7 +204,7 @@ export function buildMap(scene, mapId = 'vegas') {
   }
   // A solid thing: blocks movement and bullets.
   function addCollider(c) {
-    c.proxy = proxyFor(c);
+    c.proxy = proxyFor(c, c.bottom || 0);
     insert(c, ...boundsOf(c));
     return c;
   }
@@ -426,9 +426,9 @@ export function buildMap(scene, mapId = 'vegas') {
     minimap.push({ x, z, w, d, color: mapColor, label: name, tier, building: true });
   }
 
-  const container = (kind, x, z, tier, rot = 0) => containers.push({ kind, x, z, tier, rot });
-  const enemies = (type, x, z, n = 1, spread = 6) => {
-    for (let i = 0; i < n; i++) enemySpots.push({ type, x: x + (Math.random() - 0.5) * spread, z: z + (Math.random() - 0.5) * spread });
+  const container = (kind, x, z, tier, rot = 0, y = 0) => containers.push({ kind, x, z, tier, rot, y });
+  const enemies = (type, x, z, n = 1, spread = 6, y = 0) => {
+    for (let i = 0; i < n; i++) enemySpots.push({ type, x: x + (Math.random() - 0.5) * spread, z: z + (Math.random() - 0.5) * spread, y });
   };
 
   // ---------- more props ----------
@@ -909,7 +909,7 @@ export function buildMap(scene, mapId = 'vegas') {
         const px = x + dx;
         const pz = z + dz;
         for (const c of grid.get(cellKey(Math.floor(px / CELL), Math.floor(pz / CELL))) || []) {
-          if (c.rayOnly || c.top < minTop) continue;
+          if (c.rayOnly || c.top < minTop || (c.bottom && c.bottom > 2)) continue;
           if (c.type === 'box' ? px > c.minX && px < c.maxX && pz > c.minZ && pz < c.maxZ : Math.hypot(px - c.x, pz - c.z) < c.r) return true;
         }
       }
@@ -937,6 +937,236 @@ export function buildMap(scene, mapId = 'vegas') {
     const to = clearSpot(sp[0], sp[1], 2.5, 0.5);
     if (to) spawns[i] = to;
   });
+
+  // ---------- landmarks: towers you can climb and one giant monument per map ----------
+  if (!def.safe && !def.indoor) {
+    const used = [];
+    // Somewhere open for a w×d footprint: off roads and buildings, away from exits and spawns.
+    const findSpot = (w, d) => {
+      const r = Math.max(w, d) / 2;
+      for (let tries = 0; tries < 600; tries++) {
+        const x = Math.round((Math.random() * 2 - 1) * (H - r - 14));
+        const z = Math.round((Math.random() * 2 - 1) * (H - r - 14));
+        const hit = (q, pad) => Math.abs(x - q.x) < (q.w || 0) / 2 + w / 2 + pad && Math.abs(z - q.z) < (q.d || 0) / 2 + d / 2 + pad;
+        if (zones.some((q) => hit(q, 10)) || minimap.some((q) => q.w && q.d && hit(q, 6)) || used.some((q) => hit(q, 18))) continue;
+        if (extracts.some((e) => Math.hypot(x - e.x, z - e.z) < r + 30) || spawns.some((sp) => Math.hypot(x - sp[0], z - sp[1]) < r + 22)) continue;
+        if (solidAt(x, z, r + 2, 0.4)) continue;
+        used.push({ x, z, w, d });
+        return [x, z];
+      }
+      return null;
+    };
+    const slab = (x0, x1, z0, z1, y0, y1, mat, solid = true) => {
+      const m = part(new THREE.BoxGeometry(x1 - x0, y1 - y0, z1 - z0), mat, { ink: 0.02 });
+      m.position.set((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2);
+      statics.add(m);
+      if (solid) addCollider({ type: 'box', minX: x0, maxX: x1, minZ: z0, maxZ: z1, top: y1, bottom: y0 > 0.5 ? y0 : undefined });
+      return m;
+    };
+    // Steps from y0 up to y1 along z (dir +1 or -1) starting at z0, across x0..x1.
+    const stairs = (x0, x1, z0, dir, y0, y1, mat, steps = 15) => {
+      const run = 0.6;
+      for (let i = 0; i < steps; i++) {
+        const top = y0 + ((i + 1) * (y1 - y0)) / steps;
+        const za = z0 + dir * i * run;
+        const zb = za + dir * run;
+        slab(x0, x1, Math.min(za, zb), Math.max(za, zb), Math.max(0, y0 > 0.5 ? top - 0.5 : 0), top, mat);
+      }
+    };
+
+    // A climbable tower: stairs zig-zag up the east side, loot on every floor, a turret on the roof.
+    const FH = 4.2;
+    function tower({ x, z, name, floors, color, trim, signColor }) {
+      const w = 14;
+      const d = 16;
+      const T = 0.5;
+      const minX = x - w / 2;
+      const maxX = x + w / 2;
+      const minZ = z - d / 2;
+      const maxZ = z + d / 2;
+      const top = floors * FH + 1.2;
+      const wallMat = toon(color);
+      const trimMat = toon(trim);
+      const doorX = x - w / 4;
+      // Outer walls (full height, so the top makes a parapet around the roof).
+      slab(minX, maxX, minZ, minZ + T, 0, top, wallMat);
+      slab(minX, minX + T, minZ, maxZ, 0, top, wallMat);
+      slab(maxX - T, maxX, minZ, maxZ, 0, top, wallMat);
+      slab(minX, doorX - 1.6, maxZ - T, maxZ, 0, top, wallMat);
+      slab(doorX + 1.6, maxX, maxZ - T, maxZ, 0, top, wallMat);
+      slab(doorX - 1.6, doorX + 1.6, maxZ - T, maxZ, 3.4, top, wallMat);
+      // Windows and trim bands on every floor.
+      const glass = new THREE.MeshBasicMaterial({ color: 0x1b2a4a });
+      for (let f = 0; f < floors; f++) {
+        const y = f * FH + 2.4;
+        for (const [fx, fz, rot, len] of [[x, minZ - 0.02, Math.PI, w], [x, maxZ + 0.02, 0, w], [minX - 0.02, z, -Math.PI / 2, d], [maxX + 0.02, z, Math.PI / 2, d]]) {
+          for (let k = -1; k <= 1; k++) {
+            if (f === 0 && rot === 0 && k === -1) continue; // the door
+            const pane = new THREE.Mesh(new THREE.PlaneGeometry(1.8, 1.5), glass);
+            const off = (k * len) / 3.4;
+            pane.position.set(fx + (rot === 0 || rot === Math.PI ? off : 0), y, fz + (rot === 0 || rot === Math.PI ? 0 : off));
+            pane.rotation.y = rot;
+            statics.add(pane);
+          }
+        }
+        if (f > 0) slab(minX - 0.08, maxX + 0.08, minZ - 0.08, maxZ + 0.08, f * FH - 0.05, f * FH + 0.25, trimMat, false);
+      }
+      // Floors with a stairwell cut out, and the stairs themselves.
+      const ax0 = maxX - T - 1.8;
+      const ax1 = maxX - T;
+      const bx0 = maxX - T - 3.8;
+      const bx1 = maxX - T - 2.0;
+      const zA = minZ + T + 2.0;
+      const zB = zA + 9;
+      const floorMat = toon(0x6b4f3a);
+      const stepMat = toon(0x8d6e63);
+      for (let f = 1; f <= floors; f++) {
+        const y = f * FH;
+        slab(minX + T, bx0, minZ + T, maxZ - T, y - 0.3, y, floorMat);
+        slab(bx0, maxX - T, minZ + T, zA, y - 0.3, y, floorMat);
+        slab(bx0, maxX - T, zB, maxZ - T, y - 0.3, y, floorMat);
+      }
+      for (let f = 0; f < floors; f++) {
+        if (f % 2 === 0) stairs(ax0, ax1, zA, 1, f * FH, (f + 1) * FH, stepMat);
+        else stairs(bx0, bx1, zB, -1, f * FH, (f + 1) * FH, stepMat);
+      }
+      // Loot gets better the higher you climb.
+      container('crate', minX + 2, minZ + 2.5, 2);
+      container('locker', minX + 2, maxZ - 3, 2);
+      for (let f = 1; f < floors; f++) {
+        container(f % 2 ? 'locker' : 'crate', minX + 2, minZ + 2.5 + (f % 2) * 6, Math.min(3, 2 + Math.floor(f / 2)), 0, f * FH);
+        if (f % 2 === 0) enemies('slotbot', x - 2, z, 1, 1, f * FH);
+      }
+      container('safe', minX + 2.5, z, 3, 0, floors * FH);
+      enemies('turret', minX + 2.5, minZ + 2.5, 1, 0, floors * FH);
+      enemies('slotbot', x - 2, z + 2, 1, 2);
+      enemies('bouncer', doorX, maxZ + 4, 1, 1);
+      const sign = neonSign(name.toUpperCase(), signColor, 12);
+      sign.position.set(x, top + 1.4, maxZ - 0.5);
+      statics.add(sign);
+      zones.push({ name, x, z, w, d, tier: 2 });
+      minimap.push({ x, z, w, d, color: `#${new THREE.Color(color).multiplyScalar(0.7).getHexString()}`, label: name, tier: 2 });
+    }
+
+    // A raised plaza with stairs up the south side, for monuments to stand on.
+    function plaza(x, z, size, mat) {
+      const h = 3;
+      slab(x - size / 2, x + size / 2, z - size / 2, z + size / 2, 0, h, mat);
+      stairs(x - 3, x + 3, z + size / 2 + 6.6, -1, 0, h, mat, 11);
+      return h;
+    }
+
+    function monument(x, z) {
+      const S = 26;
+      const h = plaza(x, z, S, toon(0x6b7280));
+      const at = (dx, dz) => [x + dx, z + dz];
+      if (mapId === 'vegas') {
+        // LUCKY SEVEN: a three-story slot machine.
+        slab(x - 7, x + 7, z - 9, z - 1, h, h + 24, toon(0xe63946));
+        slab(x - 7.5, x + 7.5, z - 9.5, z - 0.5, h + 24, h + 27, toon(0xd4a63a));
+        const face = new THREE.Mesh(new THREE.PlaneGeometry(11, 6), new THREE.MeshBasicMaterial({ map: boardTexture('7  7  7', '#fff6e0', '#e63946') }));
+        face.position.set(x, h + 15, z - 0.95);
+        statics.add(face);
+        const arm = part(new THREE.CylinderGeometry(0.6, 0.6, 14, 12), 0x9ca3af);
+        arm.position.set(x + 8.5, h + 14, z - 5);
+        const ball = part(new THREE.SphereGeometry(2.2, 16, 12), 0xe63946);
+        ball.position.set(x + 8.5, h + 21.5, z - 5);
+        statics.add(arm, ball);
+        const s = neonSign('LUCKY SEVEN', '#ffd23f', 22);
+        s.position.set(x, h + 30, z - 5);
+        statics.add(s);
+      } else if (mapId === 'frost') {
+        // THE ICE CROWN: giant ice crystals around a frozen golden chip.
+        const ice = new THREE.MeshBasicMaterial({ color: 0xbfe9ff, transparent: true, opacity: 0.85 });
+        for (const [dx, dz, r, hh] of [[0, -4, 4, 40], [-6, -2, 3, 26], [6, -3, 3, 30], [-3, -8, 2.5, 22], [4, -8, 2.2, 18]]) {
+          const c = new THREE.Mesh(new THREE.ConeGeometry(r, hh, 6), ice);
+          c.position.set(x + dx, h + hh / 2, z + dz);
+          statics.add(c);
+          circle(x + dx, z + dz, r * 0.8, h + hh * 0.4);
+        }
+        const chip = part(new THREE.CylinderGeometry(5, 5, 1.2, 32), 0xd4a63a);
+        chip.rotation.x = Math.PI / 2;
+        chip.position.set(x, h + 14, z + 0.5);
+        statics.add(chip);
+        const s = neonSign('THE ICE CROWN', '#7dd3fc', 20);
+        s.position.set(x, h + 30, z + 2);
+        statics.add(s);
+      } else if (mapId === 'bayou') {
+        // OLD CHOMPER: a giant gator statue with its jaws wide open.
+        const green = toon(0x4d7c0f);
+        slab(x - 4, x + 4, z - 11, z + 5, h, h + 6, green);
+        const head = part(new THREE.BoxGeometry(6, 3, 9), 0x4d7c0f);
+        head.position.set(x, h + 7, z + 9);
+        head.rotation.x = -0.35;
+        const jaw = part(new THREE.BoxGeometry(5.6, 1.4, 8.5), 0x3f6212);
+        jaw.position.set(x, h + 2, z + 9);
+        const tail = part(new THREE.ConeGeometry(3.4, 16, 6), 0x4d7c0f);
+        tail.rotation.x = -Math.PI / 2;
+        tail.position.set(x, h + 3, z - 17);
+        statics.add(head, jaw, tail);
+        for (const side of [-1, 1]) {
+          const eye = new THREE.Mesh(new THREE.SphereGeometry(0.9, 12, 8), new THREE.MeshBasicMaterial({ color: 0xfacc15 }));
+          eye.position.set(x + side * 2, h + 9.4, z + 6.5);
+          statics.add(eye);
+        }
+        const s = neonSign('OLD CHOMPER', '#5ee27a', 18);
+        s.position.set(x, h + 16, z);
+        statics.add(s);
+      } else {
+        // LA BOTELLA: a tequila bottle the size of a building.
+        const glass = new THREE.MeshBasicMaterial({ color: 0x86efac, transparent: true, opacity: 0.8 });
+        const body = new THREE.Mesh(new THREE.CylinderGeometry(6, 6, 22, 24), glass);
+        body.position.set(x, h + 11, z - 4);
+        const neck = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 5.5, 8, 20), glass);
+        neck.position.set(x, h + 26, z - 4);
+        const cap = part(new THREE.CylinderGeometry(2.4, 2.4, 3, 16), 0xd4a63a);
+        cap.position.set(x, h + 31.5, z - 4);
+        const label = new THREE.Mesh(new THREE.PlaneGeometry(9, 6), new THREE.MeshBasicMaterial({ map: boardTexture('TEMAKILLA\nAÑEJO', '#fff6e0', '#b5651d') }));
+        label.position.set(x, h + 10, z + 2.05);
+        statics.add(body, neck, cap, label);
+        circle(x, z - 4, 6, h + 22);
+        const s = neonSign('LA BOTELLA', '#ff9f1c', 18);
+        s.position.set(x, h + 37, z - 4);
+        statics.add(s);
+      }
+      // The good stuff sits on the plaza; a turret and a bouncer keep watch.
+      container('safe', ...at(-9, 9), 4, 0, h);
+      container('crate', ...at(9, 9), 3, 0, h);
+      container('locker', ...at(-10, -10), 3, 0, h);
+      enemies('turret', ...at(10, -10), 1, 0, h);
+      enemies('bouncer', ...at(0, S / 2 + 10), 1, 2);
+      enemies('bouncer', ...at(-6, S / 2 + 8), 1, 2);
+      const name = { vegas: 'Lucky Seven', frost: 'The Ice Crown', bayou: 'Old Chomper', tequila: 'La Botella' }[mapId] || 'The Monument';
+      zones.push({ name, x, z, w: S, d: S, tier: 3 });
+      minimap.push({ x, z, w: S, d: S, color: '#d4a63a', label: name, tier: 3 });
+    }
+
+    const TOWERS = {
+      vegas: [['Hotel Jackpot', 0xf1faee, 0xe63946, '#ff3fa4'], ['Neon Arms', 0x7b2cbf, 0x1b0f2b, '#2ee6d6'], ['The High Rise', 0xffd6a5, 0x6b3a1e, '#ffd23f']],
+      frost: [['Summit Lodge', 0x8d6e63, 0x3e2723, '#7dd3fc'], ['Glacier Suites', 0xe2e8f0, 0x475569, '#2ee6d6'], ['Avalanche Tower', 0x94a3b8, 0x1e293b, '#ff5d5d']],
+      bayou: [['Swamp Spire', 0x6b705c, 0x3f3f2f, '#5ee27a'], ['Moonshine Mill', 0x9c6644, 0x3e2723, '#ffd23f'], ['Heron Hotel', 0xa5a58d, 0x3f3f2f, '#ff7eb6']],
+      tequila: [['Hotel Agave', 0xf4a261, 0x5b2a12, '#5ee27a'], ['Torre Tequila', 0xe76f51, 0x5b2a12, '#ffd23f'], ['El Mirador', 0xe9c46a, 0x5b2a12, '#ff9f1c']],
+    }[mapId] || [];
+    const m = findSpot(30, 52);
+    if (m) monument(m[0], m[1] - 8);
+    TOWERS.forEach(([name, color, trim, signColor], i) => {
+      const t = findSpot(16, 26);
+      if (t) tower({ x: t[0], z: t[1] - 4, name, floors: 3 + (i % 2), color, trim, signColor });
+    });
+
+    // New machines out in the open: Roulette Rollers roam in pairs, Bouncers guard the bigger spots.
+    for (let i = 0; i < Math.round(H / 45); i++) {
+      const sp = findSpot(8, 8);
+      if (sp) enemies('roller', sp[0], sp[1], 2, 8);
+    }
+    zones.filter((q) => q.tier >= 2 && q.w * q.d < 5000).forEach((q, i) => {
+      if (i % 4 === 0) enemies('bouncer', q.x, q.z + q.d / 2 + 3, 1, 2);
+    });
+  } else if (def.indoor && !def.safe) {
+    // The Bunker gets a couple of Bouncers working the door.
+    enemies('bouncer', -30, 50, 1, 2);
+    enemies('bouncer', 30, -52, 1, 2);
+  }
   const CX = layout.casino.x;
   const CZ = layout.casino.z;
 
@@ -1046,7 +1276,7 @@ export function buildMap(scene, mapId = 'vegas') {
 
     isFree(x, z, r = 1) {
       for (const c of map.near(x, z)) {
-        if (c.rayOnly) continue;
+        if (c.rayOnly || (c.bottom && c.bottom > 2)) continue;
         if (c.type === 'box') {
           const nx = Math.max(c.minX, Math.min(x, c.maxX));
           const nz = Math.max(c.minZ, Math.min(z, c.maxZ));

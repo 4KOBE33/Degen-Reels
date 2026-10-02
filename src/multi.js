@@ -660,7 +660,7 @@ export class Session {
     const raid = this.raid;
     if (a.k === 'm') {
       if (!a.a || !a.t) return null;
-      const m = new Machine(raid, a.t, a.x, a.z);
+      const m = new Machine(raid, a.t, a.x, a.z, a.y || 0);
       m.puppet = true;
       m.yaw = a.yw;
       this.register(m, a.i);

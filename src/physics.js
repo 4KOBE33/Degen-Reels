@@ -2,10 +2,13 @@
 const STEP = 0.3;
 
 // Colliders are { type: 'box', minX, maxX, minZ, maxZ, top } or { type: 'circle', x, z, r, top }.
+// An optional `bottom` lifts one off the ground (an upstairs floor or wall): you walk under it.
 export function resolve(pos, vel, radius, map) {
   let ground = 0;
   for (const c of map.near(pos.x, pos.z)) {
     if (c.rayOnly || c.disabled) continue;
+    // Something overhead (an upper floor): only matters once your feet are up there.
+    if (c.bottom && pos.y < c.bottom - 0.05) continue;
     if (c.type === 'box') {
       const inside = pos.x > c.minX && pos.x < c.maxX && pos.z > c.minZ && pos.z < c.maxZ;
       const nx = Math.max(c.minX, Math.min(pos.x, c.maxX));

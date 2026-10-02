@@ -53,18 +53,18 @@ const KINDS = {
 };
 
 export class Container {
-  constructor(raid, { kind, x, z, tier, rot = 0 }) {
+  constructor(raid, { kind, x, z, tier, rot = 0, y = 0 }) {
     this.raid = raid;
     this.kind = kind;
     this.def = KINDS[kind];
     this.tier = Math.min(4, tier + this.def.tierBonus + (raid.map.lootBonus || 0));
-    this.spot = new THREE.Vector3(x, 0, z);
+    this.spot = new THREE.Vector3(x, y, z);
     this.range = 1.9;
     this.opened = false;
 
     // The body is static scenery; the lid is the only moving part.
     const g = new THREE.Group();
-    g.position.set(x, 0, z);
+    g.position.set(x, y, z);
     g.rotation.y = rot;
     let h;
     if (kind === 'register') {
@@ -93,10 +93,10 @@ export class Container {
       h = s;
     }
     raid.map.statics.add(g);
-    raid.map.addCollider({ type: 'box', minX: x - 0.5, maxX: x + 0.5, minZ: z - 0.45, maxZ: z + 0.45, top: h });
+    raid.map.addCollider({ type: 'box', minX: x - 0.5, maxX: x + 0.5, minZ: z - 0.45, maxZ: z + 0.45, top: y + h, bottom: y || undefined });
 
     this.lid = new THREE.Mesh(new THREE.BoxGeometry(kind === 'locker' ? 0.8 : 0.9, 0.12, kind === 'locker' ? 0.6 : 0.8), toon(this.def.lid));
-    this.lid.position.set(x, h + 0.06, z);
+    this.lid.position.set(x, y + h + 0.06, z);
     this.lid.rotation.y = rot;
     raid.scene.add(this.lid);
     this.h = h;
@@ -105,13 +105,13 @@ export class Container {
     const col = new THREE.Color(TIER_COLORS[this.tier] || TIER_COLORS[1]);
     this.badge = new THREE.Sprite(new THREE.SpriteMaterial({ map: badgeTexture(kind, this.tier), transparent: true, depthWrite: false }));
     this.badge.scale.set(1.1, 1.1, 1);
-    this.badgeY = h + 1.3;
+    this.badgeY = y + h + 1.3;
     this.badge.position.set(x, this.badgeY, z);
     this.badge.renderOrder = 5;
     raid.scene.add(this.badge);
     this.ring = new THREE.Mesh(new THREE.RingGeometry(0.85, 1.25, 28), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.55, depthWrite: false, side: THREE.DoubleSide }));
     this.ring.rotation.x = -Math.PI / 2;
-    this.ring.position.set(x, 0.06, z);
+    this.ring.position.set(x, y + 0.06, z);
     raid.scene.add(this.ring);
     this.phase = (x * 0.37 + z * 0.61) % (Math.PI * 2);
   }
@@ -132,7 +132,7 @@ export class Container {
     this.opened = true;
     this.badge.visible = false;
     this.ring.visible = false;
-    this.lid.position.y = this.h + 0.5;
+    this.lid.position.y = this.spot.y + this.h + 0.5;
     this.lid.rotation.x = -0.9;
     sfx.open(this.spot, this.raid.listener);
   }
@@ -150,7 +150,7 @@ export class Container {
     this.badge.visible = false;
     this.ring.visible = false;
     if (c && c.isPlayer && this.raid.run) this.raid.run.containers++;
-    this.lid.position.y = this.h + 0.5;
+    this.lid.position.y = this.spot.y + this.h + 0.5;
     this.lid.rotation.x = -0.9;
     sfx.open(this.spot, this.raid.listener);
     const [a, b] = this.def.rolls;
@@ -158,7 +158,7 @@ export class Container {
     for (let i = 0; i < n; i++) {
       const loot = rollLoot(this.tier);
       const at = this.spot.clone().add(new THREE.Vector3((Math.random() - 0.5) * 2, 0, (Math.random() - 0.5) * 2));
-      if (loot.chips) this.raid.chips.spawnBurst(at.setY(this.h + 0.3), loot.chips, null, { speed: 1.5 });
+      if (loot.chips) this.raid.chips.spawnBurst(at.setY(this.spot.y + this.h + 0.3), loot.chips, null, { speed: 1.5 });
       else {
         // Spill out toward the person who opened it, fanned out a little.
         const dir = c ? new THREE.Vector3(c.pos.x - this.spot.x, 0, c.pos.z - this.spot.z) : new THREE.Vector3(0, 0, 1);
@@ -172,7 +172,7 @@ export class Container {
   reset() {
     this.opened = false;
     this.claimedBy = null;
-    this.lid.position.y = this.h + 0.06;
+    this.lid.position.y = this.spot.y + this.h + 0.06;
     this.lid.rotation.x = 0;
   }
 

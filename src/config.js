@@ -129,6 +129,12 @@ export const ENEMIES = {
   shark: { name: 'Card Shark', hp: 80, speed: 7.5, damage: 16, melee: true, rate: 1.4, range: 2.2, aggro: 18, chips: [10, 30], loot: 0.35 },
   // Bayou wildlife: lurks underwater in ponds and lunges at anyone who wanders close.
   gator: { name: 'Gator', hp: 130, speed: 8.5, damage: 18, melee: true, rate: 1.6, range: 2.6, aggro: 10, chips: [0, 15], loot: 0.6 },
+  // A hulking bruiser in a suit. Slow, tanky, and it hits like a truck.
+  bouncer: { name: 'Bouncer', hp: 340, speed: 3.6, damage: 30, melee: true, rate: 1.9, range: 2.9, aggro: 22, chips: [45, 100], loot: 0.85, head: 3.0, radius: 1.1, bar: 4.2, charge: 1.7 },
+  // A runaway roulette wheel that rolls at you and rams.
+  roller: { name: 'Roulette Roller', hp: 75, speed: 10.5, damage: 14, melee: true, rate: 1.1, range: 2.1, aggro: 30, chips: [12, 30], loot: 0.3, head: 1.3, radius: 0.85, bar: 2.8 },
+  // Bolted down on rooftops and monuments: slow, heavy, very long-range shots.
+  turret: { name: 'Jackpot Turret', hp: 170, speed: 0, damage: 24, burst: 1, burstGap: 0, rate: 2.7, range: 55, aggro: 52, accuracy: 0.045, chips: [35, 80], loot: 0.6, head: 1.6, radius: 0.9, bar: 2.8, fixed: true },
   boss: { name: 'The Pit Boss', hp: 3200, speed: 2.2, damage: 4, burst: 10, burstGap: 0.08, rate: 3.4, range: 40, aggro: 45, accuracy: 0.12, chips: [600, 900], loot: 1 },
 };
 

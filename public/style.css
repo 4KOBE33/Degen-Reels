@@ -125,7 +125,7 @@ kbd { display: inline-block; min-width: 20px; padding: 0 5px; margin-right: 3px;
 .tag { display: inline-block; font: 900 10px var(--body); letter-spacing: 0.5px; text-transform: uppercase; padding: 2px 8px; border-radius: 20px; background: rgba(255, 255, 255, 0.12); }
 .tag.d-medium { background: #ffd23f; color: #1b0f2b; }
 .tag.d-hard { background: #ff5d5d; color: #1b0f2b; }
-.tag.d-pvp { background: #c77dff; color: #1b0f2b; }
+.tag.d-deadly { background: #7a1028; color: #fff6e0; }
 .tag.d-safe { background: #5ee27a; color: #1b0f2b; }
 .mapinfo { margin: 0 0 14px; font-size: 13px; font-weight: 700; background: rgba(27, 15, 43, 0.6); border-radius: 12px; padding: 8px 12px; line-height: 1.5; }
 .mapinfo b { font: 400 16px var(--display); color: var(--gold); letter-spacing: 0.5px; margin-right: 4px; }

@@ -2,6 +2,9 @@
 //   Slotbot   – a walking slot machine that fires short bursts
 //   Dicer     – a flying die that circles you and plinks away
 //   Card Shark – a playing card that sprints at you and slices
+//   Bouncer   – a hulking bruiser that charges in and hits like a truck
+//   Roulette Roller – a runaway roulette wheel that rams you
+//   Jackpot Turret – bolted onto rooftops; slow, heavy, long-range shots
 //   Pit Boss  – a giant golden slot mech: bullet sweeps, rockets, summons, ground slams
 import * as THREE from 'three';
 import { ENEMIES } from './config.js';
@@ -47,6 +50,27 @@ function pips() {
     }
   });
   return pipTex;
+}
+
+let wheelTex = null;
+function wheelFace() {
+  if (wheelTex) return wheelTex;
+  wheelTex = canvasTexture(128, 128, (c, w) => {
+    const n = 18;
+    for (let i = 0; i < n; i++) {
+      c.beginPath();
+      c.moveTo(w / 2, w / 2);
+      c.arc(w / 2, w / 2, w / 2, (i / n) * Math.PI * 2, ((i + 1) / n) * Math.PI * 2);
+      c.closePath();
+      c.fillStyle = i === 0 ? '#1f8a4c' : i % 2 ? '#1b0f2b' : '#e63946';
+      c.fill();
+    }
+    c.beginPath();
+    c.arc(w / 2, w / 2, w * 0.22, 0, Math.PI * 2);
+    c.fillStyle = '#6b3a1e';
+    c.fill();
+  });
+  return wheelTex;
 }
 
 let cardTex = null;
@@ -199,6 +223,100 @@ function buildModel(type) {
     parts.crit.position.set(0, 0.75, -1.25);
     parts.critMult = 2.0;
     g.add(parts.crit);
+  } else if (type === 'bouncer') {
+    // A slab of a robot in a black suit and shades.
+    const bodyMat = toon(0x1f2937, { unique: true, emissive: 0xffffff, emissiveIntensity: 0 });
+    const torso = part(new THREE.BoxGeometry(1.7, 1.6, 1.0), bodyMat, { ink: 0.05 });
+    torso.position.y = 2.0;
+    const shirt = part(new THREE.BoxGeometry(0.5, 1.2, 0.05), 0xfff6e0, { ink: 0 });
+    shirt.position.set(0, 2.05, -0.52);
+    const tie = part(new THREE.BoxGeometry(0.16, 0.9, 0.06), 0xe63946, { ink: 0 });
+    tie.position.set(0, 2.0, -0.56);
+    const head = part(new THREE.BoxGeometry(0.9, 0.75, 0.85), 0x9ca3af, { ink: 0.04 });
+    head.position.y = 3.15;
+    const shades = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.18, 0.06), new THREE.MeshBasicMaterial({ color: 0x111111 }));
+    shades.position.set(0, 3.25, -0.45);
+    const eye = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.05, 0.03), new THREE.MeshBasicMaterial({ color: 0xff3fa4 }));
+    eye.position.set(0, 3.25, -0.49);
+    g.add(torso, shirt, tie, head, shades, eye);
+    const fists = [];
+    for (const side of [-1, 1]) {
+      const arm = part(new THREE.BoxGeometry(0.4, 1.2, 0.45), bodyMat, { ink: 0.03 });
+      arm.position.set(side * 1.05, 1.9, -0.1);
+      const fist = part(new THREE.BoxGeometry(0.6, 0.55, 0.6), 0x9ca3af, { ink: 0.03 });
+      fist.position.set(side * 1.05, 1.25, -0.6);
+      g.add(arm, fist);
+      fists.push(fist);
+    }
+    const legs = [];
+    for (const side of [-1, 1]) {
+      const leg = part(new THREE.BoxGeometry(0.5, 1.2, 0.55), 0x111827, { ink: 0.03 });
+      leg.position.set(side * 0.45, 0.6, 0);
+      g.add(leg);
+      legs.push(leg);
+    }
+    Object.assign(parts, { body: torso, legs, fists, eye, bodyMat, muzzle: new THREE.Vector3(0, 1.4, -1) });
+    parts.hit = new THREE.Mesh(new THREE.BoxGeometry(2.0, 3.0, 1.2), hitMat);
+    parts.hit.position.y = 1.5;
+    g.add(parts.hit);
+    parts.crit = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.8, 0.9), hitMat);
+    parts.crit.position.y = 3.15;
+    parts.critMult = 2.2;
+    g.add(parts.crit);
+  } else if (type === 'roller') {
+    // A roulette wheel on its edge: red and black pockets, a gold hub, an angry eye.
+    const bodyMat = toon(0xffffff, { unique: true, map: wheelFace(), emissive: 0xffffff, emissiveIntensity: 0 });
+    const wheel = new THREE.Group();
+    wheel.position.y = 1.2;
+    const disc = new THREE.Mesh(new THREE.CylinderGeometry(1.15, 1.15, 0.45, 28), [toon(0x6b3a1e), bodyMat, bodyMat]);
+    disc.rotation.z = Math.PI / 2;
+    disc.castShadow = true;
+    const hub = part(new THREE.CylinderGeometry(0.3, 0.3, 0.6, 12), 0xd4a63a, { ink: 0.02 });
+    hub.rotation.z = Math.PI / 2;
+    wheel.add(disc, hub);
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 6), new THREE.MeshBasicMaterial({ color: 0xff3fa4 }));
+    eye.position.set(0, 1.25, -0.36);
+    g.add(wheel, eye);
+    Object.assign(parts, { body: disc, wheel, eye, bodyMat, muzzle: new THREE.Vector3(0, 1.2, -0.6) });
+    parts.hit = new THREE.Mesh(new THREE.BoxGeometry(0.7, 2.3, 2.3), hitMat);
+    parts.hit.position.y = 1.2;
+    g.add(parts.hit);
+    // Weak spot: the hub.
+    parts.crit = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.6, 0.6), hitMat);
+    parts.crit.position.y = 1.2;
+    parts.critMult = 2.5;
+    g.add(parts.crit);
+  } else if (type === 'turret') {
+    // A one-armed bandit welded to a tripod, with a cannon where the reels should be.
+    const bodyMat = toon(0xd4a63a, { unique: true, emissive: 0xffffff, emissiveIntensity: 0 });
+    const base = part(new THREE.CylinderGeometry(0.75, 0.95, 0.5, 12), 0x374151, { ink: 0.03 });
+    base.position.y = 0.25;
+    const post = part(new THREE.CylinderGeometry(0.2, 0.2, 0.7, 8), 0x374151, { ink: 0.02 });
+    post.position.y = 0.8;
+    const head = part(new THREE.BoxGeometry(1.1, 0.9, 1.1), bodyMat, { ink: 0.04 });
+    head.position.y = 1.55;
+    const barrel = part(new THREE.CylinderGeometry(0.13, 0.17, 1.6, 10), 0x1f2937, { ink: 0.02 });
+    barrel.rotation.x = Math.PI / 2;
+    barrel.position.set(0, 1.55, -1.2);
+    const lens = new THREE.Mesh(new THREE.CircleGeometry(0.22, 12), new THREE.MeshBasicMaterial({ color: 0xff3fa4 }));
+    lens.position.set(0, 1.75, -0.56);
+    lens.rotation.y = Math.PI;
+    const lever = new THREE.Group();
+    lever.position.set(0.6, 1.6, 0);
+    const stick = part(new THREE.CylinderGeometry(0.05, 0.05, 0.8, 6), 0x9ca3af, { ink: 0.01 });
+    stick.position.y = 0.4;
+    const knob = part(new THREE.SphereGeometry(0.13, 8, 6), 0xe63946, { ink: 0.01 });
+    knob.position.y = 0.8;
+    lever.add(stick, knob);
+    g.add(base, post, head, barrel, lens, lever);
+    Object.assign(parts, { body: head, eye: lens, lever, bodyMat, muzzle: new THREE.Vector3(0, 1.55, -2.0) });
+    parts.hit = new THREE.Mesh(new THREE.BoxGeometry(1.3, 2.0, 1.3), hitMat);
+    parts.hit.position.y = 1.0;
+    g.add(parts.hit);
+    parts.crit = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.2), hitMat);
+    parts.crit.position.set(0, 1.75, -0.58);
+    parts.critMult = 2.5;
+    g.add(parts.crit);
   } else if (type === 'shark') {
     const bodyMat = toon(0xffffff, { unique: true, emissive: 0xffffff, emissiveIntensity: 0 });
     const card = new THREE.Mesh(new THREE.BoxGeometry(1.2, 1.7, 0.1), [bodyMat, bodyMat, bodyMat, bodyMat,
@@ -231,7 +349,7 @@ function buildModel(type) {
 }
 
 export class Machine {
-  constructor(raid, type, x, z) {
+  constructor(raid, type, x, z, y = 0) {
     this.raid = raid;
     this.type = type;
     this.def = ENEMIES[type];
@@ -242,11 +360,11 @@ export class Machine {
     this.hp = this.maxHp;
     this.armor = 0;
     this.alive = true;
-    this.pos = new THREE.Vector3(x, 0, z);
+    this.pos = new THREE.Vector3(x, y, z);
     this.vel = new THREE.Vector3();
-    this.home = new THREE.Vector3(x, 0, z);
+    this.home = new THREE.Vector3(x, y, z);
     this.yaw = Math.random() * Math.PI * 2;
-    this.radius = this.isBoss ? 2.4 : type === 'dicer' ? 0.6 : type === 'gator' ? 1.0 : 0.8;
+    this.radius = this.def.radius || (this.isBoss ? 2.4 : type === 'dicer' ? 0.6 : type === 'gator' ? 1.0 : 0.8);
     this.target = null;
     this.lostFor = 0;
     this.thinkIn = Math.random() * 0.5;
@@ -271,7 +389,7 @@ export class Machine {
       this.critMesh = parts.crit;
     }
     this.bar = hpBar();
-    this.bar.position.y = this.isBoss ? 11.5 : type === 'dicer' ? 3.4 : type === 'gator' ? 1.8 : 3.6;
+    this.bar.position.y = this.def.bar || (this.isBoss ? 11.5 : type === 'dicer' ? 3.4 : type === 'gator' ? 1.8 : 3.6);
     this.bar.userData.draw(1);
     if (!this.isBoss) group.add(this.bar);
     group.position.copy(this.pos);
@@ -279,7 +397,7 @@ export class Machine {
   }
 
   head(out = new THREE.Vector3()) {
-    const h = this.isBoss ? 6 : this.type === 'dicer' ? 2.4 : this.type === 'gator' ? 0.7 : 1.8;
+    const h = this.def.head || (this.isBoss ? 6 : this.type === 'dicer' ? 2.4 : this.type === 'gator' ? 0.7 : 1.8);
     return out.set(this.pos.x, this.pos.y + h, this.pos.z);
   }
 
@@ -333,6 +451,8 @@ export class Machine {
     if (this.type === 'gator') {
       if (this.target && this.target.pos.distanceTo(this.home) > 20) this.target = null;
       if (!this.target) this.wanderTo = this.home.clone();
+    } else if (this.def.fixed) {
+      this.wanderTo = null;
     } else if (!this.target && (!this.wanderTo || Math.random() < 0.05)) {
       this.wanderTo = this.home.clone().add(new THREE.Vector3((Math.random() - 0.5) * 16, 0, (Math.random() - 0.5) * 16));
     }
@@ -405,6 +525,7 @@ export class Machine {
           raid.meleeHit(this, t, def.damage);
         }
         if (d < 8 && this.cooldown < def.rate * 0.5) speed *= 1.35;
+        if (def.charge && d < 12 && d > 3) speed *= def.charge;
       } else if (this.type === 'dicer') {
         const ideal = 11;
         mx = (-dz / d) * this.strafe;
@@ -480,6 +601,17 @@ export class Machine {
       this.parts.body.rotation.x += dt * 1.5;
       this.parts.body.rotation.z += dt;
       this.parts.rotor.rotation.y += dt * 30;
+    }
+    if (this.type === 'roller') {
+      // Roll the wheel the way it's going; wobble a little.
+      this.parts.wheel.rotation.x -= dt * Math.hypot(this.vel.x, this.vel.z) / 1.1;
+      this.parts.wheel.rotation.z = Math.sin(performance.now() / 160) * 0.06;
+    }
+    if (this.type === 'turret') this.parts.lever.rotation.x = this.burstLeft > 0 ? 0.8 : this.parts.lever.rotation.x * 0.9;
+    if (this.type === 'bouncer') {
+      const swing = this.cooldown > this.def.rate - 0.25 ? 1 : 0;
+      this.parts.fists[0].position.z = -0.6 - swing * 0.7;
+      this.parts.fists[1].position.z = -0.6 + swing * 0.2;
     }
     if (this.parts.blade) this.parts.blade.rotation.y += (0 - this.parts.blade.rotation.y) * Math.min(1, dt * 8);
     if (this.parts.jaw) this.parts.jaw.rotation.x += (0 - this.parts.jaw.rotation.x) * Math.min(1, dt * 6);

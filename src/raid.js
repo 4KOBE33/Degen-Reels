@@ -264,15 +264,15 @@ export class Raid {
     this.machines = [];
     this.bots = [];
     this.combatants = this.combatants.filter((c) => c.isPlayer);
-    for (const s of this.map.enemySpots) this.spawnMachine(s.type, s.x, s.z);
+    for (const s of this.map.enemySpots) this.spawnMachine(s.type, s.x, s.z, s.y || 0);
     // Bayou ponds hide gators.
     if (this.mapId === 'bayou') for (const pd of this.map.hazards.ponds) this.spawnMachine('gator', pd.x, pd.z);
     for (let i = 0; i < (this.map.raiders ?? RAIDERS.count); i++) this.spawnRaider();
   }
 
-  spawnMachine(type, x, z) {
-    if (type !== 'gator' && type !== 'boss') [x, z] = this.openSpot(x, z, 0.9);
-    const m = new Machine(this, type, x, z);
+  spawnMachine(type, x, z, y = 0) {
+    if (type !== 'gator' && type !== 'boss' && !y) [x, z] = this.openSpot(x, z, 0.9);
+    const m = new Machine(this, type, x, z, y);
     this.machines.push(m);
     return m;
   }
@@ -536,7 +536,7 @@ export class Raid {
   startKillcam(victim, killer, { replay = !this.net } = {}) {
     const real = killer && killer !== victim && killer.pos && killer.alive !== undefined ? killer : null;
     const weapon = !killer ? 'something'
-      : killer.team === 'machine' ? ({ shark: 'its blade', gator: 'its jaws', boss: 'the jackpot cannon', dicer: 'dice bullets' }[killer.type] || 'a burst of bullets')
+      : killer.team === 'machine' ? ({ shark: 'its blade', gator: 'its jaws', boss: 'the jackpot cannon', dicer: 'dice bullets', bouncer: 'its fists', roller: 'a running start', turret: 'a jackpot shell' }[killer.type] || 'a burst of bullets')
         : killer.team === 'env' ? '' : killer.weaponName || 'their fists';
     this.killcam = {
       t: 0, dur: 4, over: false, killer: real, victimPos: victim.pos.clone(), name: killer ? killer.name : 'Something',
@@ -772,16 +772,20 @@ export class Raid {
   }
 
   findDropSpot(from, want) {
-    const origin = new THREE.Vector3(from.x, 1.0, from.z);
+    // Works upstairs too: loot lands on whatever floor it came from.
+    const baseY = from.y > 0.5 ? from.y : 0;
+    const floorAt = (x, z) => (baseY ? this.map.groundAt(x, z, baseY + 0.5) : 0);
+    const origin = new THREE.Vector3(from.x, baseY + 1.0, from.z);
     const reachable = (x, z) => {
       if (!this.map.isFree(x, z, 0.6)) return false;
       if (this.pickups.some((pk) => Math.hypot(pk.spot.x - x, pk.spot.z - z) < 0.6)) return false;
-      const to = new THREE.Vector3(x, 1.0, z);
+      if (baseY && Math.abs(floorAt(x, z) - baseY) > 0.6) return false;
+      const to = new THREE.Vector3(x, baseY + 1.0, z);
       const d = origin.distanceTo(to);
       if (d < 0.05) return true;
       return !this.raycast(origin, to.sub(origin).normalize(), d, null, { solidsOnly: true }).hit;
     };
-    if (reachable(want.x, want.z)) return new THREE.Vector3(want.x, 0, want.z);
+    if (reachable(want.x, want.z)) return new THREE.Vector3(want.x, floorAt(want.x, want.z), want.z);
     // Spiral outward from the source, starting in the direction we wanted.
     const base = Math.atan2(want.z - from.z, want.x - from.x) || 0;
     for (const r of [1.2, 1.7, 2.3, 3, 3.8, 4.8]) {
@@ -789,10 +793,10 @@ export class Raid {
         const a = base + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * (Math.PI / 6);
         const x = from.x + Math.cos(a) * r;
         const z = from.z + Math.sin(a) * r;
-        if (reachable(x, z)) return new THREE.Vector3(x, 0, z);
+        if (reachable(x, z)) return new THREE.Vector3(x, floorAt(x, z), z);
       }
     }
-    return new THREE.Vector3(want.x, 0, want.z);
+    return new THREE.Vector3(want.x, floorAt(want.x, want.z), want.z);
   }
 
   // Move a gun from the backpack into a weapon slot (swapping if both are full).
