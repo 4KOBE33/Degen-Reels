@@ -1,6 +1,6 @@
 // Your keyboard/mouse controls and the over-the-shoulder camera.
 //   WASD move · Space jump · Shift sprint · Mouse aim · Left click shoot · Right click aim down sights
-//   1/2 or Q swap guns · R reload · E use (hold to search) · H heal · F armor plate · Tab bag · M map
+//   1/2 or Q swap guns · R reload · E use (hold to search) · H heal · F armor plate · I (or Tab/B) bag · M map
 import * as THREE from 'three';
 import { WEAPONS } from './config.js';
 
@@ -42,7 +42,7 @@ export class PlayerController {
       if (k === 'r') this.say(c.reload(), 'Reloading…');
       if (k === 'h') this.say(c.startUsing(c.count('bandage') ? 'bandage' : 'soda'), null);
       if (k === 'f') this.say(c.startUsing('plate'), null);
-      if (k === 'tab') this.onToggle('bag');
+      if (k === 'tab' || k === 'i' || k === 'b') this.onToggle('bag');
       if (k === 'm') this.onToggle('map');
     });
     window.addEventListener('keyup', (e) => { this.keys[e.key.toLowerCase()] = false; });

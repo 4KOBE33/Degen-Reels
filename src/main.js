@@ -101,6 +101,12 @@ $('paused').addEventListener('click', (e) => {
   controller.lock();
 });
 $('resume').addEventListener('click', () => { initAudio(); controller.lock(); });
+$('openBag').addEventListener('click', () => {
+  if (!raid.active) return;
+  $('paused').hidden = true;
+  overlay = 'bag';
+  $('bag').hidden = false;
+});
 $('abandon').addEventListener('click', () => {
   if (!raid.active) return;
   raid.player.alive = false;

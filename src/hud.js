@@ -75,6 +75,23 @@ export class Hud {
       return `<div class="slot ${on}"><kbd>${i + 1}</kbd><span style="color:${info.css}">${info.icon} ${escapeHtml(info.name)}</span><b class="ammo">${g.ammo}</b></div>`;
     }).join(''));
 
+    // Backpack bar: always visible so you can see loot land.
+    const pack = p.backpack.map((it) => `${it.id}${it.qty || ''}${it.kind || ''}`).join('|');
+    if (pack !== this.lastPack) {
+      const grew = this.lastPack !== undefined && p.backpack.length > (this.lastPackLen || 0);
+      this.lastPack = pack;
+      this.lastPackLen = p.backpack.length;
+      const slots = [];
+      for (let i = 0; i < p.capacity; i++) {
+        const it = p.backpack[i];
+        if (!it) { slots.push('<span class="s"></span>'); continue; }
+        const info = itemInfo(it);
+        const isNew = grew && i === p.backpack.length - 1;
+        slots.push(`<span class="s ${isNew ? 'new' : ''}" style="border-color:${info.css}" title="${escapeHtml(info.name)}">${info.icon}${!isGun(it) && it.qty > 1 ? `<i>${it.qty}</i>` : ''}</span>`);
+      }
+      $('packbar').innerHTML = `<div class="t">🎒 Backpack ${p.backpack.length}/${p.capacity} · <kbd>I</kbd> to open</div><div class="slots">${slots.join('')}</div>`;
+    }
+
     // Timer, zone and exits.
     $('timer').classList.toggle('urgent', raid.timeLeft < 60);
     this.slow -= dt;

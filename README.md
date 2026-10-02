@@ -31,7 +31,7 @@ Unlockable hats: cowboy (extract once), dealer visor (extract 10 times), crown (
 
 ## Controls
 
-WASD move · Space jump · Shift sprint · Mouse aim · Left click shoot · **Right click aim down sights** · E use (**hold** to search) · 1/2/Q swap guns · R reload (uses an Ammo Box) · H heal · F armor plate · Tab backpack · M map · Esc pause and settings (**mouse sensitivity**, FOV, volume)
+WASD move · Space jump · Shift sprint · Mouse aim · Left click shoot · **Right click aim down sights** · E use (**hold** to search) · 1/2/Q swap guns · R reload (uses an Ammo Box) · H heal · F armor plate · I backpack (also Tab or B) · M map · Esc pause and settings (**mouse sensitivity**, FOV, volume)
 
 ## Run it
 
