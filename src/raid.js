@@ -13,6 +13,7 @@ import { Combatant } from './combatant.js';
 import { Machine } from './enemies.js';
 import { Hazards } from './hazards.js';
 import { Throwables } from './throwables.js';
+import { NavGrid } from './nav.js';
 import { RaiderBrain } from './bots.js';
 import { ItemPickup } from './pickups.js';
 import {
@@ -36,6 +37,7 @@ export class Raid {
     this.hud = hud;
     this.scene = new THREE.Scene();
     this.map = buildMap(this.scene, mapId);
+    this.nav = new NavGrid(this.map);
     this.fx = new Fx(this.scene);
     this.chips = new ChipSystem(this);
     this.listener = new THREE.Vector3();
@@ -99,6 +101,7 @@ export class Raid {
     this.vaultOpen = true;
     this.vaultCollider.disabled = true;
     this.map.removeCollider(this.vaultCollider);
+    this.nav.cache.clear();
     sfx.jackpot(this.vaultDoor.position, this.listener);
     this.feed(`💳 ${c.name} opened the Vault!`);
     if (c.isPlayer) this.hud.toast('🔓 THE VAULT IS OPEN', 'big');
@@ -147,7 +150,7 @@ export class Raid {
     for (const s of this.map.enemySpots) this.spawnMachine(s.type, s.x, s.z);
     // Bayou ponds hide gators.
     if (this.mapId === 'bayou') for (const pd of this.map.hazards.ponds) this.spawnMachine('gator', pd.x, pd.z);
-    for (let i = 0; i < RAIDERS.count; i++) this.spawnRaider();
+    for (let i = 0; i < (this.map.raiders || RAIDERS.count); i++) this.spawnRaider();
   }
 
   spawnMachine(type, x, z) {
@@ -165,13 +168,15 @@ export class Raid {
     const [x, z] = this.openSpot(sx + (Math.random() - 0.5) * 10, sz + (Math.random() - 0.5) * 10);
     c.pos.set(x, 0, z);
     c.equip(makeGun(pick(['pistol', 'pistol', 'smg', 'shotgun']), rollRarity(1)));
-    c.backpack.push(makeItem('bandage', 2));
+    c.backpack.push(makeItem('bandage', 2), makeItem('ammo', randInt(1, 3)));
     if (Math.random() < 0.4) c.backpack.push(makeItem(pick(['grenade', 'grenade', 'dice', 'flash', 'sauce']), randInt(1, 2)));
     if (Math.random() < 0.15) c.backpack.push(makeItem('token', 1));
     if (Math.random() < 0.5) c.backpack.push(rollLoot(2).chips ? makeItem('cards') : rollLoot(2));
     c.chips = randInt(20, 120);
     this.combatants.push(c);
-    this.bots.push(new RaiderBrain(this, c));
+    const brain = new RaiderBrain(this, c);
+    if (this.map.hostile !== null) brain.hostile = Math.random() < this.map.hostile;
+    this.bots.push(brain);
     return c;
   }
 
@@ -219,7 +224,8 @@ export class Raid {
     this.player = p;
     this.combatants.push(p);
 
-    this.timeLeft = RAID_TIME;
+    this.raidTime = this.map.raidTime || RAID_TIME;
+    this.timeLeft = this.raidTime;
     this.elapsed = 0;
     for (const e of this.extracts) { e.call = null; e.cooldown = 0; }
     this.bossSpawned = false;
@@ -389,7 +395,7 @@ export class Raid {
 
   finish(result) {
     this.active = false;
-    this.result = { ...result, run: this.run, time: RAID_TIME - this.timeLeft, newFinds: [] };
+    this.result = { ...result, run: this.run, time: this.raidTime - this.timeLeft, newFinds: [] };
     // Stats, collection log, XP and achievements.
     this.result.progress = recordRaid(this.result, this.mapId);
     if (this.killcam) this.hud.killcam(this.killcam);
@@ -574,6 +580,37 @@ export class Raid {
     if (c.backpack.length >= c.capacity) return 'Backpack is full';
     c.backpack.push(gun);
     c.weapons[slot] = null;
+    c.refreshWeapon();
+    return null;
+  }
+
+  // Drag and drop in the backpack screen. `from`/`to` are { where: 'weapon' | 'pack', i }.
+  // Guns swap into weapon slots, anything swaps places in the backpack.
+  moveItem(c, from, to) {
+    if (from.where === to.where && from.i === to.i) return null;
+    const get = (s) => (s.where === 'weapon' ? c.weapons[s.i] : c.backpack[s.i]);
+    const a = get(from);
+    const b = get(to);
+    if (!a) return null;
+    if (to.where === 'weapon' && !isGun(a)) return 'Only guns go in weapon slots';
+    if (from.where === 'weapon' && b && !isGun(b)) return 'Only guns go in weapon slots';
+    if (from.where === 'pack' && to.where === 'pack') {
+      if (b) { c.backpack[from.i] = b; c.backpack[to.i] = a; } else { c.backpack.splice(from.i, 1); c.backpack.push(a); }
+    } else if (from.where === 'weapon' && to.where === 'weapon') {
+      c.weapons[from.i] = b || null;
+      c.weapons[to.i] = a;
+    } else if (from.where === 'pack' && to.where === 'weapon') {
+      c.weapons[to.i] = a;
+      if (b) c.backpack[from.i] = b; else c.backpack.splice(from.i, 1);
+      c.active = to.i;
+    } else {
+      // Weapon slot into the backpack.
+      if (b) { c.backpack[to.i] = a; c.weapons[from.i] = b; } else {
+        if (c.backpack.length >= c.capacity) return 'Backpack is full';
+        c.backpack.push(a);
+        c.weapons[from.i] = null;
+      }
+    }
     c.refreshWeapon();
     return null;
   }

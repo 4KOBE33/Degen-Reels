@@ -91,6 +91,25 @@ $('povBtn').addEventListener('click', () => controller.togglePov());
 hud.onDrop = (where, i) => raid.dropFromInventory(raid.player, where, i);
 hud.onEquip = (i) => { const r = raid.equipFromPack(raid.player, i); if (r) hud.toast(r); };
 hud.onUnequip = (i) => { const r = raid.unequipToPack(raid.player, i); if (r) hud.toast(r); };
+hud.onMove = (from, to) => { const r = raid.moveItem(raid.player, from, to); if (r) hud.toast(r); };
+hud.onPickThrowFrom = (from) => {
+  const it = from.where === 'pack' ? raid.player.backpack[from.i] : null;
+  if (!it || !ITEMS[it.id] || ITEMS[it.id].kind !== 'throw') { hud.toast('Only throwables go there'); return; }
+  hud.onPickThrow(it.id);
+};
+// Double-click / right-click: the obvious thing for that item.
+hud.onQuick = (slot) => {
+  const p = raid.player;
+  if (slot.where === 'weapon') { const r = raid.unequipToPack(p, slot.i); if (r) hud.toast(r); return; }
+  const it = p.backpack[slot.i];
+  if (!it) return;
+  if (it.id === 'gun') { const r = raid.equipFromPack(p, slot.i); if (r) hud.toast(r); return; }
+  const kind = ITEMS[it.id].kind;
+  if (kind === 'throw') hud.onPickThrow(it.id);
+  else if (kind === 'ammo') hud.onReload();
+  else if (['heal', 'armor', 'warm', 'boost'].includes(kind)) hud.onUse(it.id);
+  else hud.toast(`${ITEMS[it.id].name}: sell it to the Fence`);
+};
 hud.onReload = () => {
   if (!raid.player.gun) { hud.toast(`Switch to a gun first (${keyName('weapon1')} or ${keyName('weapon2')})`); return; }
   const refusal = raid.player.reload();
@@ -210,7 +229,38 @@ let wasActive = false;
 let last = performance.now();
 let orbit = 0;
 
+// If something breaks, say so instead of silently freezing, and keep the loop alive.
+let crashShown = false;
+function showCrash(kind, detail) {
+  try { localStorage.setItem('degen-reels-last-error', `${new Date().toISOString()} ${kind}: ${detail}`); } catch (e) { /* storage blocked */ }
+  if (crashShown) return;
+  crashShown = true;
+  const el = $('crash');
+  el.hidden = false;
+  $('crashWhat').textContent = kind;
+  $('crashDetail').textContent = String(detail).slice(0, 300);
+  if (document.pointerLockElement) document.exitPointerLock();
+}
+window.addEventListener('error', (e) => showCrash('Something broke', `${e.message} (${(e.filename || '').split('/').pop()}:${e.lineno})`));
+window.addEventListener('unhandledrejection', (e) => showCrash('Something broke', e.reason && e.reason.message ? e.reason.message : String(e.reason)));
+renderer.domElement.addEventListener('webglcontextlost', (e) => {
+  e.preventDefault();
+  showCrash('The graphics crashed', 'Your browser lost the 3D context (usually running out of video memory). Your stash is saved. Reload to keep playing.');
+});
+$('crashReload').addEventListener('click', () => location.reload());
+$('crashDismiss').addEventListener('click', () => { $('crash').hidden = true; crashShown = false; });
+
 function frame(now) {
+  requestAnimationFrame(frame);
+  try {
+    step(now);
+  } catch (err) {
+    console.error(err);
+    showCrash('Something broke', `${err.message} @ ${(err.stack || '').split('\n')[1] || ''}`);
+  }
+}
+
+function step(now) {
   const dt = Math.min(0.05, (now - last) / 1000);
   last = now;
   const inRaid = raid.active;
@@ -247,6 +297,5 @@ function frame(now) {
   }
 
   renderer.render(raid.scene, camera);
-  requestAnimationFrame(frame);
 }
 requestAnimationFrame(frame);

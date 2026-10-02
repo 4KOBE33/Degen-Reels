@@ -65,6 +65,14 @@ export class PlayerController {
     }, { passive: true });
     window.addEventListener('mousemove', (e) => {
       if (!this.locked || !this.c) return;
+      // While the throwable wheel is open, the mouse picks a slice instead of turning you.
+      if (this.wheel && this.wheel.open) {
+        this.wheel.x += e.movementX;
+        this.wheel.y += e.movementY;
+        const len = Math.hypot(this.wheel.x, this.wheel.y);
+        if (len > 120) { this.wheel.x *= 120 / len; this.wheel.y *= 120 / len; }
+        return;
+      }
       // Slower turning while aiming down sights.
       const s = BASE_SENSITIVITY * this.sensitivity * (this.aimHeld ? 0.55 : 1);
       this.c.yaw -= e.movementX * s;
@@ -101,6 +109,7 @@ export class PlayerController {
   }
 
   releaseAll() {
+    if (this.wheel) { this.wheel = null; this.raid.hud.throwWheel(null); }
     for (const a of [...this.held]) { this.held.delete(a); this.action(a, false); }
     this.firing = false;
     this.aimHeld = false;
@@ -109,6 +118,7 @@ export class PlayerController {
 
   action(a, down) {
     const c = this.c;
+    if (a === 'cycleThrow' && !down && this.wheel) { this.closeWheel(); return; }
     if (a === 'fire') { this.firing = down; return; }
     if (a === 'aim') { this.aimHeld = down; return; }
     if (!c || !c.alive || !this.raid.active) { if (!down) this.throwHeld = false; return; }
@@ -133,13 +143,41 @@ export class PlayerController {
     if (a === 'armor') this.say(c.startUsing('plate'), null);
     if (a === 'cocoa') this.say(c.startUsing('cocoa'), null);
     if (a === 'boost') this.say(c.startUsing('fuel'), null);
-    if (a === 'cycleThrow') {
-      const id = c.cycleThrowable();
-      this.say(null, id ? `Throwing: ${ITEMS[id].icon} ${ITEMS[id].name} ×${c.count(id)}` : 'Nothing to throw');
-    }
+    if (a === 'cycleThrow') this.wheel = { t: 0, x: 0, y: 0, open: false };
     if (a === 'bag') this.onToggle('bag');
     if (a === 'map') this.onToggle('map');
     if (a === 'pov') this.togglePov();
+  }
+
+  // Throwable wheel: hold to open, point the mouse at one, let go. A quick tap just cycles.
+  wheelOptions() {
+    return this.c ? this.c.throwables() : [];
+  }
+
+  wheelPick() {
+    const w = this.wheel;
+    const opts = this.wheelOptions();
+    if (!w || !opts.length || Math.hypot(w.x, w.y) < 25) return -1;
+    const a = (Math.atan2(w.x, -w.y) + Math.PI * 2) % (Math.PI * 2);
+    return Math.round(a / ((Math.PI * 2) / opts.length)) % opts.length;
+  }
+
+  closeWheel() {
+    const w = this.wheel;
+    const c = this.c;
+    this.wheel = null;
+    this.raid.hud.throwWheel(null);
+    if (!c || !c.alive) return;
+    if (w.open) {
+      const i = this.wheelPick();
+      if (i < 0) return;
+      const id = this.wheelOptions()[i];
+      c.throwable = id;
+      this.say(null, `Throwing: ${ITEMS[id].icon} ${ITEMS[id].name} ×${c.count(id)}`);
+    } else {
+      const id = c.cycleThrowable();
+      this.say(null, id ? `Throwing: ${ITEMS[id].icon} ${ITEMS[id].name} ×${c.count(id)}` : 'Nothing to throw');
+    }
   }
 
   togglePov() {
@@ -208,6 +246,11 @@ export class PlayerController {
     } else this.giveUp = 0;
 
     // Cherry Bomb aiming arc.
+    if (this.wheel) {
+      this.wheel.t += dt;
+      if (!this.wheel.open && this.wheel.t > 0.16 && this.wheelOptions().length) this.wheel.open = true;
+      if (this.wheel.open) hud.throwWheel(this.wheelOptions(), this.wheelPick(), c);
+    }
     const throwing = this.throwHeld && c.alive && raid.active ? c.currentThrowable() : null;
     if (throwing) raid.showArc(raid.grenadeArc(c, c.head(new THREE.Vector3()), this.aimRay().dir, throwing), throwing);
     else raid.showArc(null);

@@ -6,9 +6,11 @@ A 3D cartoon **extraction shooter** set in a casino town gone wrong. Gear up, ra
 
 | Map | Size | Danger | Vibe |
 |---|---|---|---|
-| 🌵 Lost Vegas | Huge (480m) | Medium | Desert strip, motel, gas station and junkyard around the Lucky Dump Grand. Out past them: the Neon Boneyard, **Area 52 Test Range**, Starlite Drive-In, bowling alley, Pharaoh's Folly, a ranch and a freight yard |
-| 🏔️ Frostbite Peaks | Huge (400m) | Hard (machines have 30% more health and damage) | Snowed-in ski town, frozen lake, gondola and the Alpine Ace Lodge. Out past them: the **Summit Observatory**, Frosty's Ice Hotel, the ski jump, Avalanche Row, a ranger station and an old mine |
-| 🐊 Bayou Royale | Large (370m) | Medium | Swamp boardwalks, stilt shacks and the Riverboat Royale paddle-steamer casino. Out past them: **Madame Marie's Mansion**, the Gator Farm, a shipwreck, a fishing camp, the Sunken Chapel and Swamp Gas |
+| 🌵 Lost Vegas | Huge (660m) | Medium | Desert strip, motel, gas station and junkyard around the Lucky Dump Grand. Further out: Neon Boneyard, **Area 52 Test Range**, Starlite Drive-In, bowling alley, Pharaoh's Folly, a ranch, a freight yard and nine desert settlements |
+| 🏔️ Frostbite Peaks | Huge (580m) | Hard (machines have 30% more health and damage) | Ski town, frozen lake, gondola and the Alpine Ace Lodge. Further out: **Summit Observatory**, Frosty's Ice Hotel, ski jump, Avalanche Row, ranger station, old mine and eight mountain outposts |
+| 🐊 Bayou Royale | Huge (540m) | Medium | Swamp boardwalks and the Riverboat Royale paddle-steamer. Further out: **Madame Marie's Mansion**, Gator Farm, a shipwreck, fishing camp, Sunken Chapel, Swamp Gas and eight swamp settlements, each with a gator pond |
+| 🌵 Temakilla | Huge (600m) | Hard | A tequila town in the agave fields around the El Gran Temakilla cantina-casino, the Calle Principal, a church, a bullring, train station, an abandoned mission and the deadly **Temakilla Distillery** |
+| 🥊 The Bunker | Small (190m), all indoors | PvP | An underground den: a poker hall, **The Pit** fighting ring, and a loop of corridors and rooms (Cash Cage, Counting Room, VIP Suite…). Barely any machines, mostly hostile raiders, top-tier loot everywhere, and a 10-minute clock |
 
 Each map has one **deadly outer area** (in bold) with tier-3 loot and heavy guards, so the casino isn't the only place worth risking it.
 
@@ -17,6 +19,8 @@ Every map has a casino with a vault, a Pit Boss event, and four exits (two open 
 - **Lost Vegas: traffic.** Cars cruise the strip and the cross street, and getting hit hurts. They honk if you're standing in the lane.
 - **Frostbite Peaks: cold.** Your warmth drains outdoors. Stand by a burning barrel 🔥 or get indoors to warm up, or drink ☕ Hot Cocoa (G). At zero warmth you freeze, and frostbite goes straight through armor.
 - **Bayou Royale: gators.** They lurk in every pond with just their eyes showing and lunge at anyone who wanders close. They drop 🦷 Gator Teeth.
+- **Temakilla: dust storms.** Every few minutes a storm rolls in and you can barely see 10 meters. It's perfect for sneaking, or for getting jumped.
+- **The Bunker: other people.** You get a few seconds of grace after you drop in. After that, most raiders down here want your stuff.
 
 ## Critical hits
 
@@ -48,7 +52,10 @@ Every enemy has a small weak spot that takes extra damage. A crit pops a yellow 
    - **Slotbots:** walking slot machines that fire bursts.
    - **Dicers:** flying dice that circle you.
    - **Card Sharks:** playing cards that rush you with a blade.
-   - Six **rival raiders** are out there too. Most leave you alone unless you shoot them, but some carry Cherry Bombs.
+   - Six **rival raiders** are out there too (more in The Bunker). Most leave you alone unless you shoot them. They're good:
+     - they find their way around buildings, search crates and loot;
+     - they strafe and jump-peek, lead their shots and go for headshots;
+     - they switch guns for the range, back off to heal and throw grenades.
    - **Throwables:** hold **T** to see a dotted arc and a ring showing where it lands and how far it reaches, then let go to throw. **X** switches which one you're holding, or pick one in the backpack.
 
      | Throwable | What it does |
@@ -58,6 +65,8 @@ Every enemy has a small weak spot that takes extra damage. A crit pops a yellow 
      | ✨ Flash Chip | Stuns every machine and raider who sees it. Don't look at it yourself |
      | 🌶️ Ghost Pepper Sauce | Smashes on impact into a pool of fire that burns for 6 seconds (and warms you up in the snow) |
 
+     Hold **X** to open the **throwable wheel**: point at the one you want and let go (tap X to just cycle).
+
      Explosions and fire hurt you too. You start with 2 Cherry Bombs, and all of them drop from crates, slots and raiders. Some raiders throw them at you.
    - **🧃 Rocket Fuel Energy (Z):** 15 seconds of running 25% faster, and sprinting costs no stamina.
 5. **Extract.** Step into an open exit's circle to **call the ride**. It takes 25 seconds to land, and:
@@ -66,6 +75,10 @@ Every enemy has a small weak spot that takes extra damage. A crit pops a yellow 
    - hostile raiders come to ambush you.
 
    Whoever is in the circle when it lands gets out, including other raiders riding with you. Miss it and the exit needs 40 seconds before it can be called again.
+
+## Backpack
+
+Press **Q**. Drag a gun onto a weapon slot to swap it in. Drag items around the grid, onto the throwable slot, or onto the floor zone to drop them. Double-click or right-click anything for the obvious action: equip, stash, use or ready.
 
 ## Getting downed
 
@@ -148,6 +161,7 @@ Then open http://localhost:3000. `npm run build:artifact` packs the whole game i
 | `src/hub.js` | Stash, loadout, Back Room gambling, Fence, look, settings |
 | `src/hud.js` / `src/player.js` | HUD, minimap, bag and map screens; controls and camera |
 | `src/keys.js` | Rebindable controls and the rebinding panel |
+| `src/nav.js` | Pathfinding for bots (A* on a walkability grid) |
 | `src/throwables.js` | Cherry Bombs, Loaded Dice, Flash Chips, Ghost Pepper Sauce |
 | `src/icons.js` | Gun pictures rendered from the 3D models |
 | `src/save.js` | Stash, settings, stats, XP, collection and achievements (saved in the browser) |

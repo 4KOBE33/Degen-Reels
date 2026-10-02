@@ -10,7 +10,7 @@ export const ACTIONS = [
   ['Combat', [
     ['fire', 'Shoot'], ['aim', 'Aim down sights'], ['reload', 'Reload (uses an Ammo Box)'],
     ['weapon1', 'Weapon 1'], ['weapon2', 'Weapon 2'], ['swap', 'Swap weapons'],
-    ['throw', 'Throw (hold to aim)'], ['cycleThrow', 'Next throwable'],
+    ['throw', 'Throw (hold to aim)'], ['cycleThrow', 'Throwable wheel (hold) / next (tap)'],
   ]],
   ['Items', [
     ['use', 'Use / pick up (hold to search)'], ['heal', 'Heal'], ['armor', 'Armor plate'],

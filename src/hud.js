@@ -37,6 +37,9 @@ export class Hud {
     this.onUse = () => {};
     this.onReload = () => {};
     this.onPickThrow = () => {};
+    this.onPickThrowFrom = () => {};
+    this.onMove = () => {};
+    this.onQuick = () => {};
     this.onLeave = () => {};
     this.mini = $('minimap').getContext('2d');
     this.selected = null; // { where: 'weapon' | 'pack', i }
@@ -54,6 +57,62 @@ export class Hud {
       if (act === 'pickthrow') this.onPickThrow(b.dataset.id);
       if (act === 'equip') { this.onEquip(i); this.selected = null; }
       if (act === 'unequip') { this.onUnequip(i); this.selected = null; }
+      this.last.bagList = null;
+    });
+    // Drag and drop: guns onto weapon slots, items around the backpack, anything onto the floor,
+    // throwables onto the throwable slot.
+    const bag = $('bagList');
+    const slotOf = (el) => (el && el.dataset.where ? { where: el.dataset.where, i: Number(el.dataset.i) } : null);
+    bag.addEventListener('dragstart', (e) => {
+      const el = e.target.closest('[draggable="true"]');
+      if (!el) return;
+      this.dragging = slotOf(el);
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/plain', JSON.stringify(this.dragging));
+      el.classList.add('dragging');
+      bag.classList.add('isdragging');
+    });
+    bag.addEventListener('dragend', () => {
+      this.dragging = null;
+      bag.classList.remove('isdragging');
+      bag.querySelectorAll('.over, .dragging').forEach((x) => x.classList.remove('over', 'dragging'));
+    });
+    bag.addEventListener('dragover', (e) => {
+      const t = e.target.closest('[data-drop]');
+      if (!t || !this.dragging) return;
+      e.preventDefault();
+      bag.querySelectorAll('.over').forEach((x) => x !== t && x.classList.remove('over'));
+      t.classList.add('over');
+    });
+    bag.addEventListener('dragleave', (e) => { const t = e.target.closest('[data-drop]'); if (t && !t.contains(e.relatedTarget)) t.classList.remove('over'); });
+    bag.addEventListener('drop', (e) => {
+      const t = e.target.closest('[data-drop]');
+      const from = this.dragging;
+      if (!t || !from) return;
+      e.preventDefault();
+      const kind = t.dataset.drop;
+      if (kind === 'ground') this.onDrop(from.where, from.i);
+      else if (kind === 'throw') this.onPickThrowFrom(from);
+      else this.onMove(from, { where: t.dataset.where, i: Number(t.dataset.i) });
+      this.selected = null;
+      this.dragging = null;
+      this.last.bagList = null;
+    });
+    // Double-click: equip a gun / stash a weapon / use or ready an item.
+    bag.addEventListener('dblclick', (e) => {
+      const el = e.target.closest('.islot[data-where]');
+      if (!el) return;
+      this.onQuick(slotOf(el));
+      this.selected = null;
+      this.last.bagList = null;
+    });
+    // Right-click does the same, Arc Raiders style.
+    bag.addEventListener('contextmenu', (e) => {
+      const el = e.target.closest('.islot[data-where]');
+      if (!el) return;
+      e.preventDefault();
+      this.onQuick(slotOf(el));
+      this.selected = null;
       this.last.bagList = null;
     });
     $('resultsBack').addEventListener('click', () => this.onLeave());
@@ -395,12 +454,12 @@ export class Hud {
     const slotCard = (item, where, i, big = false) => {
       const sel = this.selected && this.selected.where === where && this.selected.i === i;
       if (!item) {
-        return `<div class="islot empty ${big ? 'big' : ''}">${big ? `<span class="hint">Weapon ${i + 1}</span>` : ''}</div>`;
+        return `<div class="islot empty ${big ? 'big' : ''}" data-drop="slot" data-where="${where}" data-i="${i}">${big ? `<span class="hint">Weapon ${i + 1}<br><small>drag a gun here</small></span>` : ''}</div>`;
       }
       const info = itemInfo(item);
       const qty = !isGun(item) && item.qty > 1 ? `<span class="qty">×${item.qty}</span>` : '';
       const ammo = isGun(item) ? `<span class="qty">${item.ammo}</span>` : '';
-      return `<button class="islot r${info.rarity} ${big ? 'big' : ''} ${sel ? 'sel' : ''} ${where === 'weapon' && i === p.active ? 'active' : ''}" data-act="select" data-where="${where}" data-i="${i}" style="--rc:${info.css}">
+      return `<button class="islot r${info.rarity} ${big ? 'big' : ''} ${sel ? 'sel' : ''} ${where === 'weapon' && i === p.active ? 'active' : ''}" draggable="true" data-drop="slot" data-act="select" data-where="${where}" data-i="${i}" style="--rc:${info.css}" title="Drag to move · double-click or right-click to ${isGun(item) ? (where === 'weapon' ? 'stash' : 'equip') : 'use'}">
         <span class="ic">${iconHtml(item)}</span>${big ? `<span class="nm">${escapeHtml(info.name)}</span>` : ''}${qty}${ammo}<i class="rbar"></i></button>`;
     };
 
@@ -411,13 +470,21 @@ export class Hud {
       <div class="vit"><span>🛡️ Armor</span><b>${Math.ceil(p.armor)}/${PLAYER.maxArmor}</b><div class="bar armor"><div style="width:${(p.armor / PLAYER.maxArmor) * 100}%"></div></div></div>
       <div class="vit"><span>🏃 Stamina</span><b>${Math.ceil(p.stamina)}</b><div class="bar stamina"><div style="width:${(p.stamina / PLAYER.maxStamina) * 100}%"></div></div></div>
       <div class="vit chipsline"><span>🪙 Raid chips</span><b>${p.chips}</b></div>
+      <h3>Throwable <small>${keyName('throw')} throw · hold ${keyName('cycleThrow')} to pick</small></h3>
+      ${(() => {
+    const t = p.currentThrowable();
+    if (!t) return '<div class="tslot empty" data-drop="throw">Drag a throwable here</div>';
+    const others = p.throwables().filter((x) => x !== t).map((x) => `<span title="${escapeHtml(ITEMS[x].name)}">${ITEMS[x].icon}${p.count(x)}</span>`).join('');
+    return `<div class="tslot" data-drop="throw"><span class="ic">${ITEMS[t].icon}</span><b>${escapeHtml(ITEMS[t].name)}</b><small>×${p.count(t)}</small>${others ? `<div class="others">${others}</div>` : ''}</div>`;
+  })()}
+      <div class="dropzone" data-drop="ground">🗑️ Drag here to drop on the ground</div>
     </section>`;
 
     // Middle: the backpack grid.
     const cells = [];
     for (let i = 0; i < p.capacity; i++) cells.push(slotCard(p.backpack[i], 'pack', i));
     const mid = `<section class="invcol"><h3>Backpack <small>${p.backpack.length}/${p.capacity}</small></h3><div class="igrid">${cells.join('')}</div>
-      <p class="hint">Click an item to see it. Everything here is lost if you die.</p></section>`;
+      <p class="hint">Drag items to move them, drag a gun onto a weapon slot to swap it in. Double-click or right-click for a quick equip / use. Everything here is lost if you die.</p></section>`;
 
     // Right: details for the selected item.
     let detail = '<div class="idetail empty"><span class="ic">🎒</span><p>Select an item to see what it does.</p></div>';
@@ -502,6 +569,21 @@ export class Hud {
     el.classList.add('show');
     if (crit) el.classList.add('crit');
     if (kill) el.classList.add('kill');
+  }
+
+  // The throwable wheel. Pass null to hide it.
+  throwWheel(opts, pick = -1, p = null) {
+    const el = $('twheel');
+    if (!opts) { el.hidden = true; this.last.twheel = null; return; }
+    el.hidden = false;
+    const cur = p && p.currentThrowable();
+    const n = opts.length;
+    this.set('twheel', `<div class="twcenter">${pick >= 0 ? escapeHtml(ITEMS[opts[pick]].name) : 'Pick a throwable'}</div>${opts.map((id, i) => {
+      const a = (i / n) * Math.PI * 2;
+      const x = Math.sin(a) * 105;
+      const y = -Math.cos(a) * 105;
+      return `<div class="twopt ${i === pick ? 'on' : ''} ${id === cur ? 'cur' : ''}" style="transform:translate(${x.toFixed(0)}px, ${y.toFixed(0)}px)"><span>${ITEMS[id].icon}</span><b>×${p ? p.count(id) : ''}</b></div>`;
+    }).join('')}`);
   }
 
   // Flash Chip went off in your face: white screen that fades out.

@@ -185,7 +185,7 @@ export function iconHtml(item, cls = 'gicon') {
   const info = itemInfo(item);
   if (isGun(item) && item.kind !== 'fists') {
     const url = gunIcon(item.kind, item.rarity || 0);
-    if (url) return `<img class="${cls}" src="${url}" alt="${info.name}">`;
+    if (url) return `<img class="${cls}" src="${url}" alt="${info.name}" draggable="false">`;
   }
   return info.icon;
 }

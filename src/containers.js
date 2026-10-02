@@ -98,6 +98,7 @@ export class Container {
 
   reset() {
     this.opened = false;
+    this.claimedBy = null;
     this.lid.position.y = this.h + 0.06;
     this.lid.rotation.x = 0;
   }

@@ -36,6 +36,15 @@ export class Hazards {
     this.raid = raid;
     const h = raid.map.hazards || {};
     this.cold = !!h.cold;
+    // Temakilla: dust storms roll in now and then and swallow the view.
+    this.dust = !!h.dust;
+    this.dustIn = 70 + Math.random() * 60;
+    this.storm = 0;
+    this.stormMix = 0;
+    if (this.dust) {
+      const f = raid.scene.fog;
+      this.baseFog = { near: f.near, far: f.far, color: f.color.clone() };
+    }
     this.fires = h.fires || [];
     this.cars = [];
     for (const lane of h.lanes || []) {
@@ -57,6 +66,27 @@ export class Hazards {
 
   update(dt) {
     const raid = this.raid;
+    // ---- Dust storms ----
+    if (this.dust) {
+      if (this.storm > 0) this.storm -= dt;
+      else if (raid.active) {
+        this.dustIn -= dt;
+        if (this.dustIn <= 0) {
+          this.storm = 30 + Math.random() * 15;
+          this.dustIn = 110 + Math.random() * 90;
+          raid.hud.toast('🌪️ DUST STORM! You can barely see your own hands.', 'big');
+          raid.feed('🌪️ A dust storm is rolling through Temakilla');
+        }
+      }
+      const want = this.storm > 0 ? 1 : 0;
+      this.stormMix += (want - this.stormMix) * Math.min(1, dt / 2.5);
+      const f = raid.scene.fog;
+      const b = this.baseFog;
+      f.near = b.near + (6 - b.near) * this.stormMix;
+      f.far = b.far + (48 - b.far) * this.stormMix;
+      f.color.copy(b.color).lerp(new THREE.Color(0xc9925e), this.stormMix);
+      if (raid.scene.background && raid.scene.background.isColor) raid.scene.background.copy(f.color);
+    }
     // ---- Traffic ----
     for (const car of this.cars) {
       const { lane } = car;

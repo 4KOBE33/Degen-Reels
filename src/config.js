@@ -116,7 +116,7 @@ export const ENEMIES = {
 };
 
 // Raider bots: other players looting the same map. Neutral unless provoked.
-export const RAIDERS = { count: 6, hostileChance: 0.25, accuracy: 0.16, reaction: 0.9 };
+export const RAIDERS = { count: 6, hostileChance: 0.25, accuracy: 0.1, reaction: 0.9 };
 
 export const SETTINGS_DEFAULT = { sensitivity: 1, fov: 72, volume: 0.6, firstPerson: false };
 
