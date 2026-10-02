@@ -1012,3 +1012,4 @@ h3 small.bank { color: var(--gold); opacity: 1; font-weight: 900; }
 .raidpick .mapcard .tag { font-size: 9px; padding: 1px 6px; }
 @media (max-width: 760px) { .raidpick .maps { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 .raidpick .mapcard b { white-space: normal; line-height: 1.05; }
+#keyhint { transition: opacity 1.2s; } #keyhint.gone { opacity: 0; }
