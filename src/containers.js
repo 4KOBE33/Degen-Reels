@@ -84,7 +84,13 @@ export class Container {
       const loot = rollLoot(this.tier);
       const at = this.spot.clone().add(new THREE.Vector3((Math.random() - 0.5) * 2, 0, (Math.random() - 0.5) * 2));
       if (loot.chips) this.raid.chips.spawnBurst(at.setY(this.h + 0.3), loot.chips, null, { speed: 1.5 });
-      else this.raid.dropItem(this.spot.clone().add(new THREE.Vector3((Math.random() - 0.5) * 2.4, 0, (Math.random() - 0.5) * 2.4)), loot);
+      else {
+        // Spill out toward the person who opened it, fanned out a little.
+        const dir = c ? new THREE.Vector3(c.pos.x - this.spot.x, 0, c.pos.z - this.spot.z) : new THREE.Vector3(0, 0, 1);
+        if (dir.lengthSq() < 0.01) dir.set(0, 0, 1);
+        dir.normalize().applyAxisAngle(new THREE.Vector3(0, 1, 0), (i - (n - 1) / 2) * 0.6);
+        this.raid.dropItem(this.spot.clone().addScaledVector(dir, 1.4), loot, this.spot);
+      }
     }
   }
 

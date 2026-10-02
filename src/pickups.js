@@ -37,7 +37,7 @@ export class ItemPickup {
     this.raid = raid;
     this.item = item;
     this.spot = new THREE.Vector3(pos.x, pos.y || 0, pos.z);
-    this.range = 1.7;
+    this.range = 2.2;
     this.age = 0;
     const info = itemInfo(item);
     const color = new THREE.Color(info.css);

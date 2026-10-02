@@ -147,16 +147,16 @@ export class SlotMachine {
   payout() {
     const c = this.user;
     this.user = null;
-    const tray = this.position.clone().addScaledVector(this.front, 1.2);
     const prizes = this.jackpot ? 3 : 1;
     let best = null;
     for (let i = 0; i < prizes; i++) {
       // Jackpots roll a tier higher.
       const loot = rollLoot(Math.min(4, this.tier + (this.jackpot ? 1 : 0)));
-      const at = tray.clone().add(new THREE.Vector3((Math.random() - 0.5) * 1.5, 0, (Math.random() - 0.5) * 0.8));
+      const side = new THREE.Vector3(-this.front.z, 0, this.front.x).multiplyScalar((i - (prizes - 1) / 2) * 1.1);
+      const at = this.position.clone().addScaledVector(this.front, 1.8).add(side);
       if (loot.chips) this.raid.chips.spawnBurst(at.clone().setY(1), loot.chips, null, { speed: 2 });
       else {
-        this.raid.dropItem(at, loot);
+        this.raid.dropItem(at, loot, this.position.clone().addScaledVector(this.front, 1.0));
         if (!best || itemInfo(loot).rarity > itemInfo(best).rarity) best = loot;
       }
     }

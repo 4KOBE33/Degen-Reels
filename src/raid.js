@@ -299,10 +299,38 @@ export class Raid {
     return null;
   }
 
-  dropItem(pos, item) {
-    const p = new ItemPickup(this, pos, item);
+  // Drop an item near `pos`. `from` is where it came out of (a crate, a machine, a body):
+  // the item always lands somewhere open and reachable from there, never inside furniture
+  // or on the far side of a wall.
+  dropItem(pos, item, from = null) {
+    const spot = this.findDropSpot(from || pos, pos);
+    const p = new ItemPickup(this, spot, item);
     this.pickups.push(p);
     return p;
+  }
+
+  findDropSpot(from, want) {
+    const origin = new THREE.Vector3(from.x, 1.0, from.z);
+    const reachable = (x, z) => {
+      if (!this.map.isFree(x, z, 0.6)) return false;
+      if (this.pickups.some((pk) => Math.hypot(pk.spot.x - x, pk.spot.z - z) < 0.6)) return false;
+      const to = new THREE.Vector3(x, 1.0, z);
+      const d = origin.distanceTo(to);
+      if (d < 0.05) return true;
+      return !this.raycast(origin, to.sub(origin).normalize(), d, null, { solidsOnly: true }).hit;
+    };
+    if (reachable(want.x, want.z)) return new THREE.Vector3(want.x, 0, want.z);
+    // Spiral outward from the source, starting in the direction we wanted.
+    const base = Math.atan2(want.z - from.z, want.x - from.x) || 0;
+    for (const r of [1.2, 1.7, 2.3, 3, 3.8, 4.8]) {
+      for (let k = 0; k < 12; k++) {
+        const a = base + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * (Math.PI / 6);
+        const x = from.x + Math.cos(a) * r;
+        const z = from.z + Math.sin(a) * r;
+        if (reachable(x, z)) return new THREE.Vector3(x, 0, z);
+      }
+    }
+    return new THREE.Vector3(want.x, 0, want.z);
   }
 
   // Move a gun from the backpack into a weapon slot (swapping if both are full).
@@ -342,7 +370,7 @@ export class Raid {
       item = c.backpack.splice(index, 1)[0];
       if (!item) return;
     }
-    this.dropItem(c.pos.clone().addScaledVector(c.forward, 1.5), item);
+    this.dropItem(c.pos.clone().addScaledVector(c.forward, 1.5), item, c.pos);
   }
 
   // ---------- combat ----------
@@ -596,7 +624,7 @@ export class Raid {
       this.chips.spawnBurst(at.clone().setY(1), item.chips, null);
       return;
     }
-    this.dropItem(at.clone().add(new THREE.Vector3((Math.random() - 0.5) * spread * 2, 0, (Math.random() - 0.5) * spread * 2)), item);
+    this.dropItem(at.clone().add(new THREE.Vector3((Math.random() - 0.5) * spread * 2, 0, (Math.random() - 0.5) * spread * 2)), item, at);
   }
 
   removeCombatant(c) {
