@@ -1,4 +1,5 @@
 // The raid HUD: health, armor, weapons, quick items, minimap, exits, boss bar, bag and map screens.
+import { TIER_COLORS } from './containers.js';
 import { WEAPONS, PLAYER, EXTRACT_TIME, ITEMS } from './config.js';
 import { itemInfo, itemTitle, isGun, fullAmmo } from './items.js';
 import { iconHtml } from './icons.js';
@@ -308,6 +309,16 @@ export class Hud {
       ctx.stroke();
     }
 
+    // Unsearched containers nearby: little loot squares, colored by tier.
+    for (const k of raid.containers) {
+      if (k.opened || Math.abs(k.spot.x - p.pos.x) > 60 || Math.abs(k.spot.z - p.pos.z) > 60) continue;
+      const [x, y] = toMini(k.spot.x, k.spot.z);
+      ctx.fillStyle = TIER_COLORS[k.tier] || '#e5e7eb';
+      ctx.strokeStyle = '#1b0f2b';
+      ctx.lineWidth = 1.2;
+      ctx.fillRect(x - 2.5, y - 2.5, 5, 5);
+      ctx.strokeRect(x - 2.5, y - 2.5, 5, 5);
+    }
     // Machines you could hear (within 40m).
     for (const m of raid.machines) {
       if (!m.alive || m.isBoss || m.pos.distanceTo(p.pos) > 40) continue;

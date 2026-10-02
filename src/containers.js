@@ -5,6 +5,45 @@ import { rollLoot, randInt } from './items.js';
 import { sfx } from './audio.js';
 import { keyName } from './keys.js';
 
+const ICONS = { register: '💵', crate: '📦', locker: '🗄️', safe: '🔒', vault: '💎' };
+// Loot tier colors: everyday, good, great, jackpot.
+export const TIER_COLORS = ['#e5e7eb', '#e5e7eb', '#4ea8ff', '#c77dff', '#ffd23f'];
+
+// One badge texture per kind + tier, shared by every container.
+const badgeCache = new Map();
+function badgeTexture(kind, tier) {
+  const key = `${kind}:${tier}`;
+  if (badgeCache.has(key)) return badgeCache.get(key);
+  const c = document.createElement('canvas');
+  c.width = 128;
+  c.height = 128;
+  const g = c.getContext('2d');
+  const col = TIER_COLORS[tier] || TIER_COLORS[1];
+  g.beginPath();
+  g.arc(64, 58, 46, 0, Math.PI * 2);
+  g.fillStyle = '#1b0f2b';
+  g.fill();
+  g.lineWidth = 9;
+  g.strokeStyle = col;
+  g.stroke();
+  // A little pointer so it reads as "down here".
+  g.beginPath();
+  g.moveTo(50, 100);
+  g.lineTo(78, 100);
+  g.lineTo(64, 122);
+  g.closePath();
+  g.fillStyle = col;
+  g.fill();
+  g.font = '52px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.fillText(ICONS[kind] || '📦', 64, 60);
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  badgeCache.set(key, tex);
+  return tex;
+}
+
 const KINDS = {
   register: { name: 'Cash Register', time: 1.0, rolls: [1, 2], tierBonus: 0, color: 0x4b5563, lid: 0xffd23f },
   crate: { name: 'Chip Crate', time: 1.2, rolls: [1, 2], tierBonus: 0, color: 0xb7791f, lid: 0x6b3a1e },
@@ -61,6 +100,20 @@ export class Container {
     this.lid.rotation.y = rot;
     raid.scene.add(this.lid);
     this.h = h;
+
+    // Make it easy to spot: a floating badge and a glowing ring until it's been searched.
+    const col = new THREE.Color(TIER_COLORS[this.tier] || TIER_COLORS[1]);
+    this.badge = new THREE.Sprite(new THREE.SpriteMaterial({ map: badgeTexture(kind, this.tier), transparent: true, depthWrite: false }));
+    this.badge.scale.set(1.1, 1.1, 1);
+    this.badgeY = h + 1.3;
+    this.badge.position.set(x, this.badgeY, z);
+    this.badge.renderOrder = 5;
+    raid.scene.add(this.badge);
+    this.ring = new THREE.Mesh(new THREE.RingGeometry(0.85, 1.25, 28), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.55, depthWrite: false, side: THREE.DoubleSide }));
+    this.ring.rotation.x = -Math.PI / 2;
+    this.ring.position.set(x, 0.06, z);
+    raid.scene.add(this.ring);
+    this.phase = (x * 0.37 + z * 0.61) % (Math.PI * 2);
   }
 
   get name() { return this.def.name; }
@@ -77,6 +130,8 @@ export class Container {
   showOpened() {
     if (this.opened) return;
     this.opened = true;
+    this.badge.visible = false;
+    this.ring.visible = false;
     this.lid.position.y = this.h + 0.5;
     this.lid.rotation.x = -0.9;
     sfx.open(this.spot, this.raid.listener);
@@ -92,6 +147,8 @@ export class Container {
     }
     if (raid.isHost) raid.net.rel({ k: 'ko', i: raid.containers.indexOf(this) });
     this.opened = true;
+    this.badge.visible = false;
+    this.ring.visible = false;
     if (c && c.isPlayer && this.raid.run) this.raid.run.containers++;
     this.lid.position.y = this.h + 0.5;
     this.lid.rotation.x = -0.9;
@@ -119,8 +176,21 @@ export class Container {
     this.lid.rotation.x = 0;
   }
 
-  // Only draw lids near the camera.
+  // Only draw lids and markers near the camera; bob the badge.
   cull(focus) {
-    this.lid.visible = Math.abs(focus.x - this.spot.x) < 70 && Math.abs(focus.z - this.spot.z) < 70;
+    const dx = Math.abs(focus.x - this.spot.x);
+    const dz = Math.abs(focus.z - this.spot.z);
+    this.lid.visible = dx < 70 && dz < 70;
+    const show = !this.opened && dx < 60 && dz < 60;
+    this.badge.visible = show;
+    this.ring.visible = show;
+    if (show) {
+      const t = performance.now() / 1000 + this.phase;
+      this.badge.position.y = this.badgeY + Math.sin(t * 2.2) * 0.18;
+      // Grow a bit with distance so far-off crates still read.
+      const s = 1.3 + Math.min(2.4, Math.hypot(dx, dz) / 16);
+      this.badge.scale.set(s, s, 1);
+      this.ring.material.opacity = 0.35 + Math.sin(t * 3) * 0.2;
+    }
   }
 }

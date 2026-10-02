@@ -675,6 +675,11 @@ export function createCharacter({ color = 0xff5d5d, hat = 'top', eyes: eyeStyle 
       anim.down = (anim.down || 0) + ((s.downed && !s.dead ? 1 : 0) - (anim.down || 0)) * Math.min(1, dt * 8);
       root.rotation.x = anim.dead * (Math.PI / 2 - 0.15) - anim.down * (1.25 + Math.sin(anim.t * 9) * 0.05 * Math.min(1, s.speed));
       root.rotation.z = anim.down * Math.sin(anim.t * 9) * 0.12 * Math.min(1, s.speed);
+      // Dodge roll: a full tumble, hopping up off the ground mid-roll.
+      if (s.roll > 0 && s.roll < 1) {
+        root.rotation.x += s.roll * Math.PI * 2;
+        root.position.y += Math.sin(s.roll * Math.PI) * 0.55;
+      }
       for (const eye of eyes) {
         eye.userData.pupil.visible = !s.dead && !eye.userData.hidePupil;
         eye.userData.cross.visible = s.dead;

@@ -202,15 +202,35 @@ export class Combatant {
     this.char.root.rotation.y = this.yaw;
     this.char.animate(dt, {
       speed, forward: Math.min(1, speed / PLAYER.walk), side: 0, onGround: true, pitch: this.pitch,
-      dead: !this.alive, downed: this.downed, showTag: true,
+      dead: !this.alive, downed: this.downed, showTag: true, roll: this.netRoll || 0,
     });
     this.char.setTag(this.name, `${Math.max(0, Math.ceil(this.hp))}`, Math.ceil(this.armor || 0));
   }
 
   get weaponName() { return this.puppet ? this.netWeaponName || 'a gun' : this.gun ? itemInfo(this.gun).name : 'Fists'; }
 
+  // Dodge roll: a quick tumble the way you're moving (or forward), with a split second where
+  // nothing can hit you. Costs stamina and has a short cooldown.
+  tryRoll() {
+    if (!this.alive || this.downed || this.using || this.rolling || (this.rollCd || 0) > 0 || !this.onGround || this.raid.frozen) return 'Can\'t roll right now';
+    if (this.stamina < PLAYER.rollCost) return 'Too tired to roll';
+    const dir = new THREE.Vector3(this.move.x, 0, this.move.y);
+    if (dir.lengthSq() < 0.01) dir.set(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
+    dir.normalize();
+    this.stamina -= PLAYER.rollCost;
+    this.staminaWait = PLAYER.staminaDelay;
+    this.rolling = { t: 0, dir };
+    this.rollCd = PLAYER.rollCooldown;
+    if (this.isPlayer) sfx.jump();
+    return null;
+  }
+
+  // Inside the dodge window of a roll?
+  get dodging() { return !!this.rolling && this.rolling.t < PLAYER.rollDodge; }
+
   update(dt) {
     if (this.puppet) { this.puppetUpdate(dt); return; }
+    this.rollCd = Math.max(0, (this.rollCd || 0) - dt);
     const canMove = this.alive && !this.raid.frozen;
     // Stamina: sprinting drains it, standing still or walking refills it after a short pause.
     const moving = this.move.lengthSq() > 0.01;
@@ -244,6 +264,17 @@ export class Combatant {
     const accel = Math.min(1, dt * (this.onGround ? 14 : 3.5));
     this.vel.x += (tx - this.vel.x) * accel;
     this.vel.z += (tz - this.vel.z) * accel;
+    if (this.rolling) {
+      const r = this.rolling;
+      r.t += dt;
+      if (r.t >= PLAYER.rollTime || !this.alive || this.downed) this.rolling = null;
+      else {
+        const k = 1 - (r.t / PLAYER.rollTime) * 0.5;
+        this.vel.x = r.dir.x * PLAYER.rollSpeed * k;
+        this.vel.z = r.dir.z * PLAYER.rollSpeed * k;
+        this.isSprinting = false;
+      }
+    }
 
     if (this.downed) {
       this.bleed -= dt;
@@ -301,6 +332,7 @@ export class Combatant {
       dead: !this.alive,
       downed: this.downed,
       showTag: !this.isPlayer,
+      roll: this.rolling ? this.rolling.t / PLAYER.rollTime : 0,
     });
     if (!this.isPlayer) this.char.setTag(this.name, `${Math.ceil(this.hp)}`, Math.ceil(this.armor));
   }

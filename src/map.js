@@ -540,12 +540,16 @@ export function buildMap(scene, mapId = 'vegas') {
   }
 
   function mountains(colors) {
-    for (let i = 0; i < 40; i++) {
-      const a = (i / 40) * Math.PI * 2;
-      const r = H + 40 + Math.random() * 30;
+    for (let i = 0; i < 48; i++) {
+      const a = (i / 48) * Math.PI * 2;
       const s = 30 + Math.random() * 30;
+      // Out past the edge of the (square) map, never poking into it, corners included.
+      const edge = H + s + 6 + Math.random() * 20;
+      const c = Math.cos(a);
+      const sn = Math.sin(a);
+      const k = edge / Math.max(Math.abs(c), Math.abs(sn));
       const m = new THREE.Mesh(new THREE.ConeGeometry(s, s * (0.8 + Math.random() * 0.6), 5), toon(colors[i % 2]));
-      m.position.set(Math.cos(a) * r, s * 0.35, Math.sin(a) * r);
+      m.position.set(c * k, s * 0.35, sn * k);
       m.rotation.y = Math.random() * Math.PI;
       statics.add(m);
     }
@@ -808,7 +812,7 @@ export function buildMap(scene, mapId = 'vegas') {
   }
 
   // A little settlement out in the wilds: 2-4 buildings around a yard, loot, a few machines.
-  function outposts({ names, colors, inner, outer, count = names.length, tier = 2, types = ['slotbot', 'dicer', 'shark'], avoid = () => false, extra = null }) {
+  function outposts({ names, colors, inner, outer, count = names.length, tier = 2, types = ['slotbot', 'dicer', 'shark'], avoid = () => false, extra = null, exits = [] }) {
     let placed = 0;
     for (let tries = 0; placed < count && tries < 600; tries++) {
       const a = Math.random() * Math.PI * 2;
@@ -818,6 +822,7 @@ export function buildMap(scene, mapId = 'vegas') {
       if (Math.abs(x) > H - 30 || Math.abs(z) > H - 30) continue;
       if (zones.some((zn) => Math.abs(x - zn.x) < zn.w / 2 + 26 && Math.abs(z - zn.z) < zn.d / 2 + 26)) continue;
       if (avoid(x, z)) continue;
+      if (exits.some((e) => Math.hypot(x - e.x, z - e.z) < 32)) continue;
       const name = names[placed % names.length];
       const spots = [[14, 0, 'w'], [-14, 0, 'e'], [0, 14, 'n'], [0, -14, 's']].sort(() => Math.random() - 0.5).slice(0, 2 + Math.floor(Math.random() * 3));
       spots.forEach(([dx, dz, side], i) => {
@@ -883,6 +888,44 @@ export function buildMap(scene, mapId = 'vegas') {
   const layout = BUILDERS[mapId in BUILDERS ? mapId : 'vegas'](kit);
   if (def.mountains) mountains(def.mountains);
   const { extracts, spawns } = layout;
+
+  // Safety net: an exit circle with a building in it, or a spawn inside something solid, gets
+  // nudged to the nearest clear ground.
+  const solidAt = (x, z, r, minTop) => {
+    for (let dx = -r; dx <= r; dx += 1.5) {
+      for (let dz = -r; dz <= r; dz += 1.5) {
+        if (dx * dx + dz * dz > r * r) continue;
+        const px = x + dx;
+        const pz = z + dz;
+        for (const c of grid.get(cellKey(Math.floor(px / CELL), Math.floor(pz / CELL))) || []) {
+          if (c.rayOnly || c.top < minTop) continue;
+          if (c.type === 'box' ? px > c.minX && px < c.maxX && pz > c.minZ && pz < c.maxZ : Math.hypot(px - c.x, pz - c.z) < c.r) return true;
+        }
+      }
+    }
+    return false;
+  };
+  const clearSpot = (x, z, r, minTop) => {
+    if (!solidAt(x, z, r, minTop)) return null;
+    for (let d = 3; d <= 45; d += 3) {
+      for (let i = 0; i < 16; i++) {
+        const a = (i / 16) * Math.PI * 2;
+        const nx = x + Math.cos(a) * d;
+        const nz = z + Math.sin(a) * d;
+        if (Math.abs(nx) > H - r - 3 || Math.abs(nz) > H - r - 3) continue;
+        if (!solidAt(nx, nz, r, minTop)) return [Math.round(nx), Math.round(nz)];
+      }
+    }
+    return null;
+  };
+  for (const e of extracts) {
+    const to = clearSpot(e.x, e.z, 8, 2.5);
+    if (to) [e.x, e.z] = to;
+  }
+  spawns.forEach((sp, i) => {
+    const to = clearSpot(sp[0], sp[1], 2.5, 0.5);
+    if (to) spawns[i] = to;
+  });
   const CX = layout.casino.x;
   const CZ = layout.casino.z;
 
@@ -1349,7 +1392,7 @@ function lostVegas(k) {
 
   // ----- Trailer park (south) -----
   for (let i = 0; i < 8; i++) {
-    const tx = -42 + (i % 4) * 22 + (i % 4 > 1 ? 10 : 0);
+    const tx = -42 + (i % 4) * 22 + (i % 4 > 1 ? 14 : 0);
     const tz = 128 + Math.floor(i / 4) * 22;
     building({
       name: 'Trailer', x: tx, z: tz, w: 10, d: 4, h: 3.2, color: [0xf1faee, 0xa8dadc, 0xffd6a5, 0xcaffbf][i % 4], trim: 0x6c757d, tier: 1, mapColor: '#8d8d8d',
@@ -1544,12 +1587,13 @@ function lostVegas(k) {
 
   // ----- Outskirts -----
   const blocked = (x, z, pad) => zones.some((zn) => Math.abs(x - zn.x) < zn.w / 2 + pad && Math.abs(z - zn.z) < zn.d / 2 + pad)
-    || Math.abs(x) < 14 || Math.abs(z - 40) < 12 || (Math.abs(x) < 40 && z < -100) || x > H - 20 || extracts.some((e) => Math.hypot(x - e.x, z - e.z) < 12);
+    || Math.abs(x) < 20 || Math.abs(z - 40) < 18 || (Math.abs(x) < 40 && z < -100) || x > H - 20 || extracts.some((e) => Math.hypot(x - e.x, z - e.z) < 22);
   // The far desert: little settlements to raid on the way in.
   k.outposts({
+    exits: extracts,
     names: ['Lucky Lizard Truck Stop', 'Snake Pit Saloon', 'Ghost Town', 'Atomic Diner', 'Craps Canyon Mine', 'Jackpot Junction', 'Bust Motel', 'Desert Rose Chapel', 'Roadkill Grill'],
     colors: [0xf4a261, 0xe9c46a, 0xe76f51, 0x8ecae6, 0xf1faee, 0xcdb4db], inner: 262, outer: H - 22, count: 9,
-    avoid: (x, z) => Math.abs(x) < 16 || Math.abs(z - 40) < 16 || x > H - 30,
+    avoid: (x, z) => Math.abs(x) < 30 || Math.abs(z - 40) < 29 || x > H - 50,
   });
   for (let i = 0; i < 900; i++) {
     const x = (Math.random() * 2 - 1) * (H - 6);
@@ -1834,7 +1878,7 @@ function frostbitePeaks(k) {
   // ----- Old Mine (far south-west by the frozen creek) -----
   {
     const mx = -175;
-    const mz = 40;
+    const mz = 4;
     const rockFace = part(new THREE.BoxGeometry(14, 12, 18), 0x64748b, { ink: 0.06 });
     rockFace.position.set(mx - 10, 6, mz);
     const mouth = part(new THREE.BoxGeometry(1, 4.5, 5), 0x111827, { ink: 0 });
@@ -1869,9 +1913,10 @@ function frostbitePeaks(k) {
     { name: 'Ski Lift', x: -H + 10, z: -95 },
   ];
   k.outposts({
+    exits: extracts,
     names: ['Yeti Lodge', 'Moose Crossing', 'Avalanche Inn', 'Black Diamond Camp', 'Frozen Fish Co.', 'Icicle Motel', 'Summit Post', 'Polar Pawn'],
     colors: [0x8b5a2b, 0x9c6644, 0x2563eb, 0xb91c1c, 0xe2e8f0, 0x7f5539], inner: 232, outer: H - 22, count: 8,
-    avoid: (x, z) => Math.abs(x) < 14 || Math.abs(z - 40) < 14,
+    avoid: (x, z) => Math.abs(x) < 28 || Math.abs(z - 40) < 27,
     extra: (x, z) => fire(x + 5, z - 5),
   });
   // More barrels to hop between out in the far snow.
@@ -1886,7 +1931,7 @@ function frostbitePeaks(k) {
     else if (r < 0.85) rock(x, z, 0.8 + Math.random() * 2);
     else if (r < 0.92) snowman(x, z);
     else crateStack(x, z);
-  }, (x, z) => Math.abs(x) < 12 || Math.abs(z - 40) < 10 || extracts.some((e) => Math.hypot(x - e.x, z - e.z) < 12) || (Math.abs(x) < 25 && z < -85));
+  }, (x, z) => Math.abs(x) < 18 || Math.abs(z - 40) < 17 || extracts.some((e) => Math.hypot(x - e.x, z - e.z) < 22) || (Math.abs(x) < 25 && z < -85));
   for (let i = 0; i < 16; i++) enemies('dicer', (Math.random() * 2 - 1) * H * 0.85, (Math.random() * 2 - 1) * H * 0.85, 1);
   for (let i = 0; i < 5; i++) enemies('shark', (Math.random() * 2 - 1) * H * 0.85, (Math.random() * 2 - 1) * H * 0.85, 1);
   for (let i = 0; i < 40; i++) {
@@ -1955,7 +2000,7 @@ function bayouRoyale(k) {
 
   // Stilt shacks and shops around the swamp.
   const shackColors = [0x9c6644, 0x6b705c, 0xa5a58d, 0x7f5539];
-  [[-55, 55], [-75, 85], [-50, 105], [55, 60], [80, 90], [50, 110], [-95, 40], [95, 35]].forEach(([x, z], i) => {
+  [[-55, 55], [-75, 85], [-50, 105], [55, 60], [80, 90], [50, 110], [-95, 40], [95, 42]].forEach(([x, z], i) => {
     building({
       name: 'Stilt Shack', x, z, w: 10, d: 8, h: 4, color: shackColors[i % 4], trim: 0x3f3f2f, floor: 0x5b4636, tier: 1, mapColor: '#6b705c',
       doors: [{ side: x < 0 ? 'e' : 'w', at: 0, width: 2.2 }],
@@ -1985,13 +2030,13 @@ function bayouRoyale(k) {
   enemies('dicer', 60, 0, 1);
 
   building({
-    name: 'Crawdad Shack', x: 0, z: 95, w: 18, d: 12, h: 4.5, color: 0xf97316, trim: 0x431407, tier: 2, sign: 'CRAWDAD SHACK', signColor: '#ff9f43', mapColor: '#c2410c',
-    doors: [{ side: 's', at: 0, width: 3 }],
+    name: 'Crawdad Shack', x: -20, z: 95, w: 18, d: 12, h: 4.5, color: 0xf97316, trim: 0x431407, tier: 2, sign: 'CRAWDAD SHACK', signColor: '#ff9f43', mapColor: '#c2410c',
+    doors: [{ side: 'e', at: 0, width: 3 }],
   });
-  container('register', 3, 92, 2);
-  container('locker', -5, 98, 2);
-  slotSpots.push({ x: 8.5, z: 95, rot: -Math.PI / 2, tier: 2 });
-  enemies('shark', 0, 108, 1);
+  container('register', -17, 92, 2);
+  container('locker', -25, 98, 2);
+  slotSpots.push({ x: -26.5, z: 95, rot: Math.PI / 2, tier: 2 });
+  enemies('shark', -20, 108, 1);
 
   building({
     name: 'Old Cannery', x: -95, z: -55, w: 26, d: 18, h: 6, color: 0x78716c, trim: 0x292524, tier: 2, mapColor: '#57534e',
@@ -2148,9 +2193,10 @@ function bayouRoyale(k) {
     { name: 'Hidden Bayou', x: -H + 20, z: H - 20 },
   ];
   k.outposts({
+    exits: extracts,
     names: ['Mudbug Marina', 'Hush Puppy Hut', 'Swamp Witch Shack', 'Gumbo Pot', 'Bayou Bingo Hall', 'Rusty Pelican', 'Moss Manor', 'Catfish Cannery'],
     colors: [0x9c6644, 0x6b705c, 0xa5a58d, 0x4d7c0f, 0x7f5539, 0x581c87], inner: 215, outer: H - 22, count: 8,
-    avoid: (x, z) => Math.abs(z + 100) < 22 || Math.abs(x) < 10 || Math.abs(z - 30) < 10,
+    avoid: (x, z) => Math.abs(z + 100) < 38 || Math.abs(x) < 26 || Math.abs(z - 30) < 26,
     // Every swamp settlement has a gator pond out back.
     extra: (x, z) => { const a = Math.random() * Math.PI * 2; pond(x + Math.cos(a) * 30, z + Math.sin(a) * 30, 8); },
   });
@@ -2160,7 +2206,7 @@ function bayouRoyale(k) {
     else if (r < 0.75) reeds(x, z);
     else if (r < 0.9) rock(x, z, 0.8 + Math.random() * 1.8);
     else crateStack(x, z);
-  }, (x, z) => Math.abs(x) < 9 || Math.abs(z - 30) < 8 || Math.abs(z + 100) < 18 || extracts.some((e) => Math.hypot(x - e.x, z - e.z) < 12));
+  }, (x, z) => Math.abs(x) < 16 || Math.abs(z - 30) < 15 || Math.abs(z + 100) < 18 || extracts.some((e) => Math.hypot(x - e.x, z - e.z) < 22));
   for (let i = 0; i < 16; i++) enemies('dicer', (Math.random() * 2 - 1) * H * 0.85, (Math.random() * 2 - 1) * H * 0.85, 1);
   for (let i = 0; i < 5; i++) enemies('shark', (Math.random() * 2 - 1) * H * 0.85, (Math.random() * 2 - 1) * H * 0.85, 1);
   for (let i = 0; i < 40; i++) {
@@ -2223,7 +2269,7 @@ function temakilla(k) {
   shops.forEach(([name, sign, sc], i) => {
     const side = i % 2 ? 1 : -1;
     const x = side * 26;
-    const z = 25 + Math.floor(i / 2) * 32;
+    const z = [25, 86, 114][Math.floor(i / 2)];
     building({ name, x, z, w: 18, d: 14, h: 5, color: adobe[i % adobe.length], trim: 0x5b2a12, tier: 2, sign, signColor: sc, mapColor: '#b5651d', doors: [{ side: side < 0 ? 'e' : 'w', at: 0, width: 3 }] });
     container(i % 3 === 0 ? 'register' : 'locker', x - side * 4, z - 3, 2);
     container('crate', x - side * 4, z + 3, 2);
@@ -2350,9 +2396,10 @@ function temakilla(k) {
     { name: 'Hot Air Balloon', x: -60, z: -H + 15 },
   ];
   k.outposts({
+    exits: extracts,
     names: ['Rancho Loco', 'Taquería El Jefe', 'Hacienda Dorada', 'Cactus Cantina', 'El Pozo Mine', 'Coyote Motel', 'Mezcal Shack', 'Los Dados'],
     colors: adobe, inner: 215, outer: H - 22, count: 8,
-    avoid: (x, z) => Math.abs(x) < 14 || Math.abs(z - 60) < 14 || x > H - 30,
+    avoid: (x, z) => Math.abs(x) < 28 || Math.abs(z - 60) < 28 || x > H - 30,
     extra: (x, z) => { for (let i = 0; i < 6; i++) agave(x + (Math.random() - 0.5) * 40, z + (Math.random() - 0.5) * 40); },
   });
   scatter(750, (x, z) => {
@@ -2361,7 +2408,7 @@ function temakilla(k) {
     else if (r < 0.65) cactus(x, z);
     else if (r < 0.92) rock(x, z, 0.8 + Math.random() * 2);
     else crateStack(x, z);
-  }, (x, z) => Math.abs(x) < 12 || Math.abs(z - 60) < 10 || x > H - 25 || extracts.some((e) => Math.hypot(x - e.x, z - e.z) < 12));
+  }, (x, z) => Math.abs(x) < 18 || Math.abs(z - 60) < 17 || x > H - 25 || extracts.some((e) => Math.hypot(x - e.x, z - e.z) < 22));
   for (let i = 0; i < 16; i++) enemies('dicer', (Math.random() * 2 - 1) * H * 0.85, (Math.random() * 2 - 1) * H * 0.85, 1);
   for (let i = 0; i < 6; i++) enemies('shark', (Math.random() * 2 - 1) * H * 0.85, (Math.random() * 2 - 1) * H * 0.85, 1);
   for (let i = 0; i < 40; i++) {

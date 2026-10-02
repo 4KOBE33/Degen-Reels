@@ -638,13 +638,25 @@ export class Raid {
   }
 
   // While you're down, the use key is your Second Chance Token.
+  // Close enough to an open exit that getting up would put you on the ride.
+  nearExit(c) {
+    return this.extracts.some((e) => e.active && Math.hypot(c.pos.x - e.x, c.pos.z - e.z) < EXTRACT_RADIUS + 4);
+  }
+
   selfReviveFor(c) {
     if (!c.count('token')) return null;
+    // No popping a token on the helipad: being downed there means a teammate has to get you up.
+    if (this.nearExit(c)) {
+      return c.selfReviveBlocked || (c.selfReviveBlocked = { spot: c.pos, range: 99, searchTime: 0, prompt: () => '🚫 Crawl out of the exit to use your 🎟️ Second Chance Token', open: () => {} });
+    }
     if (!c.selfRevive) {
       c.selfRevive = {
         spot: c.pos, range: 99, searchTime: PLAYER.selfReviveTime, searchLabel: 'Second chance…',
         prompt: () => `<b>Hold ${keyName('use')}</b> Use 🎟️ Second Chance Token (${c.count('token')})`,
-        open: (by) => { if (by.takeOne('token')) this.revive(by, by); },
+        open: (by) => {
+          if (this.nearExit(by)) { if (by.isPlayer) this.hud.toast('🚫 Crawl out of the exit to use your token'); return; }
+          if (by.takeOne('token')) this.revive(by, by);
+        },
       };
     }
     return c.selfRevive;
@@ -1032,6 +1044,11 @@ export class Raid {
     if (attacker && attacker !== target && attacker.team === 'machine' && target.team === 'machine') return;
     amount = Math.round(amount);
     if (amount <= 0) return;
+    // Mid-roll: it whiffs.
+    if (target.dodging && !target.puppet) {
+      if (target.isPlayer || (attacker && attacker.isPlayer)) this.fx.number(target.center(new THREE.Vector3()).setY(target.pos.y + 2), 'DODGE!', '#2ee6d6', 1.1);
+      return;
+    }
     // The Pit Boss only takes hits from people in the casino with him.
     if (target.isBoss && attacker && attacker.pos && !this.inCasino(attacker.pos)) {
       if (attacker.isPlayer) {

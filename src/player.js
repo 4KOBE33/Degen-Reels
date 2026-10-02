@@ -140,6 +140,7 @@ export class PlayerController {
     if (a === 'weapon2') c.switchTo(1);
     if (a === 'swap') c.switchTo(c.active ? 0 : 1);
     if (a === 'reload') this.say(c.reload(), 'Reloading…');
+    if (a === 'roll') { const no = c.tryRoll(); if (no && no !== 'Can\'t roll right now') this.say(no, null); }
     if (a === 'heal') this.say(c.startUsing(c.count('bandage') ? 'bandage' : 'soda'), null);
     if (a === 'armor') this.say(c.startUsing('plate'), null);
     if (a === 'cocoa') this.say(c.startUsing('cocoa'), null);

@@ -5,7 +5,7 @@ import { save } from './save.js';
 export const ACTIONS = [
   ['Movement', [
     ['forward', 'Move forward'], ['back', 'Move back'], ['left', 'Move left'], ['right', 'Move right'],
-    ['jump', 'Jump'], ['sprint', 'Sprint'],
+    ['jump', 'Jump'], ['sprint', 'Sprint'], ['roll', 'Dodge roll'],
   ]],
   ['Combat', [
     ['fire', 'Shoot'], ['aim', 'Aim down sights'], ['reload', 'Reload (uses an Ammo Box)'],
@@ -31,6 +31,7 @@ export const DEFAULT_BINDS = {
   right: ['KeyD', 'ArrowRight'],
   jump: ['Space', null],
   sprint: ['ShiftLeft', 'ShiftRight'],
+  roll: ['KeyC', null],
   fire: ['Mouse0', null],
   aim: ['Mouse2', null],
   reload: ['KeyR', null],

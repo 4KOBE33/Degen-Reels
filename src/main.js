@@ -367,7 +367,7 @@ $('abandon').addEventListener('click', () => {
 // The controls cheat sheet on the pause screen, built from your current bindings.
 function pauseKeys() {
   const k = (a) => `<b>${keyName(a)}</b>`;
-  $('pauseKeys').innerHTML = `${k('forward')}${k('left')}${k('back')}${k('right')} move · ${k('jump')} jump · ${k('sprint')} sprint · ${k('fire')} shoot · ${k('aim')} aim<br>
+  $('pauseKeys').innerHTML = `${k('forward')}${k('left')}${k('back')}${k('right')} move · ${k('jump')} jump · ${k('sprint')} sprint · ${k('roll')} dodge roll · ${k('fire')} shoot · ${k('aim')} aim<br>
     ${k('use')} use (hold to search) · ${k('weapon1')} ${k('weapon2')} ${k('swap')} guns · ${k('reload')} reload (uses an 📦 Ammo Box)<br>
     ${k('throw')} hold to aim a throwable, let go to throw · ${k('cycleThrow')} next throwable<br>
     ${k('heal')} heal · ${k('armor')} armor · ${k('cocoa')} cocoa · ${k('boost')} Rocket Fuel · ${k('bag')} backpack · ${k('map')} map · ${k('pov')} camera`;

@@ -6,7 +6,7 @@ import * as THREE from 'three';
 import { Combatant } from './combatant.js';
 import { Machine } from './enemies.js';
 import { ItemPickup } from './pickups.js';
-import { RARITIES, WEAPONS } from './config.js';
+import { PLAYER, RARITIES, WEAPONS } from './config.js';
 import { addToList, itemInfo } from './items.js';
 import { sfx } from './audio.js';
 
@@ -240,6 +240,8 @@ export class Session {
       s.p = r2(a.pitch || 0);
       s.ar = Math.round(a.armor || 0);
       s.d = a.downed ? 1 : 0;
+      const roll = a.puppet ? a.netRoll || 0 : a.rolling ? a.rolling.t / PLAYER.rollTime : 0;
+      if (roll) s.rl = r2(roll);
       s.w = a.puppet ? a.netWeapon || 'fists' : a.weapon;
       s.r = a.puppet ? a.netRarity || 0 : a.rarity || 0;
       s.wn = a.puppet ? a.netWeaponName : a.weaponName;
@@ -348,6 +350,7 @@ export class Session {
       x: r2(p.pos.x), y: r2(p.pos.y), z: r2(p.pos.z), yw: r2(p.yaw), p: r2(p.pitch),
       vx: r2(p.vel.x), vz: r2(p.vel.z), hp: Math.round(p.hp), mh: p.maxHp, ar: Math.round(p.armor),
       a: p.alive ? 1 : 0, d: p.downed ? 1 : 0, w: p.weapon, r: p.rarity || 0, wn: p.weaponName,
+      rl: p.rolling ? r2(p.rolling.t / PLAYER.rollTime) : 0,
     });
   }
 
@@ -385,6 +388,7 @@ export class Session {
         pup.netWeapon = d.w;
         pup.netRarity = d.r;
         pup.netWeaponName = d.wn;
+        pup.netRoll = d.rl || 0;
         if (d.d && !pup.downed) raid.down(pup, null, true);
         if (!d.d && pup.downed) { pup.downed = false; pup.reviveSpot = null; }
         break;
@@ -599,6 +603,7 @@ export class Session {
         actor.hp = a.hp;
         actor.armor = a.ar;
         actor.netPitch = a.p;
+        actor.netRoll = a.rl || 0;
         actor.netWeapon = a.w;
         actor.netRarity = a.r;
         if (a.wn !== undefined) actor.netWeaponName = a.wn;

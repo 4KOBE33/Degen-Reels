@@ -2,6 +2,8 @@
 
 export const PLAYER = {
   radius: 0.5,
+  // Dodge roll.
+  rollCost: 22, rollCooldown: 1.1, rollTime: 0.45, rollSpeed: 13, rollDodge: 0.3,
   walk: 6.5,
   sprint: 10,
   jump: 8.5,
