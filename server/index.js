@@ -162,7 +162,6 @@ wss.on('connection', (ws) => {
         const r = rooms.get(String(msg.code || '').toUpperCase().trim());
         if (!r) { send(ws, { t: 'error', text: 'No party with that code.' }); break; }
         if (r.members.size >= MAX_MEMBERS) { send(ws, { t: 'error', text: 'That party is full.' }); break; }
-        if (r.inRaid) { send(ws, { t: 'error', text: 'That party is already in a raid. Wait for them to finish.' }); break; }
         leave(ws);
         addMember(r, ws, msg);
         broadcast(r, roster(r));

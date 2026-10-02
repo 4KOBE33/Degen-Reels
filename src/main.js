@@ -11,6 +11,7 @@ import { save } from './save.js';
 import { keyName, renderBinds, wireBinds } from './keys.js';
 import { ITEMS, QUALITY } from './config.js';
 import { BUILD } from './version.js';
+import { wornLook } from './looks.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -204,7 +205,64 @@ net.on('disconnected', () => {
   if (session && session.client) session.hostLeft();
 });
 net.on('reconnecting', () => { if (session && raid.active) hud.toast('📶 Connection hiccup, reconnecting…'); });
-net.on('resumed', () => { if (session && raid.active) hud.toast('📶 Back online'); });
+let rejoinAfterReload = false;
+net.on('resumed', ({ reload } = {}) => {
+  if (session && raid.active) hud.toast('📶 Back online');
+  if (reload) rejoinAfterReload = true;
+});
+net.on('room', (r) => {
+  if (!rejoinAfterReload || !r) return;
+  rejoinAfterReload = false;
+  if (r.inRaid) askToJoin(false);
+});
+
+// ---------- dropping into a raid in progress ----------
+// While you're in a party raid, what you carry is backed up every couple of seconds, so if the
+// page reloads or crashes you can get back in with it.
+const BACKUP_KEY = 'bth-raid-backup';
+let backupAt = 0;
+function backupRaid(force = false) {
+  if (!session || !session.client || !raid.active || !net.room) return;
+  if (!force && performance.now() - backupAt < 2000) return;
+  backupAt = performance.now();
+  const p = raid.player;
+  if (!p || !p.alive) return;
+  try {
+    localStorage.setItem(BACKUP_KEY, JSON.stringify({ code: net.room.code, seed: raid.seed, at: Date.now(), weapons: p.weapons, backpack: p.backpack, chips: p.chips, hp: p.hp, armor: p.armor }));
+  } catch (e) { /* storage full or blocked */ }
+}
+window.addEventListener('pagehide', () => backupRaid(true));
+function readBackup(code) {
+  try {
+    const b = JSON.parse(localStorage.getItem(BACKUP_KEY) || 'null');
+    return b && b.code === code && Date.now() - b.at < 10 * 60 * 1000 ? b : null;
+  } catch (e) { return null; }
+}
+function clearBackup() { try { localStorage.removeItem(BACKUP_KEY); } catch (e) { /* blocked */ } }
+
+// Ask the leader to let us in (after a reload, or a new member joining late).
+function askToJoin(late) {
+  const r = net.room;
+  if (!r || !r.inRaid || raid.active) return;
+  if (net.isHost) {
+    // We were leading and our page reloaded: the world we were running is gone.
+    net.to('all', { k: 'hostgone' });
+    net.end();
+    hub.toast('Your page reloaded mid-raid, so the raid you were leading ended. Your squad got out with their gear.');
+    return;
+  }
+  const d = save.get();
+  const me = r.members.find((m) => m.id === net.id) || {};
+  net.to('host', { k: 'rejoin', late, name: (d.look.name || '').trim() || 'High Roller', look: wornLook(d.look), team: me.team || 0 });
+  hub.toast(late ? '🪂 Dropping in…' : '🪂 Getting you back into the raid…');
+}
+net.on('msg', ({ d }) => {
+  if (!d || raid.active) return;
+  if (d.k === 'joinInfo') {
+    const restore = readBackup(net.room && net.room.code);
+    hub.launch({ ...d.info, join: { pos: d.pos, time: d.time, el: d.el, opened: d.opened, vault: d.vault, pickups: d.pickups, restore } });
+  } else if (d.k === 'nojoin') hub.toast(d.why);
+});
 
 const hub = new Hub({
   net,
@@ -218,6 +276,7 @@ const hub = new Hub({
     net.start({ mapId, seed, exits, spawn });
   },
   onSettings() { applySettings(); },
+  onJoinRaid() { askToJoin(true); },
   onMapChange(id) {
     $('loading').hidden = false;
     // Let the "Loading" note paint before the heavy build.
@@ -231,6 +290,7 @@ const hub = new Hub({
       const info = opts.party;
       switchMap(info.mapId, info.seed);
       session = new Session(raid, net, info);
+      session.info = { mapId: info.mapId, seed: info.seed, exits: info.exits, spawn: info.spawn };
       const red = info.spawn || raid.map.spawns[0];
       // Teams: blue drops in at the spawn farthest from red's.
       const blue = raid.map.spawns.reduce((best, s) => (Math.hypot(s[0] - red[0], s[1] - red[1]) > Math.hypot(best[0] - red[0], best[1] - red[1]) ? s : best), red);
@@ -239,7 +299,9 @@ const hub = new Hub({
       const mates = info.members.filter((m) => session.mode !== 'teams' || (m.team || 0) === myTeam);
       const slot = Math.max(0, mates.findIndex((m) => m.id === net.id));
       const spawn = myTeam ? blue : red;
-      raid.deploy({ ...opts, opts: { client: !session.host, exits: info.exits, spawn, slot, party: info.members.length } });
+      const join = info.join || null;
+      raid.deploy({ ...opts, opts: { client: !session.host, exits: info.exits, spawn, slot, party: info.members.length, at: join && join.pos, restore: join && join.restore } });
+      if (join) { session.applyJoin(join); clearBackup(); }
       if (session.host) session.addFriends(new THREE.Vector3(spawn[0], 0, spawn[1]));
       else session.register(raid.player, `p${net.id}`);
     } else {
@@ -445,7 +507,9 @@ function step(now, draw = true) {
     $('bag').hidden = true;
     $('bigmap').hidden = true;
   }
+  if (wasActive && !raid.active) clearBackup();
   wasActive = raid.active;
+  backupRaid();
   // Never keep the mouse captured once you're out of the raid.
   if (!raid.active && document.pointerLockElement && wasActive === false && !kcLive()) document.exitPointerLock();
 

@@ -96,13 +96,14 @@ const FREE_LOCKED = 'The free loadout is locked in. Raid with it as is.';
 const hasFreeKit = (lo) => lo.weapons.some((g) => g && g.free) || lo.items.some((it) => it.free);
 
 export class Hub {
-  constructor({ onDeploy, onMapChange, onPartyStart = null, onSettings = null, net = null }) {
+  constructor({ onDeploy, onMapChange, onPartyStart = null, onSettings = null, onJoinRaid = null, net = null }) {
     this.onDeploy = onDeploy;
     this.onPartyStart = onPartyStart;
     this.net = net;
     this.partyCode = '';
     this.onMapChange = onMapChange || (() => {});
     this.onSettings = onSettings;
+    this.onJoinRaid = onJoinRaid;
     this.tab = 'loadout';
     this.game = 'slots';
     this.bet = 100;
@@ -219,7 +220,7 @@ export class Hub {
     const m = MAPS[d.selectedMap];
     const party = this.net && this.net.inParty;
     let html = hasGun ? `DEPLOY<small>${m.icon} ${m.name}</small>` : 'DEPLOY<small>no gun packed!</small>';
-    if (party && !this.net.isHost) html = 'WAITING…<small>the party leader deploys everyone</small>';
+    if (party && !this.net.isHost) html = this.net.room.inRaid ? 'JOIN RAID<small>drop in next to your squad</small>' : 'WAITING…<small>the party leader deploys everyone</small>';
     else if (party) html = `DEPLOY SQUAD<small>${m.icon} ${m.name} · ${this.net.partySize} players</small>`;
     $('deploy').innerHTML = html;
   }
@@ -1298,7 +1299,11 @@ export class Hub {
       return;
     }
     const party = this.net && this.net.inParty;
-    if (party && !this.net.isHost) { this.toast('Only the party leader can deploy. Pack your loadout and hang tight!'); return; }
+    if (party && !this.net.isHost) {
+      if (this.net.room.inRaid && this.onJoinRaid) { this.onJoinRaid(); return; }
+      this.toast('Only the party leader can deploy. Pack your loadout and hang tight!');
+      return;
+    }
     if (!lo.weapons.some(Boolean) && !this.warnedNoGun) {
       this.warnedNoGun = true;
       this.toast('No gun packed! Click DEPLOY again to go in with just your fists.');
@@ -1314,9 +1319,11 @@ export class Hub {
   launch(party = null) {
     const d = this.data;
     const lo = d.loadout;
+    // Back in after a reload: you already have your gear from before.
+    const restoring = party && party.join && party.join.restore;
     // Whatever you bring leaves the stash for good unless you extract with it.
-    const loadout = JSON.parse(JSON.stringify(lo));
-    save.update((x) => { x.loadout = { weapons: [null, null], items: [] }; });
+    const loadout = restoring ? { weapons: [], items: [] } : JSON.parse(JSON.stringify(lo));
+    if (!restoring) save.update((x) => { x.loadout = { weapons: [null, null], items: [] }; });
     this.onDeploy({
       party,
       mapId: party ? party.mapId : d.selectedMap,

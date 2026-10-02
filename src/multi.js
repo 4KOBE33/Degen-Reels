@@ -118,15 +118,71 @@ export class Session {
     this.register(raid.player, `p${this.me}`);
     this.members.forEach((m, i) => {
       if (m.id === this.me) return;
-      const c = new Combatant(raid, { name: m.name, look: m.look || undefined });
-      c.puppet = true;
-      c.human = true;
-      c.owner = m.id;
-      c.pos.set(spawn.x + (i % 3) * 2 - 2, 0, spawn.z + Math.floor(i / 3) * 2);
-      c.netPos = c.pos.clone();
-      this.register(c, `p${m.id}`);
-      raid.combatants.push(c);
+      this.makeFriend(m, new THREE.Vector3(spawn.x + (i % 3) * 2 - 2, 0, spawn.z + Math.floor(i / 3) * 2));
     });
+  }
+
+  makeFriend(m, pos) {
+    const raid = this.raid;
+    const c = new Combatant(raid, { name: m.name, look: m.look || undefined });
+    c.puppet = true;
+    c.human = true;
+    c.owner = m.id;
+    c.pos.copy(pos);
+    c.netPos = c.pos.clone();
+    this.register(c, `p${m.id}`);
+    raid.combatants.push(c);
+    return c;
+  }
+
+  // Host: someone wants into the raid: a friend back from a refresh, or a new party member.
+  handleJoin(from, d) {
+    const raid = this.raid;
+    if (this.ended || !this.info) return;
+    const no = (why) => this.net.to(from, { k: 'nojoin', why });
+    let pup = this.puppetOf(from);
+    if (pup && (!pup.alive || (this.gone.has(from) && !this.left.has(from)))) { no('You already left this raid. Wait for the next one.'); return; }
+    if (!pup && this.gone.has(from) && !this.left.has(from)) { no('You already left this raid. Wait for the next one.'); return; }
+    let pos;
+    if (pup && pup.alive) pos = pup.pos.clone();
+    else {
+      // New to this raid: drop in next to a teammate who's still out there.
+      const m = { id: from, name: String(d.name || 'Raider').slice(0, 16), look: d.look || null, team: d.team ? 1 : 0 };
+      this.members = this.members.filter((x) => x.id !== from).concat(m);
+      this.teamOf.set(from, m.team);
+      const mates = raid.combatants.filter((c) => (c.isPlayer || c.human) && c.alive && (this.mode !== 'teams' || this.teamOf.get(this.ownerOf(c)) === m.team));
+      const anchor = mates[Math.floor(Math.random() * mates.length)];
+      const [sx, sz] = anchor ? [anchor.pos.x + 2, anchor.pos.z + 2] : raid.map.spawns[Math.floor(Math.random() * raid.map.spawns.length)];
+      const [x, z] = raid.openSpot(sx, sz);
+      pos = new THREE.Vector3(x, 0, z);
+      if (pup) raid.removeCombatant(pup);
+      pup = this.makeFriend(m, pos);
+      raid.feed(`🪂 ${m.name} dropped into the raid`);
+    }
+    this.gone.delete(from);
+    this.left.delete(from);
+    this.watching.delete(from);
+    this.sent.delete(from);
+    this.net.to(from, {
+      k: 'joinInfo',
+      info: { ...this.info, host: this.me, mode: this.mode, members: this.members },
+      pos: arr(pos),
+      time: r1(raid.timeLeft),
+      el: r2(raid.elapsed),
+      opened: raid.containers.map((k, i) => (k.opened ? i : -1)).filter((i) => i >= 0),
+      vault: raid.vaultOpen,
+      pickups: raid.pickups.filter((pk) => pk.netId).map((pk) => ({ id: pk.netId, p: arr(pk.pos), item: pk.item })),
+    });
+  }
+
+  // Client: catch up on the world when dropping in mid-raid.
+  applyJoin(j) {
+    const raid = this.raid;
+    raid.timeLeft = j.time;
+    raid.elapsed = j.el;
+    for (const i of j.opened || []) if (raid.containers[i]) raid.containers[i].showOpened();
+    if (j.vault) raid.openVault({ name: 'Someone' }, true);
+    for (const p of j.pickups || []) this.applyEvent({ k: 'pn', id: p.id, p: p.p, item: p.item });
   }
 
   // ---------- every frame ----------
@@ -310,6 +366,7 @@ export class Session {
   // Host handling a message from a friend.
   hostReceive(from, d) {
     const raid = this.raid;
+    if (d.k === 'rejoin') { this.handleJoin(from, d); return; }
     if (d.k === 'watch') { if (d.i) this.watching.set(from, d.i); else this.watching.delete(from); return; }
     if (d.k === 'bye') { this.left.add(from); this.gone.add(from); return; }
     const pup = this.puppetOf(from);
@@ -510,6 +567,7 @@ export class Session {
         raid.hud.toast(d.text, d.big ? 'big' : '');
         break;
       case 'over': this.ended = true; break;
+      case 'hostgone': this.hostLeft(); break;
       default:
     }
   }

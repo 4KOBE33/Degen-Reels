@@ -345,7 +345,8 @@ export class Raid {
     const p = new Combatant(this, { name, look, isPlayer: true });
     const [sx, sz] = opts.spawn || pick(this.map.spawns);
     const slot = opts.slot || 0;
-    const [x, z] = this.openSpot(sx + (slot % 3) * 2 - 2, sz + Math.floor(slot / 3) * 2);
+    // Dropping back into a raid in progress: right where the leader says.
+    const [x, z] = opts.at ? this.openSpot(opts.at[0], opts.at[2]) : this.openSpot(sx + (slot % 3) * 2 - 2, sz + Math.floor(slot / 3) * 2);
     p.pos.set(x, 0, z);
     p.yaw = Math.atan2(x, z);
     for (const gun of loadout.weapons) {
@@ -355,6 +356,16 @@ export class Raid {
       p.equip(g);
     }
     for (const it of loadout.items) addToList(p.backpack, { ...it }, p.capacity);
+    // Back from a refresh or crash: what you were carrying.
+    const back = opts.restore;
+    if (back) {
+      back.weapons.forEach((g, i) => { p.weapons[i] = g ? { ...g } : null; });
+      p.refreshWeapon();
+      p.backpack = back.backpack.map((it) => ({ ...it }));
+      p.chips = back.chips || 0;
+      if (back.hp > 0) p.hp = Math.min(p.maxHp, back.hp);
+      p.armor = back.armor || 0;
+    }
     this.player = p;
     this.combatants.push(p);
 
