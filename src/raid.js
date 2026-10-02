@@ -268,15 +268,19 @@ export class Raid {
     return list;
   }
 
+  // What E does right now. Loot on the floor always beats the machine or crate next to it,
+  // so you can never get stuck re-pulling a lever when you meant to grab the prize.
   nearbyInteractable(c) {
     let best = null;
-    let bestD = Infinity;
+    let bestScore = Infinity;
     for (const it of this.interactables) {
       const dx = it.spot.x - c.pos.x;
       const dz = it.spot.z - c.pos.z;
       if (Math.abs(dx) > 3 || Math.abs(dz) > 3) continue;
       const d = Math.hypot(dx, dz);
-      if (d < (it.range || 1.6) && d < bestD && Math.abs((it.spot.y || 0) - c.pos.y) < 2.5 && it.prompt(c)) { bestD = d; best = it; }
+      if (d >= (it.range || 1.6) || Math.abs((it.spot.y || 0) - c.pos.y) >= 2.5 || !it.prompt(c)) continue;
+      const score = d - (it instanceof ItemPickup ? 10 : 0);
+      if (score < bestScore) { bestScore = score; best = it; }
     }
     return best;
   }
@@ -304,7 +308,7 @@ export class Raid {
   // or on the far side of a wall.
   dropItem(pos, item, from = null) {
     const spot = this.findDropSpot(from || pos, pos);
-    const p = new ItemPickup(this, spot, item);
+    const p = new ItemPickup(this, spot, item, from);
     this.pickups.push(p);
     return p;
   }

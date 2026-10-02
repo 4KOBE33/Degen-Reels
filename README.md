@@ -22,7 +22,7 @@ Every enemy has a small weak spot that takes extra damage. A crit pops a yellow 
 
 | Target | Weak spot | Damage |
 |---|---|---|
-| Slotbot | Glowing eye strip | ×2.2 |
+| Slotbot | Lever knob on its side | ×2.5 |
 | Dicer | Rotor hub on top | ×3 |
 | Card Shark | Eye band | ×2 |
 | Gator | Between the eyes | ×2 |

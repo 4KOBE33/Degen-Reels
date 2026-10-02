@@ -126,12 +126,17 @@ function buildModel(type) {
     parts.hit = new THREE.Mesh(new THREE.BoxGeometry(1.8, 3.1, 1.4), hitMat);
     parts.hit.position.y = 1.6;
     g.add(parts.hit);
-    // Weak spot: the glowing eye strip on a Slotbot, the jackpot screen on the boss.
-    parts.crit = boss
-      ? new THREE.Mesh(new THREE.BoxGeometry(1.35, 0.6, 0.3), hitMat)
-      : new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.3, 0.3), hitMat);
-    parts.crit.position.set(0, boss ? 2.1 : 2.95, -0.62);
-    parts.critMult = boss ? 2.5 : 2.2;
+    // Weak spot: the little lever knob on a Slotbot's side (small and hard to hit),
+    // the jackpot screen on the boss.
+    if (boss) {
+      parts.crit = new THREE.Mesh(new THREE.BoxGeometry(1.35, 0.6, 0.3), hitMat);
+      parts.crit.position.set(0, 2.1, -0.62);
+      parts.critMult = 2.5;
+    } else {
+      parts.crit = new THREE.Mesh(new THREE.SphereGeometry(0.22, 8, 6), hitMat);
+      parts.crit.position.copy(lever.position);
+      parts.critMult = 2.5;
+    }
     g.add(parts.crit);
   } else if (type === 'dicer') {
     const bodyMat = toon(0xffffff, { unique: true, map: pips(), emissive: 0xffffff, emissiveIntensity: 0 });

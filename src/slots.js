@@ -153,7 +153,7 @@ export class SlotMachine {
       // Jackpots roll a tier higher.
       const loot = rollLoot(Math.min(4, this.tier + (this.jackpot ? 1 : 0)));
       const side = new THREE.Vector3(-this.front.z, 0, this.front.x).multiplyScalar((i - (prizes - 1) / 2) * 1.1);
-      const at = this.position.clone().addScaledVector(this.front, 1.8).add(side);
+      const at = this.position.clone().addScaledVector(this.front, 2.6).add(side);
       if (loot.chips) this.raid.chips.spawnBurst(at.clone().setY(1), loot.chips, null, { speed: 2 });
       else {
         this.raid.dropItem(at, loot, this.position.clone().addScaledVector(this.front, 1.0));

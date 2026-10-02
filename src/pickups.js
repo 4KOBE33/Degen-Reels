@@ -33,7 +33,7 @@ const beamGeo = new THREE.CylinderGeometry(0.12, 0.3, 14, 8, 1, true);
 beamGeo.translate(0, 7, 0);
 
 export class ItemPickup {
-  constructor(raid, pos, item) {
+  constructor(raid, pos, item, launchFrom = null) {
     this.raid = raid;
     this.item = item;
     this.spot = new THREE.Vector3(pos.x, pos.y || 0, pos.z);
@@ -65,6 +65,9 @@ export class ItemPickup {
       this.group.add(beam);
     }
     raid.scene.add(this.group);
+    // Pop out of the machine/crate in a little arc instead of appearing in place.
+    this.launch = launchFrom ? { from: new THREE.Vector3(launchFrom.x, 1.0, launchFrom.z), t: 0 } : null;
+    if (this.launch) this.group.position.copy(this.launch.from);
   }
 
   prompt() {
@@ -77,6 +80,13 @@ export class ItemPickup {
 
   update(dt) {
     this.age += dt;
+    if (this.launch) {
+      const L = this.launch;
+      L.t = Math.min(1, L.t + dt / 0.45);
+      this.group.position.lerpVectors(L.from, this.spot, L.t);
+      this.group.position.y = THREE.MathUtils.lerp(L.from.y, this.spot.y, L.t) + Math.sin(L.t * Math.PI) * 1.4;
+      if (L.t >= 1) { this.group.position.copy(this.spot); this.launch = null; }
+    }
     this.model.position.y = 0.8 + Math.sin(this.age * 3) * 0.12;
     if (isGun(this.item)) this.model.rotation.y += dt * 1.5;
   }
