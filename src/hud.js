@@ -1,6 +1,8 @@
 // The raid HUD: health, armor, weapons, quick items, minimap, exits, boss bar, bag and map screens.
-import { WEAPONS, PLAYER, EXTRACT_TIME } from './config.js';
+import { WEAPONS, PLAYER, EXTRACT_TIME, ITEMS } from './config.js';
 import { itemInfo, itemTitle, isGun, fullAmmo } from './items.js';
+import { iconHtml } from './icons.js';
+import { keyName } from './keys.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -33,6 +35,7 @@ export class Hud {
     this.onDrop = () => {};
     this.onUse = () => {};
     this.onReload = () => {};
+    this.onPickThrow = () => {};
     this.onLeave = () => {};
     this.mini = $('minimap').getContext('2d');
     this.selected = null; // { where: 'weapon' | 'pack', i }
@@ -47,6 +50,7 @@ export class Hud {
       if (act === 'drop') { this.onDrop(where, i); this.selected = null; }
       if (act === 'use') this.onUse(b.dataset.id);
       if (act === 'reload') this.onReload();
+      if (act === 'pickthrow') this.onPickThrow(b.dataset.id);
       if (act === 'equip') { this.onEquip(i); this.selected = null; }
       if (act === 'unequip') { this.onUnequip(i); this.selected = null; }
       this.last.bagList = null;
@@ -81,24 +85,28 @@ export class Hud {
     $('frost').style.opacity = cold ? Math.max(0, (35 - p.warmth) / 35).toFixed(2) : 0;
     this.set('hpText', `❤️ ${Math.ceil(Math.max(0, p.hp))}${p.armor > 0 ? ` · 🛡️ ${Math.ceil(p.armor)}` : ''}`);
     this.set('raidChips', `🪙 ${p.chips}`);
+    this.set('keyhint', `${keyName('bag')} backpack · ${keyName('map')} map · ${keyName('pov')} camera · ${keyName('heal')} heal · ${keyName('armor')} armor · ${keyName('reload')} reload · ${keyName('throw')} throw · ${keyName('aim')} aim · Esc controls`);
+    const thr = p.currentThrowable();
     this.set('quick', [
-      ['H', '🩹', p.count('bandage') + p.count('soda')],
-      ['F', '🛡️', p.count('plate')],
-      ['R', '📦', p.count('ammo')],
-      ['T', '💣', p.count('grenade')],
-      ...(raid.hazards && raid.hazards.cold ? [['G', '☕', p.count('cocoa')]] : []),
-    ].map(([key, icon, n]) => `<span class="${n ? '' : 'none'}"><kbd>${key}</kbd>${icon}${n}</span>`).join(''));
+      [keyName('heal'), '🩹', p.count('bandage') + p.count('soda')],
+      [keyName('armor'), '🛡️', p.count('plate')],
+      [keyName('reload'), '📦', p.count('ammo')],
+      [keyName('throw'), thr ? ITEMS[thr].icon : '💣', thr ? p.count(thr) : 0, p.throwables().length > 1 ? `<small>${keyName('cycleThrow')}⇄</small>` : ''],
+      ...(p.count('fuel') || p.boost > 0 ? [[keyName('boost'), '🧃', p.boost > 0 ? `${Math.ceil(p.boost)}s` : p.count('fuel')]] : []),
+      ...(raid.hazards && raid.hazards.cold ? [[keyName('cocoa'), '☕', p.count('cocoa')]] : []),
+    ].map(([key, icon, n, extra = '']) => `<span class="${n ? '' : 'none'}"><kbd>${key}</kbd>${icon}${n}${extra}</span>`).join(''));
 
     // Weapon slots.
     this.set('weapons', [0, 1].map((i) => {
       const g = p.weapons[i];
       const on = i === p.active ? 'on' : '';
-      if (!g) return `<div class="slot ${on}"><kbd>${i + 1}</kbd><span class="empty">👊 Empty</span></div>`;
+      const wk = keyName(i ? 'weapon2' : 'weapon1');
+      if (!g) return `<div class="slot ${on}"><kbd>${wk}</kbd><span class="empty">👊 Empty</span></div>`;
       const info = itemInfo(g);
       // Warn when the gun is running low, and say how to fix it.
       const low = Number.isFinite(g.ammo) && g.ammo <= fullAmmo(g.kind, g.rarity) * 0.2;
-      const tip = low && i === p.active ? (p.count('ammo') ? '<em class="tip">R to reload</em>' : '<em class="tip out">no ammo boxes</em>') : '';
-      return `<div class="slot ${on} ${low ? 'low' : ''}"><kbd>${i + 1}</kbd><span style="color:${info.css}">${info.icon} ${escapeHtml(info.name)}</span><b class="ammo">${g.ammo}</b>${tip}</div>`;
+      const tip = low && i === p.active ? (p.count('ammo') ? `<em class="tip">${keyName('reload')} to reload</em>` : '<em class="tip out">no ammo boxes</em>') : '';
+      return `<div class="slot ${on} ${low ? 'low' : ''}"><kbd>${wk}</kbd><span style="color:${info.css}">${iconHtml(g)} ${escapeHtml(info.name)}</span><b class="ammo">${g.ammo}</b>${tip}</div>`;
     }).join(''));
 
     // Backpack bar: always visible so you can see loot land.
@@ -113,7 +121,7 @@ export class Hud {
         if (!it) { slots.push('<span class="s"></span>'); continue; }
         const info = itemInfo(it);
         const isNew = grew && i === p.backpack.length - 1;
-        slots.push(`<span class="s ${isNew ? 'new' : ''}" style="border-color:${info.css}" title="${escapeHtml(info.name)}">${info.icon}${!isGun(it) && it.qty > 1 ? `<i>${it.qty}</i>` : ''}</span>`);
+        slots.push(`<span class="s ${isNew ? 'new' : ''}" style="border-color:${info.css}" title="${escapeHtml(info.name)}">${iconHtml(it)}${!isGun(it) && it.qty > 1 ? `<i>${it.qty}</i>` : ''}</span>`);
       }
       $('packbar').innerHTML = `<div class="t">🎒 Backpack ${p.backpack.length}/${p.capacity} · <kbd>Q</kbd> to open</div><div class="slots">${slots.join('')}</div>`;
     }
@@ -373,7 +381,7 @@ export class Hud {
       const qty = !isGun(item) && item.qty > 1 ? `<span class="qty">×${item.qty}</span>` : '';
       const ammo = isGun(item) ? `<span class="qty">${item.ammo}</span>` : '';
       return `<button class="islot r${info.rarity} ${big ? 'big' : ''} ${sel ? 'sel' : ''} ${where === 'weapon' && i === p.active ? 'active' : ''}" data-act="select" data-where="${where}" data-i="${i}" style="--rc:${info.css}">
-        <span class="ic">${info.icon}</span>${big ? `<span class="nm">${escapeHtml(info.name)}</span>` : ''}${qty}${ammo}<i class="rbar"></i></button>`;
+        <span class="ic">${iconHtml(item)}</span>${big ? `<span class="nm">${escapeHtml(info.name)}</span>` : ''}${qty}${ammo}<i class="rbar"></i></button>`;
     };
 
     // Left: weapons and vitals.
@@ -412,14 +420,20 @@ export class Hud {
           : `<button class="btn" data-act="unequip" data-i="${sel.i}">To backpack</button>`;
       } else {
         stats = `<p class="desc">${escapeHtml(info.def.desc || '')}</p>`;
-        const key = { heal: 'H', armor: 'F', warm: 'G', ammo: 'R', throw: 'T' }[info.def.kind];
-        if (['heal', 'armor', 'warm'].includes(info.def.kind)) actions = `<button class="btn" data-act="use" data-id="${item.id}">Use <kbd>${key}</kbd></button>`;
-        if (info.def.kind === 'ammo') actions = `<button class="btn" data-act="reload">Reload now <kbd>R</kbd></button>`;
-        if (key) stats += `<p class="keyhint">Shortcut in a raid: <kbd>${key}</kbd>${info.def.kind === 'throw' ? ' (hold, then let go)' : ''}</p>`;
+        const kind = info.def.kind;
+        const action = { heal: 'heal', armor: 'armor', warm: 'cocoa', ammo: 'reload', throw: 'throw', boost: 'boost' }[kind];
+        const key = action ? keyName(action) : null;
+        if (['heal', 'armor', 'warm', 'boost'].includes(kind)) actions = `<button class="btn" data-act="use" data-id="${item.id}">Use <kbd>${key}</kbd></button>`;
+        if (kind === 'ammo') actions = `<button class="btn" data-act="reload">Reload now <kbd>${key}</kbd></button>`;
+        if (kind === 'throw') {
+          const picked = p.currentThrowable() === item.id;
+          actions = picked ? '<button class="btn" disabled>Ready to throw ✓</button>' : `<button class="btn" data-act="pickthrow" data-id="${item.id}">Throw this one</button>`;
+        }
+        if (key) stats += `<p class="keyhint">Shortcut in a raid: <kbd>${key}</kbd>${kind === 'throw' ? ` (hold, then let go · <kbd>${keyName('cycleThrow')}</kbd> switches)` : ''}</p>`;
       }
       actions += `<button class="btn ghost" data-act="drop" data-where="${sel.where}" data-i="${sel.i}">Drop</button>`;
       detail = `<div class="idetail" style="--rc:${info.css}">
-        <div class="bigicon r${info.rarity}">${info.icon}</div>
+        <div class="bigicon r${info.rarity}">${iconHtml(item, 'gicon big')}</div>
         <div class="rname">${rarityName}${!isGun(item) && item.qty > 1 ? ` · ×${item.qty}` : ''}</div>
         <h3 style="color:${info.css}">${escapeHtml(info.name)}</h3>
         ${stats}
@@ -470,6 +484,16 @@ export class Hud {
     if (kill) el.classList.add('kill');
   }
 
+  // Flash Chip went off in your face: white screen that fades out.
+  flashbang(strength) {
+    const el = $('flashbang');
+    el.style.transition = 'none';
+    el.style.opacity = String(Math.min(1, strength));
+    void el.offsetWidth;
+    el.style.transition = `opacity ${(1 + strength * 2.5).toFixed(1)}s ease-in`;
+    el.style.opacity = '0';
+  }
+
   hurt() {
     const el = $('vignette');
     el.classList.remove('show');
@@ -506,7 +530,7 @@ export class Hud {
     $('resultsTitle').textContent = title;
     $('resultsLine').innerHTML = `${line}<br><small>Machines destroyed: ${r.run.machines} · Raiders busted: ${r.run.raiders}${r.run.boss ? ' · 👑 Took down the Pit Boss!' : ''}</small>`;
     $('resultsItems').innerHTML = r.items.length || r.chips
-      ? `${r.chips ? `<span class="chip">🪙 ${r.chips} chips</span>` : ''}${r.items.map((it) => `<span class="chip ${r.success ? '' : 'lost'}" style="color:${itemInfo(it).css}">${itemTitle(it)}</span>`).join('')}`
+      ? `${r.chips ? `<span class="chip">🪙 ${r.chips} chips</span>` : ''}${r.items.map((it) => `<span class="chip ${r.success ? '' : 'lost'}" style="color:${itemInfo(it).css}">${iconHtml(it)} ${escapeHtml(itemTitle(it).slice(itemInfo(it).icon.length + 1))}</span>`).join('')}`
       : '<span class="chip">Nothing</span>';
     $('resultsItems').classList.toggle('lost', !r.success);
     $('resultsUnlocks').innerHTML = r.newHats && r.newHats.length ? `🔓 Unlocked: ${r.newHats.map((h) => `<b>${h} hat</b>`).join(', ')}` : '';

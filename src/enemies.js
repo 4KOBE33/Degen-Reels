@@ -352,6 +352,14 @@ export class Machine {
     const far = p && this.pos.distanceTo(p) > 120 && !this.target;
     if (far) return true;
 
+    // Flash Chip: dazed, wobbling, not shooting.
+    if (this.stunned > 0) {
+      this.stunned -= dt;
+      this.group.rotation.z = this.stunned > 0 ? Math.sin(this.stunned * 14) * 0.12 : 0;
+      this.burstLeft = 0;
+      return true;
+    }
+
     this.thinkIn -= dt;
     if (this.thinkIn <= 0) {
       this.thinkIn = 0.4;

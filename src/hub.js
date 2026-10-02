@@ -5,6 +5,8 @@ import {
   itemInfo, itemTitle, isGun, rollLoot, addToList, addToStash, makeGun, makeItem, weightedIndex, fullAmmo,
 } from './items.js';
 import { save } from './save.js';
+import { iconHtml } from './icons.js';
+import { renderBinds, wireBinds } from './keys.js';
 import { MAPS } from './map.js';
 import { escapeHtml } from './hud.js';
 import { sfx, initAudio, setVolume } from './audio.js';
@@ -55,6 +57,7 @@ export class Hub {
       this.render();
     });
     $('hubBody').addEventListener('click', (e) => this.onClick(e));
+    wireBinds($('hubBody'), () => this.render(), (t) => this.toast(t));
     // Cash out on press, not release: every millisecond counts.
     $('hubBody').addEventListener('pointerdown', (e) => {
       if (e.target.closest('[data-act="cashout"]')) { e.preventDefault(); this.cashOutCrash(); }
@@ -102,7 +105,7 @@ export class Hub {
   itemCard(item, act, i, extra = '') {
     const info = itemInfo(item);
     return `<button class="item r${info.rarity}" data-act="${act}" data-i="${i}" title="${escapeHtml(info.name)} · worth 🪙${info.value}">
-      <span class="icon">${info.icon}</span><span class="nm" style="color:${info.css}">${escapeHtml(info.name)}</span>
+      <span class="icon">${iconHtml(item)}</span><span class="nm" style="color:${info.css}">${escapeHtml(info.name)}</span>
       <span class="meta">${isGun(item) ? `${Number.isFinite(item.ammo) ? item.ammo : fullAmmo(item.kind, item.rarity)} ammo` : item.qty > 1 ? `×${item.qty}` : ''}</span>${extra}</button>`;
   }
 
@@ -154,6 +157,8 @@ export class Hub {
       <label class="slider">Mouse sensitivity <b id="sensVal">${s.sensitivity.toFixed(2)}x</b><input type="range" id="sens" min="0.1" max="3" step="0.05" value="${s.sensitivity}"></label>
       <label class="slider">Field of view <b id="fovVal">${s.fov}°</b><input type="range" id="fov" min="60" max="100" step="1" value="${s.fov}"></label>
       <label class="slider">Volume <b id="volVal">${Math.round(s.volume * 100)}%</b><input type="range" id="vol" min="0" max="1" step="0.05" value="${s.volume}"></label>
+      <h3>Controls</h3>
+      <div id="hubBinds">${renderBinds()}</div>
       <button class="btn ghost" data-act="reset">${this.armedReset ? 'Click again to wipe ALL progress' : 'Reset progress'}</button>`;
   }
 

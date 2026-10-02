@@ -358,3 +358,23 @@ input#lookName { width: 100%; max-width: 360px; padding: 10px 12px; border: 4px 
 }
 
 #loading { position: fixed; left: 50%; top: 45%; transform: translateX(-50%); font: 400 36px var(--display); color: var(--gold); text-shadow: 3px 3px 0 var(--ink); }
+
+/* Gun pictures rendered from the 3D models. */
+img.gicon { width: 2.2em; height: 1.1em; object-fit: contain; vertical-align: middle; filter: drop-shadow(0 1px 0 rgba(0, 0, 0, 0.35)); }
+img.gicon.big { width: 120px; height: 60px; }
+.islot .ic img.gicon { width: 100%; max-width: 64px; height: auto; }
+.islot.big .ic img.gicon { max-width: 110px; }
+.item .icon img.gicon { width: 46px; height: 23px; }
+#packbar .s img.gicon { width: 26px; height: 14px; }
+#flashbang { position: fixed; inset: 0; background: #fffdf5; opacity: 0; pointer-events: none; z-index: 40; }
+
+/* Controls / keybinds panel. */
+.binds { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); gap: 10px 18px; width: 100%; text-align: left; }
+.bindgroup h4 { margin: 4px 0; font: 400 15px var(--display); letter-spacing: 1px; color: var(--gold); }
+.bindrow { display: grid; grid-template-columns: 1fr 92px 92px; gap: 6px; align-items: center; font-size: 13px; font-weight: 800; padding: 2px 0; }
+.bindkey { font: 400 13px var(--display); letter-spacing: 0.5px; padding: 4px 6px; border-radius: 8px; border: 2px solid var(--ink); background: #fff6e0; color: var(--ink); cursor: pointer; min-height: 28px; }
+.bindkey.none { opacity: 0.45; }
+.bindkey:hover { background: var(--gold); }
+.bindkey.listening { background: #ff5d5d; color: #fff; animation: lowpulse 0.6s ease-in-out infinite alternate; }
+#pauseBinds { max-height: 46vh; overflow-y: auto; width: 100%; margin: 6px 0; padding-right: 4px; }
+#quick small { margin-left: 2px; font-size: 10px; opacity: 0.8; }

@@ -5,6 +5,7 @@ import { RAID_SLOT_COST } from './config.js';
 import { part, canvasTexture } from './toon.js';
 import { rollLoot, itemInfo } from './items.js';
 import { sfx } from './audio.js';
+import { keyName } from './keys.js';
 
 const SPIN_TIME = 2.4;
 const REEL_STOPS = [1.0, 1.5, 2.0];
@@ -99,7 +100,7 @@ export class SlotMachine {
 
   prompt(c) {
     if (this.user) return 'Spinning…';
-    return `<b>E</b> Pull the lever · 🪙 ${this.cost} · ${this.name}`;
+    return `<b>${keyName('use')}</b> Pull the lever · 🪙 ${this.cost} · ${this.name}`;
   }
 
   use(c) {

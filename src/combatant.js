@@ -101,6 +101,7 @@ export class Combatant {
     if (def.kind === 'heal' && this.hp >= this.maxHp) return 'Already at full health';
     if (def.kind === 'armor' && this.armor >= PLAYER.maxArmor) return 'Armor is full';
     if (def.kind === 'warm' && this.warmth >= PLAYER.maxWarmth && this.hp >= this.maxHp) return 'You\'re already toasty';
+    if (def.kind === 'throw') return `Hold the throw key to toss your ${def.name}`;
     this.using = { id, t: 0, total: def.useTime };
     return null;
   }
@@ -118,13 +119,35 @@ export class Combatant {
     return null;
   }
 
-  // Lob a Cherry Bomb along `dir` from `origin`.
-  throwGrenade(origin, dir) {
+  // Every kind of throwable in the backpack, in backpack order.
+  throwables() {
+    const ids = [];
+    for (const it of this.backpack) if (ITEMS[it.id] && ITEMS[it.id].kind === 'throw' && !ids.includes(it.id)) ids.push(it.id);
+    return ids;
+  }
+
+  // The throwable the throw key uses: the one you picked, or the first one you have.
+  currentThrowable() {
+    if (this.throwable && this.count(this.throwable)) return this.throwable;
+    return this.throwables()[0] || null;
+  }
+
+  cycleThrowable() {
+    const ids = this.throwables();
+    if (!ids.length) return null;
+    const i = ids.indexOf(this.currentThrowable());
+    this.throwable = ids[(i + 1) % ids.length];
+    return this.throwable;
+  }
+
+  // Lob a throwable along `dir` from `origin`.
+  throwGrenade(origin, dir, id = this.currentThrowable()) {
     if (!this.alive || this.using) return 'Busy';
+    if (this.stunned > 0) return 'Seeing stars…';
     if (this.throwCooldown > 0) return 'Still winding up';
-    if (!this.takeOne('grenade')) return 'No Cherry Bombs';
+    if (!id || !this.takeOne(id)) return 'Nothing to throw';
     this.throwCooldown = 0.9;
-    this.raid.spawnGrenade(this, origin, dir);
+    this.raid.spawnGrenade(this, origin, dir, id);
     this.char.recoil(1.5);
     return null;
   }
@@ -162,7 +185,12 @@ export class Combatant {
     // Stamina: sprinting drains it, standing still or walking refills it after a short pause.
     const moving = this.move.lengthSq() > 0.01;
     this.isSprinting = this.sprint && moving && !this.aiming && !this.using && !this.winded && this.stamina > 0;
-    if (this.isSprinting) {
+    this.boost = Math.max(0, (this.boost || 0) - dt);
+    this.stunned = Math.max(0, (this.stunned || 0) - dt);
+    if (this.isSprinting && this.boost > 0) {
+      // Rocket Fuel: sprint for free.
+      this.staminaWait = PLAYER.staminaDelay;
+    } else if (this.isSprinting) {
       this.stamina = Math.max(0, this.stamina - PLAYER.sprintDrain * dt);
       this.staminaWait = PLAYER.staminaDelay;
       if (this.stamina <= 0) this.winded = true;
@@ -175,6 +203,8 @@ export class Combatant {
     if (this.winded) speed *= 0.85;
     if (this.aiming) speed *= 0.6;
     if (this.using) speed *= 0.45;
+    if (this.boost > 0) speed *= 1.25;
+    if (this.stunned > 0) speed *= 0.3;
     const tx = canMove ? this.move.x * speed : 0;
     const tz = canMove ? this.move.y * speed : 0;
     const accel = Math.min(1, dt * (this.onGround ? 14 : 3.5));
@@ -210,6 +240,7 @@ export class Combatant {
             this.warmth = Math.min(PLAYER.maxWarmth, this.warmth + def.warmth);
             this.hp = Math.min(this.maxHp, this.hp + def.heal);
           }
+          if (def.kind === 'boost') this.boost = def.duration;
           if (this.isPlayer) sfx.heal();
         }
         this.using = null;

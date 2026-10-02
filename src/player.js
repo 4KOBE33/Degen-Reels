@@ -1,9 +1,8 @@
 // Your keyboard/mouse controls and the over-the-shoulder camera.
-//   WASD move · Space jump · Shift sprint · Mouse aim · Left click shoot · Right click aim down sights
-//   1/2 or mouse wheel swap guns · R reload · E use (hold to search) · H heal · F armor plate · Q (or Tab/I/B) bag · M map
-//   V switch first/third person
+// Which key or button does what lives in keys.js, and players can rebind all of it.
 import * as THREE from 'three';
-import { WEAPONS } from './config.js';
+import { WEAPONS, ITEMS } from './config.js';
+import { actionsFor, capturing } from './keys.js';
 
 const BASE_SENSITIVITY = 0.0016;
 const AUTO = new Set(['smg', 'fists', 'spoon']);
@@ -15,7 +14,6 @@ export class PlayerController {
     this.raid = raid;
     this.camera = camera;
     this.canvas = canvas;
-    this.keys = {};
     this.firing = false;
     this.aimHeld = false;
     this.locked = false;
@@ -30,56 +28,39 @@ export class PlayerController {
     this.firstPerson = false;
     this.bob = 0;
 
+    // Every input goes through the bindings in keys.js, so keys and mouse buttons are interchangeable.
+    this.held = new Set();
     window.addEventListener('keydown', (e) => {
-      if (e.target.tagName === 'INPUT') return;
-      const k = e.key.toLowerCase();
-      if (k === 'tab') e.preventDefault();
-      if (k === ' ') e.preventDefault();
-      if (e.repeat) { this.keys[k] = true; return; }
-      this.keys[k] = true;
-      const c = this.c;
-      if (!c || !c.alive || !this.raid.active) return;
-      if (k === 'e') this.pressE = true;
-      if (k === '1') c.switchTo(0);
-      if (k === '2') c.switchTo(1);
-      if (k === 'r') this.say(c.reload(), 'Reloading…');
-      if (k === 'h') this.say(c.startUsing(c.count('bandage') ? 'bandage' : 'soda'), null);
-      if (k === 'f') this.say(c.startUsing('plate'), null);
-      if (k === 'g') this.say(c.startUsing('cocoa'), null);
-      // T: hold to see where the Cherry Bomb will land, let go to throw.
-      if (k === 't') {
-        if (c.count('grenade')) this.throwHeld = true;
-        else this.say('No Cherry Bombs. Find 💣 in crates and slots.', null);
-      }
-      if (k === 'q' || k === 'tab' || k === 'i' || k === 'b') this.onToggle('bag');
-      if (k === 'm') this.onToggle('map');
-      if (k === 'v') this.togglePov();
+      if (e.target.tagName === 'INPUT' || capturing()) return;
+      if (e.code === 'Tab' || e.code === 'Space' || (this.locked && actionsFor(e.code).length)) e.preventDefault();
+      if (e.repeat) return;
+      this.press(e.code);
     });
-    window.addEventListener('keyup', (e) => {
-      const k = e.key.toLowerCase();
-      this.keys[k] = false;
-      if (k === 't' && this.throwHeld) {
-        this.throwHeld = false;
-        const c = this.c;
-        if (c && c.alive && this.raid.active) this.say(c.throwGrenade(c.head(new THREE.Vector3()), this.aimRay().dir), null);
+    window.addEventListener('keyup', (e) => this.release(e.code));
+    window.addEventListener('blur', () => this.releaseAll());
+    window.addEventListener('mousedown', (e) => {
+      if (capturing()) return;
+      if (e.button >= 3) e.preventDefault();
+      if (!this.locked) {
+        // Click the game to grab the mouse; extra buttons can still open and close the bag or map.
+        if (e.target === canvas) { this.lock(); return; }
+        if (e.button >= 1 && this.raid.active) this.press(`Mouse${e.button}`, ['bag', 'map']);
+        return;
       }
-    });
-    window.addEventListener('blur', () => { this.keys = {}; this.firing = false; this.aimHeld = false; this.throwHeld = false; });
-    canvas.addEventListener('mousedown', (e) => {
-      if (!this.locked) { this.lock(); return; }
-      if (e.button === 0) this.firing = true;
-      if (e.button === 2) this.aimHeld = true;
+      this.press(`Mouse${e.button}`);
     });
     window.addEventListener('mouseup', (e) => {
-      if (e.button === 0) this.firing = false;
-      if (e.button === 2) this.aimHeld = false;
+      // Side buttons would otherwise make the browser go back a page.
+      if (e.button >= 3) e.preventDefault();
+      this.release(`Mouse${e.button}`);
     });
+    window.addEventListener('auxclick', (e) => { if (e.button >= 3) e.preventDefault(); });
     canvas.addEventListener('contextmenu', (e) => e.preventDefault());
-    // Mouse wheel swaps guns.
     window.addEventListener('wheel', (e) => {
-      if (!this.locked || !this.c || !this.c.alive || !this.raid.active) return;
-      if (Math.abs(e.deltaY) < 1) return;
-      this.c.switchTo(this.c.active ? 0 : 1);
+      if (!this.locked || capturing() || Math.abs(e.deltaY) < 1) return;
+      const code = e.deltaY < 0 ? 'WheelUp' : 'WheelDown';
+      this.press(code);
+      this.release(code);
     }, { passive: true });
     window.addEventListener('mousemove', (e) => {
       if (!this.locked || !this.c) return;
@@ -95,9 +76,69 @@ export class PlayerController {
     });
     document.addEventListener('pointerlockchange', () => {
       this.locked = document.pointerLockElement === canvas;
-      if (!this.locked) { this.firing = false; this.aimHeld = false; this.throwHeld = false; this.keys = {}; }
+      if (!this.locked) this.releaseAll();
       this.onLockChange(this.locked);
     });
+  }
+
+  // A bound key or button went down. `only` limits which actions may fire (used while the mouse is free).
+  press(code, only = null) {
+    for (const a of actionsFor(code)) {
+      if (only && !only.includes(a)) continue;
+      if (this.held.has(a)) continue;
+      this.held.add(a);
+      this.action(a, true);
+    }
+  }
+
+  release(code) {
+    for (const a of actionsFor(code)) {
+      if (!this.held.has(a)) continue;
+      this.held.delete(a);
+      this.action(a, false);
+    }
+  }
+
+  releaseAll() {
+    for (const a of [...this.held]) { this.held.delete(a); this.action(a, false); }
+    this.firing = false;
+    this.aimHeld = false;
+    this.throwHeld = false;
+  }
+
+  action(a, down) {
+    const c = this.c;
+    if (a === 'fire') { this.firing = down; return; }
+    if (a === 'aim') { this.aimHeld = down; return; }
+    if (!c || !c.alive || !this.raid.active) { if (!down) this.throwHeld = false; return; }
+    if (a === 'throw') {
+      // Hold to see where it lands, let go to throw.
+      if (down) {
+        if (c.currentThrowable()) this.throwHeld = true;
+        else this.say('Nothing to throw. Find 💣 🎲 ✨ 🌶️ in crates and slots.', null);
+      } else if (this.throwHeld) {
+        this.throwHeld = false;
+        this.say(c.throwGrenade(c.head(new THREE.Vector3()), this.aimRay().dir), null);
+      }
+      return;
+    }
+    if (!down) return;
+    if (a === 'use') this.pressE = true;
+    if (a === 'weapon1') c.switchTo(0);
+    if (a === 'weapon2') c.switchTo(1);
+    if (a === 'swap') c.switchTo(c.active ? 0 : 1);
+    if (a === 'reload') this.say(c.reload(), 'Reloading…');
+    if (a === 'heal') this.say(c.startUsing(c.count('bandage') ? 'bandage' : 'soda'), null);
+    if (a === 'armor') this.say(c.startUsing('plate'), null);
+    if (a === 'cocoa') this.say(c.startUsing('cocoa'), null);
+    if (a === 'boost') this.say(c.startUsing('fuel'), null);
+    if (a === 'cycleThrow') {
+      const id = c.cycleThrowable();
+      this.say(null, id ? `Throwing: ${ITEMS[id].icon} ${ITEMS[id].name} ×${c.count(id)}` : 'Nothing to throw');
+    }
+    if (a === 'bag') this.onToggle('bag');
+    if (a === 'map') this.onToggle('map');
+    if (a === 'pov') this.togglePov();
   }
 
   togglePov() {
@@ -122,9 +163,9 @@ export class PlayerController {
     const raid = this.raid;
     const hud = raid.hud;
     if (!c) return;
-    const k = this.keys;
-    const f = (k.w || k.arrowup ? 1 : 0) - (k.s || k.arrowdown ? 1 : 0);
-    const r = (k.d || k.arrowright ? 1 : 0) - (k.a || k.arrowleft ? 1 : 0);
+    const h = this.held;
+    const f = (h.has('forward') ? 1 : 0) - (h.has('back') ? 1 : 0);
+    const r = (h.has('right') ? 1 : 0) - (h.has('left') ? 1 : 0);
     const fx = -Math.sin(c.yaw);
     const fz = -Math.cos(c.yaw);
     let mx = f * fx + r * -fz;
@@ -132,14 +173,14 @@ export class PlayerController {
     const len = Math.hypot(mx, mz);
     if (len > 0) { mx /= len; mz /= len; }
     c.move.set(mx, mz);
-    c.sprint = !!k.shift;
+    c.sprint = h.has('sprint');
     c.aiming = this.aimHeld && c.alive;
-    if (k[' ']) c.wantJump = true;
+    if (h.has('jump')) c.wantJump = true;
 
     // E: tap to use, hold to search containers.
     const it = c.alive && raid.active ? raid.nearbyInteractable(c) : null;
     if (this.search) {
-      const still = this.search.target === it && k.e && c.alive;
+      const still = this.search.target === it && h.has('use') && c.alive;
       if (!still) this.search = null;
       else {
         this.search.t += dt;
@@ -159,7 +200,8 @@ export class PlayerController {
       this.search ? 'Searching…' : c.using ? 'Using…' : '');
 
     // Cherry Bomb aiming arc.
-    if (this.throwHeld && c.alive && raid.active) raid.showArc(raid.grenadeArc(c, c.head(new THREE.Vector3()), this.aimRay().dir));
+    const throwing = this.throwHeld && c.alive && raid.active ? c.currentThrowable() : null;
+    if (throwing) raid.showArc(raid.grenadeArc(c, c.head(new THREE.Vector3()), this.aimRay().dir, throwing), throwing);
     else raid.showArc(null);
 
     if (this.firing && c.alive && raid.active) {

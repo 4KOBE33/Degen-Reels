@@ -41,7 +41,17 @@ Every enemy has a small weak spot that takes extra damage. A crit pops a yellow 
    - **Dicers:** flying dice that circle you.
    - **Card Sharks:** playing cards that rush you with a blade.
    - Six **rival raiders** are out there too. Most leave you alone unless you shoot them, but some carry Cherry Bombs.
-   - **Cherry Bombs 💣:** hold **T** to see a dotted arc and a red ring where it will land and how big the blast is, then let go to throw. They bounce off walls and blow up 2 seconds later. They hurt you too. You start with 2, and they drop from crates, slots and raiders.
+   - **Throwables:** hold **T** to see a dotted arc and a ring showing where it lands and how far it reaches, then let go to throw. **X** switches which one you're holding, or pick one in the backpack.
+
+     | Throwable | What it does |
+     |---|---|
+     | 💣 Cherry Bomb | Bounces, then blows up 2 seconds later |
+     | 🎲 Loaded Dice | Tumbles and lands on a number. The higher the roll, the bigger the boom: a 6 is a jackpot blast, snake eyes fizzles |
+     | ✨ Flash Chip | Stuns every machine and raider who sees it. Don't look at it yourself |
+     | 🌶️ Ghost Pepper Sauce | Smashes on impact into a pool of fire that burns for 6 seconds (and warms you up in the snow) |
+
+     Explosions and fire hurt you too. You start with 2 Cherry Bombs, and all of them drop from crates, slots and raiders. Some raiders throw them at you.
+   - **🧃 Rocket Fuel Energy (Z):** 15 seconds of running 25% faster, and sprinting costs no stamina.
 5. **Extract.** Stand in an open exit's green circle for 8 seconds, and everything you're carrying goes to your stash.
 
 ## Risk and reward
@@ -68,6 +78,10 @@ WASD move · Space jump · Shift sprint (uses stamina; jumping costs some too) �
 **Ammo Boxes 📦** go straight into your backpack when you pick them up. Press **R** (or keep shooting when you run dry) and one box refills half of the gun in your hands. You can also open the backpack (Q), click the box and hit **Reload now**. When a gun gets low, its ammo count turns red and tells you whether you have boxes left.
 
 Running, jumping and moving make your shots spray. The crosshair opens up to show it, and aiming down sights tightens it.
+
+## Controls are rebindable
+
+Settings (or **Esc → Controls** mid-raid) lists every action with two slots each. Click a slot, then press any key, **any mouse button (side buttons work)** or the scroll wheel. Esc cancels and Backspace clears it. Every on-screen hint updates to match your bindings.
 
 ## Run it
 
@@ -96,6 +110,9 @@ Then open http://localhost:3000. `npm run build:artifact` packs the whole game i
 | `src/containers.js` / `src/slots.js` | Searchable containers and in-raid loot slots |
 | `src/hub.js` | Stash, loadout, Back Room gambling, Fence, look, settings |
 | `src/hud.js` / `src/player.js` | HUD, minimap, bag and map screens; controls and camera |
+| `src/keys.js` | Rebindable controls and the rebinding panel |
+| `src/throwables.js` | Cherry Bombs, Loaded Dice, Flash Chips, Ghost Pepper Sauce |
+| `src/icons.js` | Gun pictures rendered from the 3D models |
 | `src/save.js` | Stash, settings, stats and unlocks (saved in the browser) |
 
 ## Roadmap

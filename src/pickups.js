@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { buildGun } from './character.js';
 import { RARITIES } from './config.js';
 import { itemInfo, itemTitle, isGun } from './items.js';
+import { keyName } from './keys.js';
 
 const iconCache = new Map();
 function iconTexture(icon) {
@@ -71,7 +72,7 @@ export class ItemPickup {
   }
 
   prompt() {
-    return `<b>E</b> Take <span style="color:${itemInfo(this.item).css}">${itemTitle(this.item)}</span>`;
+    return `<b>${keyName('use')}</b> Take <span style="color:${itemInfo(this.item).css}">${itemTitle(this.item)}</span>`;
   }
 
   use(c) {

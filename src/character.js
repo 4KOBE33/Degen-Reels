@@ -96,6 +96,23 @@ export function buildGun(kind, tint = null) {
     pump.position.set(0, -0.04, -0.6);
     g.add(stock, barrel, pump);
     muzzle.position.set(0, 0.05, -1.0);
+  } else if (kind === 'rifle') {
+    // High Roller: a long marksman rifle with a gold scope.
+    const stock = part(new THREE.BoxGeometry(0.1, 0.18, 0.42), 0x6b3f1d, { ink: 0.025 });
+    stock.position.set(0, -0.01, 0.16);
+    const body = part(new THREE.BoxGeometry(0.12, 0.15, 0.6), main(0x7b2cbf), { ink: 0.025 });
+    body.position.set(0, 0.03, -0.32);
+    const barrel = part(new THREE.CylinderGeometry(0.03, 0.035, 0.75, 8), 0x1f2937, { ink: 0.02 });
+    barrel.rotation.x = Math.PI / 2;
+    barrel.position.set(0, 0.05, -0.95);
+    const scope = part(new THREE.CylinderGeometry(0.055, 0.055, 0.36, 10), 0xd4a63a, { ink: 0.02 });
+    scope.rotation.x = Math.PI / 2;
+    scope.position.set(0, 0.17, -0.3);
+    const grip = part(new THREE.BoxGeometry(0.09, 0.2, 0.11), 0x374151, { ink: 0.02 });
+    grip.position.set(0, -0.11, -0.05);
+    grip.rotation.x = 0.25;
+    g.add(stock, body, barrel, scope, grip);
+    muzzle.position.set(0, 0.05, -1.34);
   } else if (kind === 'rocket') {
     const tube = part(new THREE.CylinderGeometry(0.16, 0.16, 1.2, 14), main(0x5ee27a), { ink: 0.03 });
     tube.rotation.x = Math.PI / 2;

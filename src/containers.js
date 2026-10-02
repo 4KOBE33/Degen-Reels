@@ -3,6 +3,7 @@ import * as THREE from 'three';
 import { part, toon } from './toon.js';
 import { rollLoot, randInt } from './items.js';
 import { sfx } from './audio.js';
+import { keyName } from './keys.js';
 
 const KINDS = {
   register: { name: 'Cash Register', time: 1.0, rolls: [1, 2], tierBonus: 0, color: 0x4b5563, lid: 0xffd23f },
@@ -66,7 +67,7 @@ export class Container {
 
   prompt() {
     if (this.opened) return null;
-    return `<b>Hold E</b> Search the ${this.def.name}`;
+    return `<b>Hold ${keyName('use')}</b> Search the ${this.def.name}`;
   }
 
   // Containers are searched by holding E; the controller calls open() when it's done.

@@ -66,9 +66,13 @@ export const ITEMS = {
   soda: { name: 'Jackpot Soda', icon: '🥤', desc: 'Heals 80 health. Fizzy and slow to chug.', kind: 'heal', heal: 80, useTime: 2.4, value: 160, stack: 3 },
   plate: { name: 'Chip Plate', icon: '🛡️', desc: 'Adds 50 armor. Armor soaks most of each hit.', kind: 'armor', armor: 50, useTime: 2, value: 140, stack: 3 },
   ammo: { name: 'Ammo Box', icon: '📦', desc: 'Refills half of the gun in your hands. Press R (or just keep shooting when you run dry) and one box gets used up.', kind: 'ammo', value: 50, stack: 5 },
-  grenade: { name: 'Cherry Bomb', icon: '💣', desc: 'Hold T to aim and let go to throw. It bounces, then blows up 2 seconds later. Hurts you too.', kind: 'throw', damage: 95, splash: 5.5, fuse: 2, value: 110, stack: 4 },
+  // Throwables: hold the throw key to aim, let go to throw. The cycle key picks which one.
+  grenade: { name: 'Cherry Bomb', icon: '💣', desc: 'A classic. Bounces around, then blows up 2 seconds later. Hurts you too.', kind: 'throw', effect: 'frag', damage: 95, splash: 5.5, fuse: 2, ring: 0xff5d5d, value: 110, stack: 4 },
+  dice: { name: 'Loaded Dice', icon: '🎲', desc: 'Tumbles, lands on a number, then blows up. The higher the roll, the bigger the boom. A 6 is a jackpot blast. Snake eyes fizzles.', kind: 'throw', effect: 'dice', splash: 5, fuse: 2.4, ring: 0xffd23f, value: 140, stack: 5 },
+  flash: { name: 'Flash Chip', icon: '✨', desc: 'Pops with a blinding flash. Machines and raiders who see it are stunned for a few seconds. Don\'t look at it yourself.', kind: 'throw', effect: 'flash', splash: 11, stun: 3.5, fuse: 1.2, ring: 0xffffff, value: 120, stack: 4 },
+  sauce: { name: 'Ghost Pepper Sauce', icon: '🌶️', desc: 'Smashes on impact into a pool of fire that burns anything standing in it for 6 seconds. Also great for warming up.', kind: 'throw', effect: 'fire', splash: 4.2, burn: 18, burnTime: 6, fuse: 3, ring: 0xff9f43, value: 130, stack: 3 },
+  fuel: { name: 'Rocket Fuel Energy', icon: '🧃', desc: 'Chug it: for 15 seconds you run 25% faster and sprinting costs no stamina.', kind: 'boost', duration: 15, useTime: 0.9, value: 100, stack: 3 },
   cards: { name: 'Marked Deck', icon: '🃏', desc: 'Sell it to the Fence.', kind: 'valuable', value: 90, stack: 5 },
-  dice: { name: 'Loaded Dice', icon: '🎲', desc: 'Sell it to the Fence.', kind: 'valuable', value: 140, stack: 5 },
   hat: { name: 'Silk Top Hat', icon: '🎩', desc: 'Sell it to the Fence.', kind: 'valuable', value: 260 },
   watch: { name: 'Gold Watch', icon: '⌚', desc: 'Sell it to the Fence.', kind: 'valuable', value: 450 },
   ring: { name: 'Diamond Ring', icon: '💍', desc: 'Worth a lot to the Fence.', kind: 'valuable', value: 900 },
@@ -83,10 +87,10 @@ export const ITEMS = {
 // Loot tables by danger tier (1 outskirts, 2 the strip, 3 the casino, 4 the vault and the boss).
 // Each entry is [weight, what]. 'gun' rolls a gun from GUN_TIERS with a rarity boost.
 export const LOOT = {
-  1: [[30, 'chips'], [18, 'bandage'], [14, 'ammo'], [16, 'cards'], [10, 'dice'], [8, 'gun'], [4, 'plate'], [6, 'cocoa'], [6, 'grenade']],
-  2: [[22, 'chips'], [12, 'bandage'], [8, 'soda'], [12, 'ammo'], [10, 'dice'], [10, 'hat'], [6, 'watch'], [12, 'gun'], [8, 'plate'], [5, 'cocoa'], [8, 'grenade']],
-  3: [[18, 'chips'], [8, 'soda'], [10, 'ammo'], [10, 'watch'], [8, 'ring'], [2, 'trophy'], [3, 'keycard'], [18, 'gun'], [10, 'plate'], [8, 'grenade'], [0.5, 'clover']],
-  4: [[14, 'chips'], [10, 'ring'], [8, 'trophy'], [24, 'gun'], [10, 'soda'], [10, 'plate'], [6, 'grenade'], [2, 'clover']],
+  1: [[30, 'chips'], [18, 'bandage'], [14, 'ammo'], [16, 'cards'], [10, 'dice'], [8, 'gun'], [4, 'plate'], [6, 'cocoa'], [6, 'grenade'], [4, 'flash'], [4, 'sauce'], [5, 'fuel']],
+  2: [[22, 'chips'], [12, 'bandage'], [8, 'soda'], [12, 'ammo'], [10, 'dice'], [10, 'hat'], [6, 'watch'], [12, 'gun'], [8, 'plate'], [5, 'cocoa'], [8, 'grenade'], [6, 'flash'], [6, 'sauce'], [6, 'fuel']],
+  3: [[18, 'chips'], [8, 'soda'], [10, 'ammo'], [10, 'watch'], [8, 'ring'], [2, 'trophy'], [3, 'keycard'], [18, 'gun'], [10, 'plate'], [8, 'grenade'], [8, 'dice'], [6, 'flash'], [6, 'sauce'], [5, 'fuel'], [0.5, 'clover']],
+  4: [[14, 'chips'], [10, 'ring'], [8, 'trophy'], [24, 'gun'], [10, 'soda'], [10, 'plate'], [6, 'grenade'], [8, 'dice'], [5, 'sauce'], [2, 'clover']],
 };
 export const CHIPS_BY_TIER = { 1: [15, 40], 2: [30, 80], 3: [60, 160], 4: [150, 400] };
 

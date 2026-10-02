@@ -6,6 +6,8 @@ import { Hub } from './hub.js';
 import { PlayerController } from './player.js';
 import { initAudio, setVolume } from './audio.js';
 import { save } from './save.js';
+import { keyName, renderBinds, wireBinds } from './keys.js';
+import { ITEMS } from './config.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -34,7 +36,7 @@ resize();
 
 function povLabel() {
   const b = document.getElementById('povBtn');
-  if (b) b.textContent = controller.firstPerson ? '🎥 Switch to third person (V)' : '👁️ Switch to first person (V)';
+  if (b) b.textContent = controller.firstPerson ? `🎥 Switch to third person (${keyName('pov')})` : `👁️ Switch to first person (${keyName('pov')})`;
 }
 
 function applySettings() {
@@ -87,9 +89,13 @@ hud.onDrop = (where, i) => raid.dropFromInventory(raid.player, where, i);
 hud.onEquip = (i) => { const r = raid.equipFromPack(raid.player, i); if (r) hud.toast(r); };
 hud.onUnequip = (i) => { const r = raid.unequipToPack(raid.player, i); if (r) hud.toast(r); };
 hud.onReload = () => {
-  if (!raid.player.gun) { hud.toast('Switch to a gun first (1 or 2)'); return; }
+  if (!raid.player.gun) { hud.toast(`Switch to a gun first (${keyName('weapon1')} or ${keyName('weapon2')})`); return; }
   const refusal = raid.player.reload();
   hud.toast(refusal || 'Reloaded. One 📦 Ammo Box used.');
+};
+hud.onPickThrow = (id) => {
+  raid.player.throwable = id;
+  hud.toast(`Throwing: ${ITEMS[id].icon} ${ITEMS[id].name}. Hold ${keyName('throw')} to aim.`);
 };
 hud.onUse = (id) => {
   const refusal = raid.player.startUsing(id);
@@ -116,6 +122,7 @@ const hub = new Hub({
   },
   onDeploy(opts) {
     applySettings();
+    pauseKeys();
     switchMap(opts.mapId);
     raid.deploy(opts);
     controller.c = raid.player;
@@ -134,7 +141,7 @@ hud.onLeave = () => {
 };
 
 $('paused').addEventListener('click', (e) => {
-  if (e.target.closest('input, label, button')) return;
+  if (e.target.closest('input, label, button, #pauseBinds')) return;
   initAudio();
   controller.lock();
 });
@@ -150,6 +157,25 @@ $('abandon').addEventListener('click', () => {
   raid.player.alive = false;
   raid.fail('abandon');
   $('paused').hidden = true;
+});
+
+// The controls cheat sheet on the pause screen, built from your current bindings.
+function pauseKeys() {
+  const k = (a) => `<b>${keyName(a)}</b>`;
+  $('pauseKeys').innerHTML = `${k('forward')}${k('left')}${k('back')}${k('right')} move · ${k('jump')} jump · ${k('sprint')} sprint · ${k('fire')} shoot · ${k('aim')} aim<br>
+    ${k('use')} use (hold to search) · ${k('weapon1')} ${k('weapon2')} ${k('swap')} guns · ${k('reload')} reload (uses an 📦 Ammo Box)<br>
+    ${k('throw')} hold to aim a throwable, let go to throw · ${k('cycleThrow')} next throwable<br>
+    ${k('heal')} heal · ${k('armor')} armor · ${k('cocoa')} cocoa · ${k('boost')} Rocket Fuel · ${k('bag')} backpack · ${k('map')} map · ${k('pov')} camera`;
+  povLabel();
+}
+pauseKeys();
+const rerenderPauseBinds = () => { $('pauseBinds').innerHTML = renderBinds(); pauseKeys(); };
+wireBinds($('pauseBinds'), rerenderPauseBinds, (t) => hud.toast(t));
+$('openBinds').addEventListener('click', () => {
+  const box = $('pauseBinds');
+  box.hidden = !box.hidden;
+  if (!box.hidden) rerenderPauseBinds();
+  $('openBinds').textContent = box.hidden ? '⌨️ Controls' : '⌨️ Hide controls';
 });
 
 // Settings sliders on the pause screen.
