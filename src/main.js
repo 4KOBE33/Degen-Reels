@@ -13,6 +13,7 @@ import { ITEMS, QUALITY } from './config.js';
 import { BUILD } from './version.js';
 import { wornLook } from './looks.js';
 import { Tutorial } from './tutorial.js';
+import { Voice } from './voice.js';
 
 const tutorial = new Tutorial();
 
@@ -191,6 +192,7 @@ function switchMap(id, seed = null) {
   raid.renderer = renderer;
   raid.camera = camera;
   controller.raid = raid;
+  if (typeof voice !== 'undefined') voice.raid = raid;
   applyQuality();
   window.degen = raid;
 }
@@ -198,6 +200,14 @@ function switchMap(id, seed = null) {
 // ---------- multiplayer ----------
 let session = null;
 net.connect();
+const voice = new Voice(net);
+voice.raid = raid;
+voice.onChange = (msg) => {
+  if (msg) { hud.toast(msg); hub.toast(msg); }
+  $('voiceInd').hidden = !voice.talking;
+  if (!$('hub').hidden && hub.tab === 'loadout') hub.renderDeploy();
+};
+window.voice = voice;
 // The leader's start: everyone (leader included) launches from the server's echo.
 net.on('start', (info) => {
   if (raid.active) return;
@@ -279,7 +289,7 @@ const hub = new Hub({
     const spawn = spawns ? spawns[Math.floor(Math.random() * spawns.length)] : null;
     net.start({ mapId, seed, exits, spawn });
   },
-  onSettings() { applySettings(); },
+  onSettings() { applySettings(); voice.apply(); },
   onJoinRaid() { askToJoin(true); },
   onMapChange(id) {
     $('loading').hidden = false;
@@ -515,6 +525,7 @@ function step(now, draw = true) {
   }
   if (wasActive && !raid.active) clearBackup();
   tutorial.update(raid);
+  voice.update();
   wasActive = raid.active;
   backupRaid();
   // Never keep the mouse captured once you're out of the raid.

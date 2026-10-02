@@ -8,7 +8,7 @@ import {
 import { save } from './save.js';
 import { cloud } from './cloud.js';
 import { iconHtml, gunIcon } from './icons.js';
-import { renderBinds, wireBinds } from './keys.js';
+import { keyName, renderBinds, wireBinds } from './keys.js';
 import { MAPS } from './map.js';
 import { escapeHtml } from './hud.js';
 import { sfx, initAudio, setVolume } from './audio.js';
@@ -500,6 +500,8 @@ export class Hub {
       <label class="slider">Mouse sensitivity <b id="sensVal">${s.sensitivity.toFixed(2)}x</b><input type="range" id="sens" min="0.1" max="3" step="0.05" value="${s.sensitivity}"></label>
       <label class="slider">Field of view <b id="fovVal">${s.fov}°</b><input type="range" id="fov" min="60" max="100" step="1" value="${s.fov}"></label>
       <label class="slider">Volume <b id="volVal">${Math.round(s.volume * 100)}%</b><input type="range" id="vol" min="0" max="1" step="0.05" value="${s.volume}"></label>
+      <div class="qrow"><span>Voice chat</span>${['off', 'ptt', 'open'].map((v) => `<button class="subtab ${(s.voice || 'off') === v ? 'on' : ''}" data-act="voice" data-v="${v}">${{ off: 'Off', ptt: `Push to talk (${keyName('talk')})`, open: 'Open mic' }[v]}</button>`).join('')}</div>
+      <p class="hint">Talk to your party. In a raid, voices get quieter with distance (and anyone close enough can hear you, enemies too). Your browser will ask for the microphone.</p>
       <div class="qrow"><span>Tutorial tips</span>${['auto', 'on', 'off'].map((t) => `<button class="subtab ${(s.tutorial || 'auto') === t ? 'on' : ''}" data-act="tutorial" data-t="${t}">${{ auto: 'First 3 raids', on: 'Always', off: 'Off' }[t]}</button>`).join('')}</div>
       <div class="qrow"><span>Graphics</span>${['auto', 'low', 'medium', 'high'].map((q) => `<button class="subtab ${(s.quality || 'auto') === q ? 'on' : ''}" data-act="quality" data-q="${q}">${q === 'auto' ? 'Auto' : QUALITY[q].label}</button>`).join('')}</div>
       <p class="hint">Lower graphics if the game stutters, especially if you lead a party (your computer runs the world for everyone). Auto lowers it for you when frames get slow.</p>
@@ -948,6 +950,10 @@ export class Hub {
       case 'cloudsync': cloud.push(); this.toast('☁️ Saving…'); return;
       case 'boardby': this.boardBy = b.dataset.by; this.board = null; break;
       case 'boardrefresh': this.board = null; break;
+      case 'voice':
+        save.update((x) => { x.settings.voice = b.dataset.v; });
+        if (this.onSettings) this.onSettings();
+        break;
       case 'tutorial': save.update((x) => { x.settings.tutorial = b.dataset.t; }); break;
       case 'quality':
         save.update((x) => { x.settings.quality = b.dataset.q; });

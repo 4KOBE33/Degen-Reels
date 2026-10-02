@@ -19,6 +19,9 @@ export const ACTIONS = [
   ['Screens', [
     ['bag', 'Backpack'], ['map', 'Map'], ['pov', 'First / third person'],
   ]],
+  ['Party', [
+    ['talk', 'Push to talk (voice chat)'],
+  ]],
 ];
 
 export const DEFAULT_BINDS = {
@@ -44,6 +47,7 @@ export const DEFAULT_BINDS = {
   bag: ['KeyQ', 'Tab'],
   map: ['KeyM', null],
   pov: ['KeyV', null],
+  talk: ['KeyB', null],
 };
 
 // Current bindings, with defaults filled in for anything a saved profile is missing.
