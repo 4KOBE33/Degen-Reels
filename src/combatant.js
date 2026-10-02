@@ -208,6 +208,8 @@ export class Combatant {
     if (this.aiming) speed *= 0.6;
     if (this.using) speed *= 0.45;
     if (this.boost > 0) speed *= 1.25;
+    // Heavy guns slow you down.
+    speed *= (WEAPONS[this.weapon] && WEAPONS[this.weapon].moveMul) || 1;
     if (this.stunned > 0) speed *= 0.3;
     // Downed: a slow crawl, no sprinting.
     if (this.downed) { speed = 1.4; this.isSprinting = false; }

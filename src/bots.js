@@ -11,7 +11,9 @@ const FINISH_LINES = ['Nothing personal.', 'House rules.', 'Should have stayed h
 const say = (raid, c, lines) => raid.feed(`💬 ${c.name}: "${lines[Math.floor(Math.random() * lines.length)]}"`);
 
 // Where each gun wants to fight from.
-const IDEAL_RANGE = { fists: 1.2, spoon: 1.4, shotgun: 6, smg: 10, pistol: 15, rocket: 22, rifle: 30 };
+const IDEAL_RANGE = {
+  fists: 1.2, spoon: 1.4, bat: 1.5, dbarrel: 4, shotgun: 6, smg: 10, minigun: 14, pistol: 15, revolver: 18, ar: 18, rocket: 22, rifle: 30, sniper: 45,
+};
 
 function angleDiff(a, b) {
   let d = b - a;
@@ -70,6 +72,7 @@ export class RaiderBrain {
     const from = this.c.head(new THREE.Vector3());
     const to = a.center(new THREE.Vector3());
     const d = from.distanceTo(to);
+    if (this.raid.throws.smokeBlocks(from, to)) return false;
     return !this.raid.raycast(from, to.sub(from).normalize(), d, this.c, { solidsOnly: true }).hit;
   }
 

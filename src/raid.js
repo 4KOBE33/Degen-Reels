@@ -167,7 +167,8 @@ export class Raid {
     const [sx, sz] = pick(this.map.spawns);
     const [x, z] = this.openSpot(sx + (Math.random() - 0.5) * 10, sz + (Math.random() - 0.5) * 10);
     c.pos.set(x, 0, z);
-    c.equip(makeGun(pick(['pistol', 'pistol', 'smg', 'shotgun']), rollRarity(1)));
+    c.equip(makeGun(pick(['pistol', 'pistol', 'smg', 'shotgun', 'revolver', 'ar']), rollRarity(1)));
+    if (Math.random() < 0.4) c.equip(makeGun(pick(['smg', 'shotgun', 'revolver', 'dbarrel', 'rifle', 'bat']), rollRarity(1)));
     c.backpack.push(makeItem('bandage', 2), makeItem('ammo', randInt(1, 3)));
     if (Math.random() < 0.4) c.backpack.push(makeItem(pick(['grenade', 'grenade', 'dice', 'flash', 'sauce']), randInt(1, 2)));
     if (Math.random() < 0.15) c.backpack.push(makeItem('token', 1));
@@ -871,7 +872,7 @@ export class Raid {
       const tier = this.map.tierAt(at.x, at.z);
       if (target.isBoss) {
         for (let i = 0; i < 5; i++) this.dropAround(at, rollLoot(4), 4);
-        this.dropAround(at, makeGun(pick(['rifle', 'rocket', 'shotgun']), Math.random() < 0.25 ? 3 : 2), 4);
+        this.dropAround(at, makeGun(pick(['rifle', 'rocket', 'sniper', 'minigun', 'ar', 'dbarrel']), Math.random() < 0.25 ? 3 : 2), 4);
         this.dropAround(at, makeItem('keycard'), 4);
         if (Math.random() < 0.2) this.dropAround(at, makeItem('clover'), 4);
         if (Math.random() < 0.01) this.dropAround(at, makeItem('crown'), 4);

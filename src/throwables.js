@@ -58,6 +58,48 @@ function buildMesh(id, roll) {
     g.add(chip, rim);
     spark = new THREE.Mesh(new THREE.SphereGeometry(0.08, 6, 5), new THREE.MeshBasicMaterial({ color: 0xffffff }));
     g.add(spark);
+  } else if (id === 'sticky') {
+    const candy = part(new THREE.SphereGeometry(0.2, 12, 10), 0xff7eb6, { ink: 0.03, shadow: false });
+    g.add(candy);
+    for (const side of [-1, 1]) {
+      const twist = part(new THREE.ConeGeometry(0.12, 0.2, 6), 0xfff6e0, { ink: 0.015, shadow: false });
+      twist.rotation.z = side * Math.PI / 2;
+      twist.position.x = side * 0.27;
+      g.add(twist);
+    }
+    spark = new THREE.Mesh(new THREE.SphereGeometry(0.06, 6, 5), new THREE.MeshBasicMaterial({ color: 0xff3fa4 }));
+    spark.position.y = 0.22;
+    g.add(spark);
+  } else if (id === 'cluster' || id === 'bomblet') {
+    const s = id === 'bomblet' ? 0.5 : 1;
+    const ball = part(new THREE.SphereGeometry(0.2 * s, 12, 10), 0xffd23f, { ink: 0.03 * s, shadow: false });
+    g.add(ball);
+    if (id === 'cluster') {
+      for (let i = 0; i < 6; i++) {
+        const nub = part(new THREE.SphereGeometry(0.07, 8, 6), 0xe63946, { ink: 0.015, shadow: false });
+        const a = (i / 6) * Math.PI * 2;
+        nub.position.set(Math.cos(a) * 0.2, (i % 2 ? 0.08 : -0.08), Math.sin(a) * 0.2);
+        g.add(nub);
+      }
+    }
+    spark = new THREE.Mesh(new THREE.SphereGeometry(0.06 * s, 6, 5), new THREE.MeshBasicMaterial({ color: 0xff5d5d }));
+    spark.position.y = 0.22 * s;
+    g.add(spark);
+  } else if (id === 'smoke') {
+    const cigar = part(new THREE.CylinderGeometry(0.07, 0.08, 0.5, 10), 0x7a4a2a, { ink: 0.02, shadow: false });
+    cigar.rotation.z = Math.PI / 2;
+    const band = part(new THREE.CylinderGeometry(0.085, 0.085, 0.06, 10), 0xd4a63a, { ink: 0, shadow: false });
+    band.rotation.z = Math.PI / 2;
+    band.position.x = -0.12;
+    spark = new THREE.Mesh(new THREE.SphereGeometry(0.07, 6, 5), new THREE.MeshBasicMaterial({ color: 0xff7a1a }));
+    spark.position.x = 0.26;
+    g.add(cigar, band, spark);
+  } else if (id === 'emp') {
+    const disc = part(new THREE.CylinderGeometry(0.2, 0.2, 0.1, 16), 0x1e3a8a, { ink: 0.025, shadow: false });
+    const core = new THREE.Mesh(new THREE.SphereGeometry(0.1, 10, 8), new THREE.MeshBasicMaterial({ color: 0x7dd3fc }));
+    core.position.y = 0.06;
+    g.add(disc, core);
+    spark = core;
   } else if (id === 'sauce') {
     const bottle = part(new THREE.CylinderGeometry(0.1, 0.12, 0.34, 10), 0xd62828, { ink: 0.02, shadow: false });
     const neck = part(new THREE.CylinderGeometry(0.04, 0.06, 0.14, 8), 0xd62828, { ink: 0.015, shadow: false });
@@ -82,14 +124,31 @@ export class Throwables {
     this.raid = raid;
     this.list = [];
     this.pools = [];
+    this.smokes = [];
     this.arc = null;
+  }
+
+  // Does a smoke cloud block the line from a to b?
+  smokeBlocks(a, b) {
+    for (const sm of this.smokes) {
+      if (sm.r < 1) continue;
+      const ab = b.clone().sub(a);
+      const len = ab.length();
+      if (len < 0.01) continue;
+      ab.divideScalar(len);
+      const t = Math.max(0, Math.min(len, sm.pos.clone().sub(a).dot(ab)));
+      if (a.clone().addScaledVector(ab, t).distanceTo(sm.pos) < sm.r * 0.85) return true;
+    }
+    return false;
   }
 
   clear() {
     for (const g of this.list) this.raid.scene.remove(g.mesh);
     for (const p of this.pools) this.endPool(p);
+    for (const sm of this.smokes) this.raid.scene.remove(sm.group);
     this.list = [];
     this.pools = [];
+    this.smokes = [];
   }
 
   launch(origin, dir) {
@@ -146,7 +205,19 @@ export class Throwables {
     for (let i = this.list.length - 1; i >= 0; i--) {
       const g = this.list[i];
       g.fuse -= dt;
-      if (this.step(g, dt)) sfx.tick(g.pos, raid.listener);
+      if (g.def.effect === 'sticky' && !g.stuck) {
+        // Taffy: grab onto the first person or thing it touches.
+        for (const a of raid.actors) {
+          if (!a.alive || a === g.owner) continue;
+          const c = a.center(new THREE.Vector3());
+          if (c.distanceTo(g.pos) < (a.isBoss ? 2.5 : 0.95)) { g.stuck = a; g.offset = g.pos.clone().sub(c); break; }
+        }
+        if (!g.stuck && g.touched) g.stuck = true;
+        if (g.stuck) { g.vel.set(0, 0, 0); g.fuse = Math.min(g.fuse, g.def.fuse); sfx.tick(g.pos, raid.listener); }
+      }
+      if (g.stuck) {
+        if (g.stuck !== true && g.stuck.alive) g.pos.copy(g.stuck.center(new THREE.Vector3())).add(g.offset);
+      } else if (this.step(g, dt)) sfx.tick(g.pos, raid.listener);
       g.mesh.position.copy(g.pos);
       const moving = g.vel.lengthSq() > 0.5;
       if (g.id === 'dice' && !moving && g.touched) {
@@ -172,6 +243,19 @@ export class Throwables {
     }
     for (let i = this.pools.length - 1; i >= 0; i--) {
       if (!this.updatePool(this.pools[i], dt)) this.pools.splice(i, 1);
+    }
+    for (let i = this.smokes.length - 1; i >= 0; i--) {
+      const sm = this.smokes[i];
+      sm.t += dt;
+      const grow = Math.min(1, sm.t / 1.5);
+      const fade = Math.min(1, (sm.dur - sm.t) / 2);
+      sm.r = sm.max * grow * Math.max(0.2, fade);
+      sm.puffs.forEach((p, k) => {
+        p.scale.setScalar(sm.r * (0.55 + 0.15 * Math.sin(sm.t * 0.8 + k)));
+        p.material.opacity = 0.85 * Math.max(0, fade);
+        p.position.y = 1.2 + k * 0.15 + Math.sin(sm.t * 0.5 + k) * 0.3;
+      });
+      if (sm.t >= sm.dur) { raid.scene.remove(sm.group); this.smokes.splice(i, 1); }
     }
   }
 
@@ -199,6 +283,62 @@ export class Throwables {
       this.flash(g, at);
     } else if (def.effect === 'fire') {
       this.startPool(g, at);
+    } else if (def.effect === 'sticky') {
+      raid.explode(at, { owner: g.owner, damage: def.damage, splash: def.splash });
+    } else if (def.effect === 'cluster') {
+      // Pop open and throw six bomblets around.
+      raid.explode(at, { owner: g.owner, damage: def.damage * 0.6, splash: def.splash * 0.8 });
+      const mini = { effect: 'frag', damage: def.damage, splash: def.splash, fuse: 0.6 };
+      for (let i = 0; i < 6; i++) {
+        const a = (i / 6) * Math.PI * 2 + Math.random() * 0.5;
+        const { mesh, spark } = buildMesh('bomblet', 1);
+        const pos = at.clone().setY(at.y + 0.3);
+        mesh.position.copy(pos);
+        raid.scene.add(mesh);
+        const vel = new THREE.Vector3(Math.cos(a) * (4 + Math.random() * 3), 6 + Math.random() * 3, Math.sin(a) * (4 + Math.random() * 3));
+        this.list.push({ id: 'bomblet', def: mini, mesh, spark, pos, vel, owner: g.owner, fuse: 0.7 + Math.random() * 0.6, blink: 0, roll: 1, spin: new THREE.Vector3(6, 4, 5) });
+      }
+    } else if (def.effect === 'smoke') {
+      this.startSmoke(at, def);
+    } else if (def.effect === 'emp') {
+      this.emp(g, at);
+    }
+  }
+
+  startSmoke(at, def) {
+    const raid = this.raid;
+    sfx.open(at, raid.listener);
+    const group = new THREE.Group();
+    group.position.set(at.x, raid.map.groundAt(at.x, at.z, at.y), at.z);
+    const puffs = [];
+    for (let k = 0; k < 9; k++) {
+      const m = new THREE.Mesh(new THREE.SphereGeometry(1, 12, 10), new THREE.MeshBasicMaterial({ color: k % 2 ? 0xd1d5db : 0xb8bcc4, transparent: true, opacity: 0.85, depthWrite: false }));
+      const a = (k / 9) * Math.PI * 2;
+      m.position.set(Math.cos(a) * def.splash * 0.35, 1.2, Math.sin(a) * def.splash * 0.35);
+      group.add(m);
+      puffs.push(m);
+    }
+    raid.scene.add(group);
+    this.smokes.push({ group, puffs, pos: group.position.clone().setY(group.position.y + 1.5), t: 0, dur: def.duration, max: def.splash, r: 0 });
+  }
+
+  // Short Circuit: fry every machine in range.
+  emp(g, at) {
+    const raid = this.raid;
+    const def = g.def;
+    sfx.zap(at, raid.listener);
+    sfx.zap(at, raid.listener);
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(1, 0.15, 8, 32), raid.fx.fadeMaterial(0x4dabff));
+    ring.rotation.x = Math.PI / 2;
+    ring.position.copy(at);
+    raid.fx.add(ring, 0.6, (o, t) => { o.scale.setScalar(1 + t * def.splash); o.material.opacity = 1 - t; });
+    for (const m of raid.machines) {
+      if (!m.alive) continue;
+      const c = m.center ? m.center(new THREE.Vector3()) : m.pos;
+      if (c.distanceTo(at) > def.splash + (m.isBoss ? 3 : 0)) continue;
+      m.stunned = def.stun * (m.isBoss ? 0.35 : 1);
+      raid.fx.number(c.clone().setY(c.y + 1.5), '⚡', '#7dd3fc', 1.2);
+      raid.damage(m, def.damage, g.owner, c);
     }
   }
 

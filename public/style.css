@@ -670,3 +670,6 @@ body.isdowned #vignette { opacity: 0.6 !important; }
 .twopt.on { background: var(--gold); color: var(--ink); box-shadow: 0 0 18px rgba(255, 210, 63, 0.8); }
 #crash { z-index: 100; }
 #crashDetail { font-family: monospace; font-size: 12px; word-break: break-word; opacity: 0.7; }
+
+.btn.freekit { width: 100%; background: linear-gradient(135deg, #5ee27a, #2ee6d6); display: grid; gap: 2px; margin-bottom: 8px; }
+.btn.freekit small { font: 800 12px var(--body); letter-spacing: 0; opacity: 0.85; }

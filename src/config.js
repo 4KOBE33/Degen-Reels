@@ -44,16 +44,27 @@ export const BACKPACK_SLOTS = 12;
 export const CHIP_VALUE = 5;
 
 export const WEAPONS = {
-  fists: { name: 'Fists', icon: '👊', melee: true, damage: 12, rate: 0.45, range: 2.0, ammo: Infinity },
-  spoon: { name: 'Lucky Spoon', icon: '🥄', melee: true, damage: 26, rate: 0.4, range: 2.4, ammo: Infinity, value: 40 },
+  fists: { name: 'Fists', icon: '👊', melee: true, auto: true, damage: 12, rate: 0.45, range: 2.0, ammo: Infinity },
+  spoon: { name: 'Lucky Spoon', icon: '🥄', melee: true, auto: true, damage: 26, rate: 0.4, range: 2.4, ammo: Infinity, value: 40 },
+  bat: { name: 'Pit Boss Bat', icon: '🏏', melee: true, auto: true, damage: 44, rate: 0.75, range: 2.8, ammo: Infinity, value: 220 },
   pistol: { name: 'Pea Shooter', icon: '🔫', damage: 16, rate: 0.28, spread: 0.012, pellets: 1, range: 70, ammo: 60, value: 120 },
-  smg: { name: 'Bullet Hose', icon: '⚡', damage: 8, rate: 0.08, spread: 0.035, pellets: 1, range: 50, ammo: 180, value: 300 },
+  revolver: { name: 'Snake Eyes', icon: '🤠', damage: 34, rate: 0.5, spread: 0.006, pellets: 1, range: 85, ammo: 36, value: 420 },
+  smg: { name: 'Bullet Hose', icon: '⚡', auto: true, damage: 8, rate: 0.08, spread: 0.035, pellets: 1, range: 50, ammo: 180, value: 300 },
   shotgun: { name: 'Boomstick', icon: '💥', damage: 10, rate: 0.85, spread: 0.09, pellets: 8, range: 22, ammo: 24, value: 320 },
+  dbarrel: { name: 'Double Down', icon: '🎲', damage: 12, rate: 1.15, spread: 0.12, pellets: 12, range: 15, ammo: 20, value: 480 },
+  ar: { name: 'Card Counter', icon: '🃏', auto: true, damage: 12, rate: 0.1, spread: 0.018, pellets: 1, range: 85, ammo: 150, value: 650 },
   rifle: { name: 'High Roller', icon: '🎯', damage: 45, rate: 0.9, spread: 0.002, pellets: 1, range: 140, ammo: 30, value: 500, zoom: true },
+  sniper: { name: 'Ace in the Hole', icon: '♠️', damage: 110, rate: 1.7, spread: 0.0008, pellets: 1, range: 220, ammo: 15, value: 1600, zoom: true },
+  minigun: { name: 'The Whale', icon: '🐋', auto: true, damage: 7, rate: 0.045, spread: 0.055, pellets: 1, range: 55, ammo: 450, value: 1400, moveMul: 0.72 },
   rocket: { name: 'Jackpot Launcher', icon: '🚀', damage: 90, rate: 1.3, projectile: true, speed: 30, splash: 4.5, ammo: 8, value: 900 },
 };
 // Gun pools by tier for loot rolls.
-export const GUN_TIERS = [['spoon', 'pistol'], ['pistol', 'smg', 'shotgun'], ['smg', 'shotgun', 'rifle'], ['rifle', 'rocket', 'shotgun']];
+export const GUN_TIERS = [
+  ['spoon', 'pistol', 'bat'],
+  ['pistol', 'smg', 'shotgun', 'revolver', 'bat'],
+  ['smg', 'shotgun', 'rifle', 'revolver', 'ar', 'dbarrel'],
+  ['rifle', 'rocket', 'ar', 'sniper', 'minigun', 'dbarrel'],
+];
 
 export const RARITIES = [
   { name: 'Common', color: null, css: '#e5e7eb', damage: 1, ammo: 1, value: 1 },
@@ -81,6 +92,10 @@ export const ITEMS = {
   dice: { name: 'Loaded Dice', icon: '🎲', desc: 'Tumbles, lands on a number, then blows up. The higher the roll, the bigger the boom. A 6 is a jackpot blast. Snake eyes fizzles.', kind: 'throw', effect: 'dice', splash: 5, fuse: 2.4, ring: 0xffd23f, value: 140, stack: 5 },
   flash: { name: 'Flash Chip', icon: '✨', desc: 'Pops with a blinding flash. Machines and raiders who see it are stunned for a few seconds. Don\'t look at it yourself.', kind: 'throw', effect: 'flash', splash: 11, stun: 3.5, fuse: 1.2, ring: 0xffffff, value: 120, stack: 4 },
   sauce: { name: 'Ghost Pepper Sauce', icon: '🌶️', desc: 'Smashes on impact into a pool of fire that burns anything standing in it for 6 seconds. Also great for warming up.', kind: 'throw', effect: 'fire', splash: 4.2, burn: 18, burnTime: 6, fuse: 3, ring: 0xff9f43, value: 130, stack: 3 },
+  sticky: { name: 'Taffy Bomb', icon: '🍬', desc: 'Sticks to the first thing it touches, people included, then blows 1.5 seconds later. Nowhere to run.', kind: 'throw', effect: 'sticky', damage: 110, splash: 4.5, fuse: 1.5, ring: 0xff7eb6, value: 160, stack: 3 },
+  cluster: { name: 'Jackpot Cluster', icon: '🎆', desc: 'Pops open and scatters six little bomblets that each go off on their own. Clears a whole room.', kind: 'throw', effect: 'cluster', damage: 45, splash: 3.2, fuse: 1.4, ring: 0xffd23f, value: 220, stack: 2 },
+  smoke: { name: 'Cigar Smoke', icon: '💨', desc: 'A thick cloud nobody can see through for 14 seconds. Machines and raiders lose track of you. Great for escaping or reviving.', kind: 'throw', effect: 'smoke', splash: 7, duration: 14, fuse: 1.3, ring: 0xd1d5db, value: 90, stack: 4 },
+  emp: { name: 'Short Circuit', icon: '🔌', desc: 'An EMP. Fries every machine nearby for 6 seconds and zaps them for 35 damage. Does nothing to people.', kind: 'throw', effect: 'emp', damage: 35, splash: 13, stun: 6, fuse: 1.3, ring: 0x4dabff, value: 170, stack: 3 },
   fuel: { name: 'Rocket Fuel Energy', icon: '🧃', desc: 'Chug it: for 15 seconds you run 25% faster and sprinting costs no stamina.', kind: 'boost', duration: 15, useTime: 0.9, value: 100, stack: 3 },
   cards: { name: 'Marked Deck', icon: '🃏', desc: 'Sell it to the Fence.', kind: 'valuable', value: 90, stack: 5 },
   hat: { name: 'Silk Top Hat', icon: '🎩', desc: 'Sell it to the Fence.', kind: 'valuable', value: 260 },
@@ -98,10 +113,10 @@ export const ITEMS = {
 // Loot tables by danger tier (1 outskirts, 2 the strip, 3 the casino, 4 the vault and the boss).
 // Each entry is [weight, what]. 'gun' rolls a gun from GUN_TIERS with a rarity boost.
 export const LOOT = {
-  1: [[30, 'chips'], [18, 'bandage'], [14, 'ammo'], [16, 'cards'], [10, 'dice'], [8, 'gun'], [4, 'plate'], [6, 'cocoa'], [6, 'grenade'], [4, 'flash'], [4, 'sauce'], [5, 'fuel']],
-  2: [[22, 'chips'], [12, 'bandage'], [8, 'soda'], [12, 'ammo'], [10, 'dice'], [10, 'hat'], [6, 'watch'], [12, 'gun'], [8, 'plate'], [5, 'cocoa'], [8, 'grenade'], [6, 'flash'], [6, 'sauce'], [6, 'fuel'], [1.5, 'token']],
-  3: [[18, 'chips'], [8, 'soda'], [10, 'ammo'], [10, 'watch'], [8, 'ring'], [2, 'trophy'], [3, 'keycard'], [18, 'gun'], [10, 'plate'], [8, 'grenade'], [8, 'dice'], [6, 'flash'], [6, 'sauce'], [5, 'fuel'], [3, 'token'], [0.5, 'clover']],
-  4: [[14, 'chips'], [10, 'ring'], [8, 'trophy'], [24, 'gun'], [10, 'soda'], [10, 'plate'], [6, 'grenade'], [8, 'dice'], [5, 'sauce'], [5, 'token'], [2, 'clover']],
+  1: [[30, 'chips'], [18, 'bandage'], [14, 'ammo'], [16, 'cards'], [10, 'dice'], [8, 'gun'], [4, 'plate'], [6, 'cocoa'], [6, 'grenade'], [4, 'flash'], [4, 'sauce'], [5, 'fuel'], [4, 'smoke'], [3, 'sticky']],
+  2: [[22, 'chips'], [12, 'bandage'], [8, 'soda'], [12, 'ammo'], [10, 'dice'], [10, 'hat'], [6, 'watch'], [12, 'gun'], [8, 'plate'], [5, 'cocoa'], [8, 'grenade'], [6, 'flash'], [6, 'sauce'], [6, 'fuel'], [1.5, 'token'], [5, 'smoke'], [5, 'sticky'], [4, 'emp'], [3, 'cluster']],
+  3: [[18, 'chips'], [8, 'soda'], [10, 'ammo'], [10, 'watch'], [8, 'ring'], [2, 'trophy'], [3, 'keycard'], [18, 'gun'], [10, 'plate'], [8, 'grenade'], [8, 'dice'], [6, 'flash'], [6, 'sauce'], [5, 'fuel'], [3, 'token'], [5, 'sticky'], [5, 'emp'], [5, 'cluster'], [3, 'smoke'], [0.5, 'clover']],
+  4: [[14, 'chips'], [10, 'ring'], [8, 'trophy'], [24, 'gun'], [10, 'soda'], [10, 'plate'], [6, 'grenade'], [8, 'dice'], [5, 'sauce'], [5, 'token'], [6, 'cluster'], [4, 'emp'], [2, 'clover']],
 };
 export const CHIPS_BY_TIER = { 1: [15, 40], 2: [30, 80], 3: [60, 160], 4: [150, 400] };
 

@@ -303,6 +303,7 @@ export class Machine {
     const from = this.head(tmp.clone());
     const to = a.center ? a.center(new THREE.Vector3()) : a.pos.clone().setY(a.pos.y + 1);
     const d = from.distanceTo(to);
+    if (this.raid.throws.smokeBlocks(from, to)) return false;
     return !this.raid.raycast(from, to.sub(from).normalize(), d, this, { solidsOnly: true }).hit;
   }
 

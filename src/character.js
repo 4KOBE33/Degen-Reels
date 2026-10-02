@@ -356,6 +356,104 @@ export function buildGun(kind, tint = null) {
     grip.rotation.x = 0.25;
     g.add(stock, body, barrel, scope, grip);
     muzzle.position.set(0, 0.05, -1.34);
+  } else if (kind === 'bat') {
+    // Pit Boss Bat: a fat wooden bat with a gold band.
+    const handle = part(new THREE.CylinderGeometry(0.04, 0.05, 0.4, 8), 0x3f2e1f, { ink: 0.015 });
+    handle.rotation.x = Math.PI / 2;
+    handle.position.z = -0.05;
+    const barrel = part(new THREE.CylinderGeometry(0.1, 0.05, 0.75, 12), main(0xc08a3e), { ink: 0.025 });
+    barrel.rotation.x = -Math.PI / 2;
+    barrel.position.z = -0.6;
+    const band = part(new THREE.CylinderGeometry(0.095, 0.095, 0.06, 12), 0xffd23f, { ink: 0 });
+    band.rotation.x = Math.PI / 2;
+    band.position.z = -0.75;
+    g.add(handle, barrel, band);
+    muzzle.position.z = -1.0;
+  } else if (kind === 'revolver') {
+    const barrel = part(new THREE.CylinderGeometry(0.045, 0.05, 0.42, 10), main(0x9ca3af), { ink: 0.02 });
+    barrel.rotation.x = Math.PI / 2;
+    barrel.position.set(0, 0.07, -0.34);
+    const cyl = part(new THREE.CylinderGeometry(0.1, 0.1, 0.16, 6), 0x6b7280, { ink: 0.02 });
+    cyl.rotation.x = Math.PI / 2;
+    cyl.position.set(0, 0.05, -0.08);
+    const grip = part(new THREE.BoxGeometry(0.09, 0.22, 0.12), 0x8b5a2b, { ink: 0.02 });
+    grip.position.set(0, -0.08, 0.06);
+    grip.rotation.x = 0.4;
+    g.add(barrel, cyl, grip);
+    muzzle.position.set(0, 0.07, -0.56);
+  } else if (kind === 'dbarrel') {
+    // Double Down: a sawed-off double barrel.
+    for (const dx of [-0.045, 0.045]) {
+      const b = part(new THREE.CylinderGeometry(0.045, 0.045, 0.55, 10), main(0x4b5563), { ink: 0.02 });
+      b.rotation.x = Math.PI / 2;
+      b.position.set(dx, 0.06, -0.38);
+      g.add(b);
+    }
+    const body = part(new THREE.BoxGeometry(0.16, 0.13, 0.2), 0x374151, { ink: 0.02 });
+    body.position.set(0, 0.05, -0.05);
+    const grip = part(new THREE.BoxGeometry(0.1, 0.2, 0.18), 0x8b5a2b, { ink: 0.02 });
+    grip.position.set(0, -0.06, 0.12);
+    grip.rotation.x = 0.5;
+    g.add(body, grip);
+    muzzle.position.set(0, 0.06, -0.68);
+  } else if (kind === 'ar') {
+    // Card Counter: an assault rifle with a card-suit stock.
+    const body = part(new THREE.BoxGeometry(0.14, 0.17, 0.7), main(0x1f8a4c), { ink: 0.025 });
+    body.position.set(0, 0.05, -0.25);
+    const stock = part(new THREE.BoxGeometry(0.1, 0.16, 0.3), 0x1f2937, { ink: 0.02 });
+    stock.position.set(0, 0.02, 0.22);
+    const barrel = part(new THREE.CylinderGeometry(0.035, 0.035, 0.35, 8), 0x1f2937, { ink: 0.02 });
+    barrel.rotation.x = Math.PI / 2;
+    barrel.position.set(0, 0.07, -0.76);
+    const mag = part(new THREE.BoxGeometry(0.08, 0.26, 0.12), 0x1f2937, { ink: 0.02 });
+    mag.position.set(0, -0.15, -0.28);
+    mag.rotation.x = -0.2;
+    const sight = part(new THREE.BoxGeometry(0.06, 0.06, 0.12), 0xe63946, { ink: 0.015 });
+    sight.position.set(0, 0.17, -0.25);
+    g.add(body, stock, barrel, mag, sight);
+    muzzle.position.set(0, 0.07, -0.95);
+  } else if (kind === 'sniper') {
+    // Ace in the Hole: very long, big scope, bipod.
+    const stock = part(new THREE.BoxGeometry(0.1, 0.18, 0.45), 0x1f2937, { ink: 0.025 });
+    stock.position.set(0, -0.01, 0.2);
+    const body = part(new THREE.BoxGeometry(0.12, 0.15, 0.6), main(0x111827), { ink: 0.025 });
+    body.position.set(0, 0.03, -0.3);
+    const barrel = part(new THREE.CylinderGeometry(0.035, 0.04, 1.0, 8), 0x1f2937, { ink: 0.02 });
+    barrel.rotation.x = Math.PI / 2;
+    barrel.position.set(0, 0.05, -1.1);
+    const scope = part(new THREE.CylinderGeometry(0.07, 0.07, 0.45, 12), 0xffd23f, { ink: 0.02 });
+    scope.rotation.x = Math.PI / 2;
+    scope.position.set(0, 0.19, -0.3);
+    for (const dx of [-0.07, 0.07]) {
+      const leg = part(new THREE.CylinderGeometry(0.015, 0.015, 0.3, 5), 0x374151, { ink: 0 });
+      leg.position.set(dx, -0.1, -1.1);
+      leg.rotation.z = dx * 4;
+      g.add(leg);
+    }
+    g.add(stock, body, barrel, scope);
+    muzzle.position.set(0, 0.05, -1.62);
+  } else if (kind === 'minigun') {
+    // The Whale: a spinning six-barrel minigun.
+    const body = part(new THREE.BoxGeometry(0.28, 0.26, 0.45), main(0x2563eb), { ink: 0.03 });
+    body.position.set(0, 0.05, -0.05);
+    const barrels = new THREE.Group();
+    barrels.position.set(0, 0.06, -0.55);
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2;
+      const b = part(new THREE.CylinderGeometry(0.03, 0.03, 0.7, 6), 0x1f2937, { ink: 0.01 });
+      b.rotation.x = Math.PI / 2;
+      b.position.set(Math.cos(a) * 0.07, Math.sin(a) * 0.07, 0);
+      barrels.add(b);
+    }
+    const ring = part(new THREE.CylinderGeometry(0.12, 0.12, 0.06, 12), 0xffd23f, { ink: 0.01 });
+    ring.rotation.x = Math.PI / 2;
+    ring.position.z = -0.25;
+    barrels.add(ring);
+    g.userData.spin = barrels;
+    const handle = part(new THREE.BoxGeometry(0.06, 0.18, 0.06), 0x374151, { ink: 0.01 });
+    handle.position.set(0, 0.26, -0.05);
+    g.add(body, barrels, handle);
+    muzzle.position.set(0, 0.06, -0.92);
   } else if (kind === 'rocket') {
     const tube = part(new THREE.CylinderGeometry(0.16, 0.16, 1.2, 14), main(0x5ee27a), { ink: 0.03 });
     tube.rotation.x = Math.PI / 2;
@@ -527,6 +625,8 @@ export function createCharacter({ color, hat = 'top', eyes: eyeStyle = 'normal',
     // s: { speed, forward, side, onGround, pitch, dead }
     animate(dt, s) {
       anim.t += dt;
+      // The Whale's barrels spin up while firing.
+      if (gun && gun.userData.spin) gun.userData.spin.rotation.z += dt * (anim.recoil > 0.05 ? 40 : 3);
       if (hatMesh.userData.spin) hatMesh.userData.spin.rotation.y += dt * 14;
       const moving = Math.min(1, s.speed / 6);
       anim.phase += dt * (6 + s.speed * 1.1) * (moving > 0.05 ? 1 : 0);
@@ -559,7 +659,7 @@ export function createCharacter({ color, hat = 'top', eyes: eyeStyle = 'normal',
       anim.recoil = Math.max(0, anim.recoil - dt * 8);
       anim.swing = Math.max(0, anim.swing - dt * 4);
       const swingArc = Math.sin(anim.swing * Math.PI) * 1.4;
-      arm.rotation.x = s.pitch + anim.recoil * 0.35 - (weaponKind === 'fists' || weaponKind === 'spoon' ? swingArc * 0.6 : 0);
+      arm.rotation.x = s.pitch + anim.recoil * 0.35 - (weaponKind === 'fists' || weaponKind === 'spoon' || weaponKind === 'bat' ? swingArc * 0.6 : 0);
       arm.rotation.y = weaponKind === 'fists' || weaponKind === 'spoon' ? swingArc * 0.6 : 0;
       arm.position.z = -0.2 + anim.recoil * 0.12 - (weaponKind === 'fists' ? swingArc * 0.25 : 0);
       leftHand.position.y = 0.9 + Math.sin(anim.phase) * 0.06 * moving;

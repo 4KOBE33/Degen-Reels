@@ -3,10 +3,10 @@
 import { save, STAT_DEFAULTS } from './save.js';
 
 export { STAT_DEFAULTS };
-import { WEAPONS, ITEMS, RARITIES, RARITY_BY_TIER } from './config.js';
+import { WEAPONS, ITEMS, RARITIES, RARITY_BY_TIER, GUN_TIERS } from './config.js';
 import { isGun } from './items.js';
 
-export const GUN_KINDS = ['spoon', 'pistol', 'smg', 'shotgun', 'rifle', 'rocket'];
+export const GUN_KINDS = ['spoon', 'bat', 'pistol', 'revolver', 'smg', 'ar', 'shotgun', 'dbarrel', 'rifle', 'sniper', 'minigun', 'rocket'];
 export const MAX_LEVEL = 50;
 
 
@@ -33,10 +33,14 @@ export function collectionEntries() {
 }
 
 function gunHint(kind, r) {
-  const where = kind === 'rocket' ? 'the casino, the vault or the Pit Boss' : kind === 'rifle' ? 'the casino and deadly zones' : kind === 'spoon' ? 'the outskirts' : 'anywhere';
+  // Which loot tiers can roll this gun.
+  const tiers = GUN_TIERS.map((pool, i) => (pool.includes(kind) ? i + 1 : 0)).filter(Boolean);
+  const where = kind === 'sniper' || kind === 'minigun' ? 'the vault, deadly zones and the Pit Boss'
+    : tiers.length && tiers[0] >= 3 ? 'casinos and deadly zones'
+      : tiers.length && tiers[0] === 1 ? 'anywhere, even the outskirts' : 'towns and anywhere riskier';
   const best = RARITY_BY_TIER[4][r];
-  if (r === 3) return `Legendary · only in deadly zones (up to ${best}% of gun drops in the vault) · try ${where}`;
-  if (r === 2) return `Epic · casino and deadly zones are your best bet · ${where}`;
+  if (r === 3) return `Legendary · only in deadly zones (up to ${best}% of gun drops in the vault) · look in ${where}`;
+  if (r === 2) return `Epic · casinos and deadly zones are your best bet · ${where}`;
   return `${RARITIES[r].name} · ${where}`;
 }
 

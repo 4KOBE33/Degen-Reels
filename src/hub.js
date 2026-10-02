@@ -221,16 +221,16 @@ export class Hub {
   renderLoadout() {
     const d = this.data;
     const lo = d.loadout;
-    const noGuns = !d.stash.items.some(isGun) && !lo.weapons.some(Boolean);
+    const noGuns = !lo.weapons.some(Boolean);
     const maps = Object.entries(MAPS).map(([id, m]) => `<button class="mapcard ${d.selectedMap === id ? 'on' : ''}" data-act="map" data-m="${id}">
         <span class="icon">${m.icon}</span><b>${m.name}</b><small>${m.size} · ${m.danger}</small><span class="blurb">${m.blurb}</span></button>`).join('');
     return `<p class="howto">Pick a map, drop in, loot what you can, fight off the machines, and reach an open exit before time runs out. <b>Die and you lose everything you brought.</b> The best loot only drops in deadly zones.</p>
       <h3>Choose a map</h3><div class="maps">${maps}</div>
       <div class="cols">
       <section><h3>Raid loadout</h3><p class="hint">Whatever you bring is lost if you die. Click to send it back to the stash.</p>
+        ${noGuns ? '<button class="btn freekit" data-act="freekit">🎁 FREE LOADOUT<small>A random gun, bandages, an Ammo Box and a throwable. Lose it and grab another.</small></button>' : ''}
         <div class="wslots">${lo.weapons.map((g, i) => (g ? this.itemCard(g, 'unequip', i) : `<div class="item empty">Weapon ${i + 1}<br><small>empty</small></div>`)).join('')}</div>
         <div class="grid">${lo.items.map((it, i) => this.itemCard(it, 'unpack', i)).join('')}${Array(Math.max(0, LOADOUT_SLOTS - lo.items.length)).fill('<div class="item empty"></div>').join('')}</div>
-        ${noGuns ? '<button class="btn" data-act="freekit">Grab a free kit (Pea Shooter, bandages, a Cherry Bomb)</button>' : ''}
       </section>
       <section><h3>Stash</h3><p class="hint">Click to pack it for the raid.</p>
         <div class="grid">${d.stash.items.map((it, i) => this.itemCard(it, 'pack', i)).join('') || '<p class="hint">Empty. Go raid!</p>'}</div>
@@ -747,10 +747,19 @@ export class Hub {
       case 'unpack':
         save.update((x) => { addToStash(x.stash.items, x.loadout.items[i]); x.loadout.items.splice(i, 1); });
         break;
-      case 'freekit':
-        save.update((x) => { x.loadout.weapons[0] = makeGun('pistol', 0); addToList(x.loadout.items, makeItem('bandage', 2), LOADOUT_SLOTS); addToList(x.loadout.items, makeItem('grenade', 1), LOADOUT_SLOTS); });
-        this.toast('Free kit packed. Try not to lose it.');
+      case 'freekit': {
+        // Free loadout: always available when you've got no gun packed.
+        const gun = makeGun(['pistol', 'smg', 'shotgun', 'revolver'][Math.floor(Math.random() * 4)], 0);
+        const thrown = ['grenade', 'dice', 'flash', 'sauce', 'sticky', 'smoke'][Math.floor(Math.random() * 6)];
+        save.update((x) => {
+          x.loadout.weapons[x.loadout.weapons[0] ? 1 : 0] = gun;
+          addToList(x.loadout.items, makeItem('bandage', 2), LOADOUT_SLOTS);
+          addToList(x.loadout.items, makeItem('ammo', 1), LOADOUT_SLOTS);
+          addToList(x.loadout.items, makeItem(thrown, 1), LOADOUT_SLOTS);
+        });
+        this.toast(`Free loadout packed: ${itemInfo(gun).name} and a ${ITEMS[thrown].name}. Try not to lose it.`);
         break;
+      }
       case 'sell': {
         const it = d.stash.items[i];
         const v = itemInfo(it).value;

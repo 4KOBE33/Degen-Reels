@@ -75,6 +75,12 @@ export const sfx = {
     if (weapon === 'pistol') { tone({ freq: 900, to: 200, dur: 0.08, vol: 0.12 * v }); noise({ dur: 0.08, vol: 0.15 * v, freq: 3000, to: 500 }); }
     if (weapon === 'smg') { tone({ freq: 700, to: 250, dur: 0.05, vol: 0.08 * v }); noise({ dur: 0.05, vol: 0.12 * v, freq: 2500, to: 600 }); }
     if (weapon === 'shotgun') { noise({ dur: 0.3, vol: 0.4 * v, freq: 2000, to: 150 }); tone({ freq: 150, to: 50, dur: 0.2, type: 'sine', vol: 0.3 * v }); }
+    if (weapon === 'revolver') { tone({ freq: 600, to: 120, dur: 0.14, vol: 0.16 * v }); noise({ dur: 0.18, vol: 0.25 * v, freq: 2200, to: 300 }); }
+    if (weapon === 'ar') { tone({ freq: 800, to: 220, dur: 0.06, vol: 0.09 * v }); noise({ dur: 0.07, vol: 0.14 * v, freq: 2800, to: 500 }); }
+    if (weapon === 'dbarrel') { noise({ dur: 0.4, vol: 0.5 * v, freq: 1800, to: 100 }); tone({ freq: 120, to: 40, dur: 0.25, type: 'sine', vol: 0.35 * v }); }
+    if (weapon === 'minigun') { tone({ freq: 500, to: 300, dur: 0.035, vol: 0.06 * v }); noise({ dur: 0.04, vol: 0.09 * v, freq: 2200, to: 800 }); }
+    if (weapon === 'rifle') { tone({ freq: 1200, to: 150, dur: 0.18, vol: 0.12 * v }); noise({ dur: 0.22, vol: 0.22 * v, freq: 3500, to: 400 }); }
+    if (weapon === 'sniper') { tone({ freq: 1600, to: 90, dur: 0.35, vol: 0.16 * v }); noise({ dur: 0.45, vol: 0.32 * v, freq: 4000, to: 200 }); }
     if (weapon === 'rocket') { noise({ dur: 0.5, vol: 0.25 * v, freq: 800, to: 200 }); tone({ freq: 200, to: 600, dur: 0.3, type: 'sawtooth', vol: 0.06 * v }); }
   },
   swing(pos, listener) { noise({ dur: 0.15, vol: 0.12 * falloff(pos, listener), freq: 600, to: 2500, q: 4 }); },

@@ -45,7 +45,7 @@ Every enemy has a small weak spot that takes extra damage. A crit pops a yellow 
    - **Mines:** pick 1 to 10 bombs on a 5×5 grid, flip tiles for gems, and cash out before you hit a bomb.
    - **Plinko:** low, medium or high risk, with up to 170x at the edges.
 
-   Sell loot to **the Fence**, dress up in **Look**, and check your **Records**. Broke? Grab a free kit.
+   Sell loot to **the Fence**, dress up in **Look**, and check your **Records**. No gun? Hit **🎁 Free Loadout** any time for a random gun, bandages, an Ammo Box and a throwable.
 2. **Deploy.** You spawn at the edge of the map with an 18-minute clock. Two of the four exits are open each raid.
 3. **Loot.** Hold **E** to search registers, crates, lockers and safes. Pull **loot slots** with chips you found. You're free to walk away and fight while the reels spin, and the prize pops out of the tray.
 4. **Fight.** The town is run by machines:
@@ -64,6 +64,10 @@ Every enemy has a small weak spot that takes extra damage. A crit pops a yellow 
      | 🎲 Loaded Dice | Tumbles and lands on a number. The higher the roll, the bigger the boom: a 6 is a jackpot blast, snake eyes fizzles |
      | ✨ Flash Chip | Stuns every machine and raider who sees it. Don't look at it yourself |
      | 🌶️ Ghost Pepper Sauce | Smashes on impact into a pool of fire that burns for 6 seconds (and warms you up in the snow) |
+     | 🍬 Taffy Bomb | Sticks to the first thing it touches, people included, then blows |
+     | 🎆 Jackpot Cluster | Pops open into six bomblets that each go off |
+     | 💨 Cigar Smoke | A 14-second smoke cloud that machines and raiders can't see through |
+     | 🔌 Short Circuit | EMP: stuns every machine nearby for 6 seconds and zaps them (does nothing to people) |
 
      Hold **X** to open the **throwable wheel**: point at the one you want and let go (tap X to just cycle).
 
@@ -114,6 +118,8 @@ The **🎨 Look** tab has a 3D preview you can spin. You can change your color, 
 | The Vault (needs a Keycard) | Vault | Legendary 7% |
 
 At **4 minutes** in, **The Pit Boss** (a giant golden slot mech) hits the casino floor. It sprays bullets, fires rockets, rolls out Dicers and slams the ground. Take it down for a guaranteed Epic+ gun, a Keycard, and a 1% shot at **The House's Crown** (🪙 25,000).
+
+**Guns:** Lucky Spoon, Pit Boss Bat, Pea Shooter, Snake Eyes (revolver), Bullet Hose (SMG), Card Counter (assault rifle), Boomstick (shotgun), Double Down (sawed-off), High Roller (marksman rifle), Ace in the Hole (sniper), The Whale (minigun, slows you down) and the Jackpot Launcher. The heavy hitters only drop in casinos, deadly zones and from the Pit Boss.
 
 Gun rarities: **Common**, **Rare**, **Epic** and **Legendary**, each with more damage and ammo. Rare drops shoot a colored beam into the sky.
 

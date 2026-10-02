@@ -259,7 +259,7 @@ export class PlayerController {
       const weapon = c.weapon;
       const { origin, dir } = this.aimRay();
       // Hold to keep firing the SMG or swinging; other guns fire once per click.
-      if (raid.fire(c, origin, dir) && !AUTO.has(weapon)) this.firing = false;
+      if (raid.fire(c, origin, dir) && !AUTO.has(weapon) && !(WEAPONS[weapon] && WEAPONS[weapon].auto)) this.firing = false;
     }
   }
 
