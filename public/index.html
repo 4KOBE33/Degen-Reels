@@ -127,6 +127,20 @@
     <div class="spkeys">Click / Space / → next squadmate · ← previous · Esc back to results</div>
   </div>
 
+  <!-- High Roller Lounge duels -->
+  <div id="duelPanel" class="screen dim" hidden>
+    <div class="card">
+      <h2>🥊 Challenge <span id="duelWho"></span></h2>
+      <p class="hint">Pick the stakes. You both put them up; the winner takes the pot. Nobody dies in The Pit.</p>
+      <div id="duelChips" class="betchips"></div>
+      <label class="duelguns"><input type="checkbox" id="duelGuns"> <span id="duelGunsLabel"></span></label>
+      <p id="duelNote" class="hint"></p>
+      <div class="resbtns"><button id="duelSend" class="btn big">SEND CHALLENGE</button><button id="duelCancel" class="btn big ghost">Cancel</button></div>
+    </div>
+  </div>
+  <div id="duelInvite" hidden></div>
+  <div id="duelStatus" hidden></div>
+
   <div id="results" class="screen dim" hidden>
     <div class="card wide">
       <h2 id="resultsTitle"></h2>

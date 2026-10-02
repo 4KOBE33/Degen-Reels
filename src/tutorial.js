@@ -31,7 +31,7 @@ export class Tutorial {
   }
 
   start(raid) {
-    this.on = this.wanted;
+    this.on = this.wanted && !raid.map.safe;
     this.moved = 0;
     this.last = raid.player ? raid.player.pos.clone() : null;
     this.done = new Set();

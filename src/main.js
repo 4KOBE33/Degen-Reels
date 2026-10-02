@@ -40,6 +40,7 @@ const controller = new PlayerController(raid, camera, renderer.domElement);
 window.degen = raid;
 raid.renderer = renderer;
 raid.camera = camera;
+raid.setOverlay = (n) => setOverlay(n);
 
 function resize() {
   renderer.setSize(window.innerWidth, window.innerHeight);
@@ -105,6 +106,7 @@ function setOverlay(name) {
   if (name) tutorial.note(name);
   $('bag').hidden = name !== 'bag';
   $('bigmap').hidden = name !== 'map';
+  $('duelPanel').hidden = name !== 'duel';
   if (name === 'map') hud.drawBigMap(raid);
   if (name && document.pointerLockElement) document.exitPointerLock();
   if (!name && raid.active) controller.lock();
@@ -132,6 +134,7 @@ window.addEventListener('keydown', (e) => {
     overlay = null;
     $('bag').hidden = true;
     $('bigmap').hidden = true;
+    $('duelPanel').hidden = true;
     if (raid.active) $('paused').hidden = false;
   }
 });
@@ -191,6 +194,7 @@ function switchMap(id, seed = null) {
   raid = new Raid(hud, id, seed);
   raid.renderer = renderer;
   raid.camera = camera;
+  raid.setOverlay = setOverlay;
   controller.raid = raid;
   if (typeof voice !== 'undefined') voice.raid = raid;
   applyQuality();

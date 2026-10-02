@@ -210,6 +210,18 @@ export class RaiderBrain {
     if (!c.alive) return;
     if (c.stunned > 0) return;
     if (c.downed) { this.crawl(dt); return; }
+    // A duelist (the House Champion) only fights whoever it's dueling, and otherwise stands around.
+    if (this.duelist) {
+      const t = this.duelTarget;
+      if (!t || !t.alive || !this.raid.duel || !this.raid.duel.fighting) return;
+      if (this.target !== t) this.reaction = 0.5;
+      this.target = t;
+      this.los = this.canSee(t);
+      if (this.los) this.lastSeen = t.pos.clone();
+      this.fight(t, dt);
+      this.unstick(dt);
+      return;
+    }
     this.age += dt;
     this.thinkIn -= dt;
     if (this.thinkIn <= 0) {

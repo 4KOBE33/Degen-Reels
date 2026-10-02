@@ -143,6 +143,14 @@ export const MAPS = {
     // notch less sharp so it's a fair fight in close quarters.
     lootBonus: 1, lootRolls: 1, botSkill: 0.7, botAim: 1.7,
   },
+  lounge: {
+    name: 'High Roller Lounge', icon: '🎩', size: 'Social', danger: 'Safe', half: 60, wilds: 'The Lounge', indoor: true,
+    blurb: 'No machines, no raiders, no shooting... except in The Pit. Challenge a friend (or the House Champion) to a 1v1 and bet chips or your guns on it.',
+    sky: [0x0b0612, 0x120a1c, 0x1b0f2b], fog: 0x1b0f2b,
+    ground: { base: '#5a1f3a', a: 'rgba(0,0,0,0.2)', b: 'rgba(255,210,63,0.12)' },
+    mapGround: '#3a1d2c', hemi: [0xffe6f0, 0x3a2a4a, 2.4], sun: [0xffe0f0, 0.5], mountains: null, glow: 0xffd23f, tough: 1,
+    raidTime: 7200, raiders: 0, hostile: 0, safe: true, noBoss: true,
+  },
   bayou: {
     name: 'Bayou Royale', icon: '🐊', size: 'Huge', danger: 'Medium', half: 270, wilds: 'The Swamp',
     blurb: 'A muggy swamp town wrapped around the Riverboat Royale, a casino on a paddle steamer.',
@@ -968,7 +976,10 @@ export function buildMap(scene, mapId = 'vegas') {
     lootRolls: def.lootRolls || 0,
     botSkill: def.botSkill || 1,
     botAim: def.botAim || 1,
-    raiders: def.raiders || null,
+    raiders: def.raiders ?? null,
+    safe: !!def.safe,
+    noBoss: !!def.noBoss,
+    lounge: layout.lounge || null,
     hostile: def.hostile ?? null,
     statics,
     solids,
@@ -2546,4 +2557,131 @@ function theBunker(k) {
   };
 }
 
-const BUILDERS = { vegas: lostVegas, frost: frostbitePeaks, bayou: bayouRoyale, tequila: temakilla, bunker: theBunker };
+// ---------- High Roller Lounge: a safe casino built around a 1v1 arena ----------
+
+function theLounge(k) {
+  const { H, THREE, statics, zones, minimap, part, toon, neonSign, flat, box, circle, carpetTexture } = k;
+  const CEIL = 10;
+  const wallMat = toon(0x2b1640);
+  for (const [x, z, w, d] of [[0, -H, H * 2, 1.5], [0, H, H * 2, 1.5], [-H, 0, 1.5, H * 2], [H, 0, 1.5, H * 2]]) {
+    const wall = part(new THREE.BoxGeometry(w, CEIL, d), wallMat, { ink: 0 });
+    wall.position.set(x, CEIL / 2, z);
+    statics.add(wall);
+    box(x, z, w, d, CEIL);
+  }
+  const carpet = new THREE.Mesh(new THREE.PlaneGeometry(H * 2, H * 2), toon(0xffffff, { map: carpetTexture() }));
+  carpet.rotation.x = -Math.PI / 2;
+  carpet.position.y = 0.03;
+  carpet.receiveShadow = true;
+  statics.add(carpet);
+  const ceiling = new THREE.Mesh(new THREE.PlaneGeometry(H * 2, H * 2), new THREE.MeshBasicMaterial({ color: 0x120818, side: THREE.DoubleSide }));
+  ceiling.rotation.x = Math.PI / 2;
+  ceiling.position.y = CEIL;
+  statics.add(ceiling);
+
+  // ----- The Pit: a glass-walled arena in the middle -----
+  const R = 14;
+  const mat = new THREE.Mesh(new THREE.CircleGeometry(R, 48), new THREE.MeshBasicMaterial({ color: 0x7a1028 }));
+  mat.rotation.x = -Math.PI / 2;
+  mat.position.y = 0.06;
+  const inner = new THREE.Mesh(new THREE.RingGeometry(R * 0.45, R * 0.48, 48), new THREE.MeshBasicMaterial({ color: 0xffd23f }));
+  inner.rotation.x = -Math.PI / 2;
+  inner.position.y = 0.07;
+  statics.add(mat, inner);
+  const glass = new THREE.Mesh(new THREE.CylinderGeometry(R, R, 4.5, 48, 1, true), new THREE.MeshBasicMaterial({ color: 0x9be7ff, transparent: true, opacity: 0.16, side: THREE.DoubleSide, depthWrite: false }));
+  glass.position.y = 2.25;
+  const rim = part(new THREE.TorusGeometry(R, 0.18, 8, 64), 0xd4a63a, { ink: 0.01, shadow: false });
+  rim.rotation.x = Math.PI / 2;
+  rim.position.y = 4.5;
+  const base = part(new THREE.TorusGeometry(R, 0.3, 8, 64), 0x1b0f2b, { ink: 0.01, shadow: false });
+  base.rotation.x = Math.PI / 2;
+  base.position.y = 0.3;
+  statics.add(glass, rim, base);
+  // The glass is solid: nobody walks in or shoots in. Duelists get dropped in.
+  for (let i = 0; i < 32; i++) {
+    const a = (i / 32) * Math.PI * 2;
+    circle(Math.cos(a) * R, Math.sin(a) * R, 1.5, 4.5);
+  }
+  // Cover inside: four short pillars and a center block.
+  for (const [x, z] of [[-6, -6], [6, 6], [-6, 6], [6, -6]]) {
+    const p = part(new THREE.BoxGeometry(1.8, 2.2, 1.8), 0x3a1d5c, { ink: 0.03 });
+    p.position.set(x, 1.1, z);
+    statics.add(p);
+    box(x, z, 1.8, 1.8, 2.2);
+  }
+  const block = part(new THREE.CylinderGeometry(1.6, 1.6, 1.3, 16), 0xd4a63a, { ink: 0.03 });
+  block.position.set(0, 0.65, 0);
+  statics.add(block);
+  circle(0, 0, 1.6, 1.3);
+  const pitSign = neonSign('THE PIT', '#ff3fa4', 14);
+  pitSign.position.set(0, 7.5, 0);
+  statics.add(pitSign);
+  const pitSign2 = neonSign('THE PIT', '#ff3fa4', 14);
+  pitSign2.position.set(0, 7.5, 0);
+  pitSign2.rotation.y = Math.PI;
+  statics.add(pitSign2);
+  zones.push({ name: 'The Pit', x: 0, z: 0, w: R * 2, d: R * 2, tier: 1 });
+  minimap.push({ x: 0, z: 0, w: R * 2, d: R * 2, color: '#7a1028', label: 'The Pit' });
+
+  // ----- Casino dressing around the edges (just for show) -----
+  const slotColors = [0x2a9d8f, 0xe63946, 0x7b2cbf, 0xffb703];
+  for (const side of [-1, 1]) {
+    for (let i = 0; i < 12; i++) {
+      const g = new THREE.Group();
+      const sx = side * (H - 2.5);
+      const sz = -40 + i * 7;
+      g.position.set(sx, 0, sz);
+      g.rotation.y = side > 0 ? -Math.PI / 2 : Math.PI / 2;
+      const body = part(new THREE.BoxGeometry(1.6, 2.2, 1.2), slotColors[i % 4]);
+      body.position.y = 1.1;
+      const screen = part(new THREE.BoxGeometry(1.2, 0.6, 0.05), 0xfff6e0, { ink: 0.02 });
+      screen.position.set(0, 1.6, 0.62);
+      g.add(body, screen);
+      statics.add(g);
+      box(sx, sz, 1.4, 1.8, 2.4);
+    }
+  }
+  const felt = toon(0x1f8a4c);
+  for (const [tx, tz] of [[-34, -32], [34, -32], [-34, 32], [34, 32], [-24, 0], [24, 0], [0, -34]]) {
+    const leg = part(new THREE.CylinderGeometry(0.8, 1.1, 0.9, 14), 0x2b2140);
+    leg.position.set(tx, 0.45, tz);
+    const rimT = part(new THREE.CylinderGeometry(2.6, 2.6, 0.22, 28), 0x6b3a1e);
+    rimT.position.set(tx, 1, tz);
+    const top = part(new THREE.CylinderGeometry(2.4, 2.4, 0.06, 28), felt, { ink: 0 });
+    top.position.set(tx, 1.12, tz);
+    statics.add(leg, rimT, top);
+    circle(tx, tz, 2.6, 1.15);
+  }
+  // A long bar on the north wall.
+  const bar = part(new THREE.BoxGeometry(30, 1.25, 2.2), 0x6b3a1e);
+  bar.position.set(0, 0.62, -H + 6);
+  statics.add(bar);
+  box(0, -H + 6, 30, 2.2, 1.3);
+  const barSign = neonSign('HIGH ROLLER LOUNGE', '#ffd23f', 34);
+  barSign.position.set(0, 7, -H + 1);
+  statics.add(barSign);
+  // The way out.
+  const door = part(new THREE.BoxGeometry(6, 4.2, 0.4), 0xd4a63a, { ink: 0.04 });
+  door.position.set(0, 2.1, H - 0.9);
+  const exitSign = neonSign('CASH OUT', '#5ee27a', 10);
+  exitSign.position.set(0, 5.6, H - 1.2);
+  exitSign.rotation.y = Math.PI;
+  statics.add(door, exitSign);
+  flat(0, H - 3.5, 8, 5, toon(0x5ee27a), 0.04);
+  minimap.push({ x: 0, z: H - 3, w: 8, d: 4, color: '#5ee27a', label: 'Cash Out' });
+  // The House Champion's corner.
+  flat(0, 22, 6, 6, toon(0xffd23f), 0.05);
+  zones.push({ name: 'High Roller Lounge', x: 0, z: 0, w: H * 2, d: H * 2, tier: 1 });
+
+  const lights = [[0, 0, 0xff3fa4], [-35, -30, 0xffd23f], [35, -30, 0x2ee6d6], [-35, 30, 0xc77dff], [35, 30, 0xffd23f], [0, 40, 0x5ee27a]];
+  return {
+    casino: { x: 0, z: 0, w: 0, d: 0, doors: [] },
+    vault: { x: 0, z: -5000, doorZ: -5000 },
+    extracts: [],
+    lights,
+    spawns: [[-40, 40], [40, 40], [-40, -40], [40, -40], [-20, 45], [20, 45], [-45, 0], [45, 0]],
+    lounge: { arena: { x: 0, z: 0, r: R }, champion: { x: 0, z: 22 }, exit: { x: 0, z: H - 3.5 } },
+  };
+}
+
+const BUILDERS = { vegas: lostVegas, frost: frostbitePeaks, bayou: bayouRoyale, tequila: temakilla, bunker: theBunker, lounge: theLounge };

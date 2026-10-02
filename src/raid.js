@@ -26,6 +26,7 @@ import { sfx } from './audio.js';
 import { keyName } from './keys.js';
 import { recordRaid } from './progress.js';
 import { randomLook } from './looks.js';
+import { Duel } from './duel.js';
 
 const raycaster = new THREE.Raycaster();
 const tmp = new THREE.Vector3();
@@ -248,6 +249,7 @@ export class Raid {
 
   // Free GPU memory when switching to a different map.
   dispose() {
+    if (this.duel) { this.duel.dispose(); this.duel = null; }
     this.scene.traverse((o) => {
       if (o.geometry) o.geometry.dispose();
       const m = o.material;
@@ -265,7 +267,7 @@ export class Raid {
     for (const s of this.map.enemySpots) this.spawnMachine(s.type, s.x, s.z);
     // Bayou ponds hide gators.
     if (this.mapId === 'bayou') for (const pd of this.map.hazards.ponds) this.spawnMachine('gator', pd.x, pd.z);
-    for (let i = 0; i < (this.map.raiders || RAIDERS.count); i++) this.spawnRaider();
+    for (let i = 0; i < (this.map.raiders ?? RAIDERS.count); i++) this.spawnRaider();
   }
 
   spawnMachine(type, x, z) {
@@ -331,6 +333,8 @@ export class Raid {
       }
     }
     if (this.recorder) this.recorder.reset();
+    if (this.duel) this.duel.dispose();
+    this.duel = null;
 
     // Two of the four exits are open each raid.
     const order = opts.exits ? [0, 1, 2, 3].sort((a, b) => (opts.exits.includes(b) ? 1 : 0) - (opts.exits.includes(a) ? 1 : 0)) : [0, 1, 2, 3].sort(() => Math.random() - 0.5);
@@ -368,6 +372,11 @@ export class Raid {
     }
     this.player = p;
     this.combatants.push(p);
+    // The Lounge: duels in The Pit, refereed by the host (or you, solo), with a House Champion.
+    if (this.map.lounge) {
+      this.duel = new Duel(this);
+      if (!opts.client) this.duel.spawnChampion();
+    }
 
     this.raidTime = this.map.raidTime || RAID_TIME;
     this.timeLeft = this.raidTime;
@@ -565,7 +574,8 @@ export class Raid {
     this.active = false;
     this.result = { ...result, run: this.run, time: this.raidTime - this.timeLeft, newFinds: [] };
     // Stats, collection log, XP and achievements.
-    this.result.progress = recordRaid(this.result, this.mapId);
+    // The Lounge is for hanging out and dueling: no raid XP or stats for walking in and out.
+    this.result.progress = this.map.safe ? null : recordRaid(this.result, this.mapId);
     if (this.killcam) this.hud.killcam(this.killcam);
     else this.hud.raidOver(this.result);
   }
@@ -574,6 +584,7 @@ export class Raid {
 
   get interactables() {
     const list = [...this.slots, ...this.pickups, this.vaultLock];
+    if (this.duel) list.push(...this.duel.interactables());
     for (const k of this.containers) if (!k.opened) list.push(k);
     for (const c of this.combatants) if (c.downed && c.alive && c.reviveSpot) list.push(c.reviveSpot);
     return list;
@@ -1049,6 +1060,8 @@ export class Raid {
       if (target.isPlayer || (attacker && attacker.isPlayer)) this.fx.number(target.center(new THREE.Vector3()).setY(target.pos.y + 2), 'DODGE!', '#2ee6d6', 1.1);
       return;
     }
+    // Safe maps (the Lounge): nobody gets hurt, except the two people dueling in The Pit.
+    if (this.map.safe && !(this.duel && this.duel.canHurt(attacker, target))) return;
     // The Pit Boss only takes hits from people in the casino with him.
     if (target.isBoss && attacker && attacker.pos && !this.inCasino(attacker.pos)) {
       if (attacker.isPlayer) {
@@ -1058,7 +1071,7 @@ export class Raid {
       return;
     }
     if (this.net && !fromNet) {
-      if (this.net.blocked(attacker, target)) return;
+      if (!this.map.safe && this.net.blocked(attacker, target)) return;
       // Client: we only decide our own hits. Send them to the host, show them right away.
       if (this.isClient && target.puppet) {
         if (!(attacker && attacker.isPlayer)) return;
@@ -1112,6 +1125,12 @@ export class Raid {
     }
     // Shooting a raider makes them (and their friends' tempers) hostile to you.
     if (target.brain && attacker && attacker.isPlayer) target.brain.hostile = true;
+    // A duel never kills anyone: the losing blow just ends it.
+    if (this.map.safe && target.hp <= 0) {
+      target.hp = 1;
+      if (this.duel) this.duel.lethal(target, attacker);
+      return;
+    }
     if (target.hp <= 0) {
       // Raiders and you go down first; machines just blow up.
       if (target.team !== 'machine' && !target.isBoss) this.down(target, attacker);
@@ -1270,6 +1289,7 @@ export class Raid {
     for (const e of this.extracts) e.beam.rotation.y += dt * 0.5;
     if (this.active && this.recorder) this.recorder.record(dt);
     if (this.net) this.net.update(dt);
+    if (this.duel) this.duel.update(dt);
 
     // The host keeps the world running for friends even after they're done themselves.
     const world = this.active || (this.isHost && this.net.worldAlive());
@@ -1283,8 +1303,10 @@ export class Raid {
     } else {
       this.timeLeft -= dt;
     }
-    if (!this.isClient && !this.bossSpawned && this.elapsed >= BOSS_TIME) this.spawnBoss();
-    if (this.active) {
+    if (!this.isClient && !this.bossSpawned && !this.map.noBoss && this.elapsed >= BOSS_TIME) this.spawnBoss();
+    // The Lounge never locks down.
+    if (this.map.safe) this.timeLeft = Math.max(this.timeLeft, 600);
+    if (this.active && !this.map.safe) {
       for (const mark of [300, 120, 60, 30]) {
         if (this.timeLeft <= mark && !this.warned[mark]) {
           this.warned[mark] = true;

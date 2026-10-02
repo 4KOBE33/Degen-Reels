@@ -246,6 +246,7 @@ export class Session {
       s.r = a.puppet ? a.netRarity || 0 : a.rarity || 0;
       s.wn = a.puppet ? a.netWeaponName : a.weaponName;
       if (a.human) s.h = 1;
+      if (a.champion) s.ch = 1;
       if (a.isPlayer) s.h = 1;
     }
     return s;
@@ -318,6 +319,7 @@ export class Session {
         ex: raid.extracts.map((e) => (e.active ? [e.call ? r2(e.call.t) : -1, r2(e.cooldown || 0), e.call ? e.call.by.name : ''] : null)),
         storm: raid.hazards.storm > 0 ? 1 : 0,
         bl: raid.bossLock && raid.bossLock.on ? 1 : 0,
+        dl: raid.duel ? raid.duel.view : null,
       });
     }
     this.events = [];
@@ -370,6 +372,10 @@ export class Session {
   hostReceive(from, d) {
     const raid = this.raid;
     if (d.k === 'rejoin') { this.handleJoin(from, d); return; }
+    const duel = this.raid.duel;
+    if (duel && d.k === 'duelAsk') { const a = this.puppetOf(from); const b = this.byId.get(d.to); if (a && b) duel.request(a, b, d.stakes || {}, d.gun || null); return; }
+    if (duel && d.k === 'duelReply') { const p = duel.pending.get(d.id); if (p && p.b.owner === from) duel.reply(d.id, !!d.yes, d.gun || null); return; }
+    if (duel && d.k === 'duelLost') { duel.lostBy(from); return; }
     if (d.k === 'watch') { if (d.i) this.watching.set(from, d.i); else this.watching.delete(from); return; }
     if (d.k === 'bye') { this.left.add(from); this.gone.add(from); return; }
     const pup = this.puppetOf(from);
@@ -572,6 +578,19 @@ export class Session {
         break;
       case 'over': this.ended = true; break;
       case 'hostgone': this.hostLeft(); break;
+      case 'duelInvite': if (raid.duel) raid.duel.showInvite(d); break;
+      case 'duelResult': if (raid.duel) raid.duel.applyResult(d); break;
+      case 'tp':
+        // The referee moved us (into or out of The Pit), patched up.
+        if (p && p.alive) {
+          p.pos.set(d.p[0], d.p[1], d.p[2]);
+          p.vel.set(0, 0, 0);
+          p.yaw = d.yaw || 0;
+          p.hp = p.maxHp;
+          p.downed = false;
+          p.rolling = null;
+        }
+        break;
       default:
     }
   }
@@ -639,6 +658,7 @@ export class Session {
       e.ring.material.color.setHex(e.call ? 0xffd23f : 0x5ee27a);
     });
     raid.setBossLock(!!s.bl);
+    if (raid.duel) raid.duel.apply(s.dl);
     if (raid.hazards.dust) raid.hazards.storm = s.storm ? Math.max(raid.hazards.storm, 1) : 0;
   }
 
@@ -657,6 +677,7 @@ export class Session {
     const c = new Combatant(raid, { name: a.n, look: a.l || undefined });
     c.puppet = true;
     c.human = !!a.h;
+    c.champion = !!a.ch;
     c.pos.set(a.x, a.y, a.z);
     c.yaw = a.yw;
     this.register(c, a.i);
