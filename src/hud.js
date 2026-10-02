@@ -320,6 +320,18 @@ export class Hud {
       ctx.fill();
       ctx.stroke();
     }
+    // Squadmates: always shown, pinned to the edge when far away.
+    for (const c of raid.combatants) {
+      if (c.isPlayer || !c.alive || !(c.human || (c.puppet && c.netId && c.netId[0] === 'p'))) continue;
+      const [x, y] = clampEdge(...toMini(c.pos.x, c.pos.z), 8);
+      ctx.fillStyle = c.downed ? '#ff9f43' : '#2ee6d6';
+      ctx.strokeStyle = '#1b0f2b';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(x, y, 5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+    }
     if (raid.boss && raid.boss.alive) {
       const [bx, by] = clampEdge(...toMini(raid.boss.pos.x, raid.boss.pos.z), 10);
       ctx.font = '16px sans-serif';

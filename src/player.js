@@ -44,7 +44,8 @@ export class PlayerController {
       if (e.button >= 3) e.preventDefault();
       if (!this.locked) {
         // Click the game to grab the mouse; extra buttons can still open and close the bag or map.
-        if (e.target === canvas) { this.lock(); return; }
+        // Only grab the mouse while you're actually playing (never on the death or results screens).
+        if (e.target === canvas && this.raid.active && this.c && this.c.alive) { this.lock(); return; }
         if (e.button >= 1 && this.raid.active) this.press(`Mouse${e.button}`, ['bag', 'map']);
         return;
       }

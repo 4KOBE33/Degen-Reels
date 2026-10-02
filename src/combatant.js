@@ -57,7 +57,6 @@ export class Combatant {
   get weapon() { return this.gun ? this.gun.kind : 'fists'; }
   get rarity() { return this.gun ? this.gun.rarity : 0; }
   get ammo() { return this.gun ? this.gun.ammo : Infinity; }
-  get weaponName() { return this.gun ? itemInfo(this.gun).name : 'Fists'; }
   get capacity() { return BACKPACK_SLOTS; }
 
   refreshWeapon() {
@@ -184,7 +183,34 @@ export class Combatant {
     if (attacker && attacker !== this) this.lastAttacker = attacker;
   }
 
+  // Someone driven over the network (a friend, or a bot on someone else's game): glide to where
+  // they really are and animate.
+  puppetUpdate(dt) {
+    const k = Math.min(1, dt * 12);
+    if (this.netPos) {
+      const before = this.pos.clone();
+      this.pos.lerp(this.netPos, k);
+      const moved = Math.hypot(this.pos.x - before.x, this.pos.z - before.z) / Math.max(dt, 0.001);
+      this.netSpeed = this.netSpeed === undefined ? moved : this.netSpeed + (moved - this.netSpeed) * Math.min(1, dt * 6);
+    }
+    if (this.netYaw !== undefined) this.yaw += Math.atan2(Math.sin(this.netYaw - this.yaw), Math.cos(this.netYaw - this.yaw)) * k;
+    if (this.netPitch !== undefined) this.pitch += (this.netPitch - this.pitch) * k;
+    const w = this.netWeapon || 'fists';
+    if (this.char.setWeapon) this.char.setWeapon(w, RARITIES[this.netRarity || 0] ? RARITIES[this.netRarity || 0].color : null);
+    const speed = this.netSpeed || 0;
+    this.char.root.position.copy(this.pos);
+    this.char.root.rotation.y = this.yaw;
+    this.char.animate(dt, {
+      speed, forward: Math.min(1, speed / PLAYER.walk), side: 0, onGround: true, pitch: this.pitch,
+      dead: !this.alive, downed: this.downed, showTag: true,
+    });
+    this.char.setTag(this.name, `${Math.max(0, Math.ceil(this.hp))}`, Math.ceil(this.armor || 0));
+  }
+
+  get weaponName() { return this.puppet ? this.netWeaponName || 'a gun' : this.gun ? itemInfo(this.gun).name : 'Fists'; }
+
   update(dt) {
+    if (this.puppet) { this.puppetUpdate(dt); return; }
     const canMove = this.alive && !this.raid.frozen;
     // Stamina: sprinting drains it, standing still or walking refills it after a short pause.
     const moving = this.move.lengthSq() > 0.01;

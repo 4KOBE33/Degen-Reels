@@ -103,19 +103,34 @@ export class SlotMachine {
     return `<b>${keyName('use')}</b> Pull the lever · 🪙 ${this.cost} · ${this.name}`;
   }
 
-  use(c) {
+  // paid: chips were already taken (a friend paid on their end in a party raid).
+  use(c, paid = false) {
     if (this.user) return 'Already spinning';
-    if (c.chips < this.cost) return `Need 🪙 ${this.cost} raid chips (you have ${c.chips})`;
-    c.chips -= this.cost;
-    if (c.isPlayer) this.raid.run.slotPulls++;
-    this.user = c;
+    const raid = this.raid;
+    if (!paid) {
+      if (c.chips < this.cost) return `Need 🪙 ${this.cost} raid chips (you have ${c.chips})`;
+      c.chips -= this.cost;
+      if (c.isPlayer) raid.run.slotPulls++;
+    }
+    // Party client: pay here, the host spins it and drops the prize.
+    if (raid.isClient && c.isPlayer) {
+      raid.net.send({ k: 'slot', i: raid.slots.indexOf(this) });
+      return null;
+    }
+    const jackpot = Math.random() < JACKPOT_CHANCE;
+    const finals = jackpot ? Array(3).fill(Math.floor(Math.random() * SYMBOLS.length)) : [0, 1, 2].map(() => Math.floor(Math.random() * SYMBOLS.length));
+    if (!jackpot && finals[0] === finals[1] && finals[1] === finals[2]) finals[2] = (finals[2] + 1) % SYMBOLS.length;
+    if (raid.isHost) raid.net.rel({ k: 'ss', i: raid.slots.indexOf(this), finals, jackpot });
+    this.startSpin(c, finals, jackpot);
+    return null;
+  }
+
+  startSpin(c, finals, jackpot) {
+    this.user = c || { remoteSpin: true };
     this.t = 0;
-    this.jackpot = Math.random() < JACKPOT_CHANCE;
-    const finals = this.jackpot ? Array(3).fill(Math.floor(Math.random() * SYMBOLS.length)) : [0, 1, 2].map(() => Math.floor(Math.random() * SYMBOLS.length));
-    if (!this.jackpot && finals[0] === finals[1] && finals[1] === finals[2]) finals[2] = (finals[2] + 1) % SYMBOLS.length;
+    this.jackpot = jackpot;
     this.reels.forEach((r, i) => { r.final = finals[i]; r.stopped = false; });
     sfx.lever(this.position, this.raid.listener);
-    return null;
   }
 
   update(dt) {
@@ -149,6 +164,11 @@ export class SlotMachine {
   payout() {
     const c = this.user;
     this.user = null;
+    // Party client: the host drops the prize; we just flash the lights.
+    if (this.raid.isClient) {
+      if (this.jackpot) { this.flashTime = 2.5; this.raid.fx.confetti(this.position.clone().setY(3)); sfx.jackpot(this.position, this.raid.listener); } else sfx.win(this.position, this.raid.listener);
+      return;
+    }
     const prizes = this.jackpot ? 3 : 1;
     let best = null;
     for (let i = 0; i < prizes; i++) {

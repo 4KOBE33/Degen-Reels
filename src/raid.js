@@ -14,6 +14,7 @@ import { Machine } from './enemies.js';
 import { Hazards } from './hazards.js';
 import { Throwables } from './throwables.js';
 import { NavGrid } from './nav.js';
+import { Recorder, Replay } from './replay.js';
 import { RaiderBrain } from './bots.js';
 import { ItemPickup } from './pickups.js';
 import {
@@ -31,11 +32,45 @@ const tmp = new THREE.Vector3();
 
 const escapeHtmlLite = (t) => String(t).replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
 
+// A seedable random so every player in a party builds the exact same map.
+function seededRandom(seed) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6D2B79F5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
 export class Raid {
-  constructor(hud, mapId = 'vegas') {
+  constructor(hud, mapId = 'vegas', seed = null) {
     this.mapId = mapId;
+    this.seed = seed;
     this.hud = hud;
+    this.net = null;
     this.scene = new THREE.Scene();
+    const realRandom = Math.random;
+    if (seed !== null) Math.random = seededRandom(seed);
+    try {
+      this.build(mapId);
+    } finally {
+      Math.random = realRandom;
+    }
+    this.combatants = [];
+    this.bots = [];
+    this.machines = [];
+    this.pickups = [];
+    this.rockets = [];
+    this.throws = new Throwables(this);
+    this.recorder = new Recorder(this);
+    this.player = null;
+    this.active = false;
+    this.populate();
+  }
+
+  build(mapId) {
     this.map = buildMap(this.scene, mapId);
     this.nav = new NavGrid(this.map);
     this.fx = new Fx(this.scene);
@@ -53,17 +88,10 @@ export class Raid {
     this.map.bake();
     this.minimap = drawMinimap(this.map, 512, false);
     this.bigmap = drawMinimap(this.map, 1024, true);
-
-    this.combatants = [];
-    this.bots = [];
-    this.machines = [];
-    this.pickups = [];
-    this.rockets = [];
-    this.throws = new Throwables(this);
-    this.player = null;
-    this.active = false;
-    this.populate();
   }
+
+  get isClient() { return !!(this.net && this.net.client); }
+  get isHost() { return !!(this.net && this.net.host); }
 
   get actors() {
     return this.combatants.concat(this.machines);
@@ -97,7 +125,10 @@ export class Raid {
     };
   }
 
-  openVault(c) {
+  openVault(c, fromNet = false) {
+    if (this.vaultOpen) return;
+    if (this.isClient && !fromNet) { this.net.send({ k: 'vault' }); return; }
+    if (this.isHost) this.net.rel({ k: 'vo', by: c.name });
     this.vaultOpen = true;
     this.vaultCollider.disabled = true;
     this.map.removeCollider(this.vaultCollider);
@@ -183,7 +214,8 @@ export class Raid {
 
   // ---------- raid lifecycle ----------
 
-  deploy({ name, look, loadout }) {
+  // opts (multiplayer): { client, exits: [i, i], spawn: [x, z], slot } — host and clients agree on these.
+  deploy({ name, look, loadout, opts = {} }) {
     // Reset the map.
     for (const p of this.pickups) p.remove();
     this.pickups = [];
@@ -198,10 +230,26 @@ export class Raid {
       this.scene.remove(this.player.char.root);
       this.combatants = this.combatants.filter((c) => c !== this.player);
     }
-    this.populate();
+    if (opts.client) {
+      // Clients don't run machines or bots; they arrive in the host's snapshots.
+      for (const m of this.machines) this.scene.remove(m.group);
+      for (const c of this.combatants) if (!c.isPlayer) this.scene.remove(c.char.root);
+      this.machines = [];
+      this.bots = [];
+      this.combatants = [];
+    } else {
+      this.populate();
+      // Fewer bots when real people are along.
+      const extra = (opts.party || 1) - 1;
+      for (let i = 0; i < extra && this.bots.length > 2; i++) {
+        const b = this.bots.pop();
+        this.removeCombatant(b.c);
+      }
+    }
+    if (this.recorder) this.recorder.reset();
 
     // Two of the four exits are open each raid.
-    const order = [0, 1, 2, 3].sort(() => Math.random() - 0.5);
+    const order = opts.exits ? [0, 1, 2, 3].sort((a, b) => (opts.exits.includes(b) ? 1 : 0) - (opts.exits.includes(a) ? 1 : 0)) : [0, 1, 2, 3].sort(() => Math.random() - 0.5);
     this.extracts.forEach((e, i) => {
       e.active = order.indexOf(i) < 2;
       e.beam.material.color.setHex(e.active ? 0x5ee27a : 0xff5d5d);
@@ -211,8 +259,9 @@ export class Raid {
     });
 
     const p = new Combatant(this, { name, look, isPlayer: true });
-    const [sx, sz] = pick(this.map.spawns);
-    const [x, z] = this.openSpot(sx, sz);
+    const [sx, sz] = opts.spawn || pick(this.map.spawns);
+    const slot = opts.slot || 0;
+    const [x, z] = this.openSpot(sx + (slot % 3) * 2 - 2, sz + Math.floor(slot / 3) * 2);
     p.pos.set(x, 0, z);
     p.yaw = Math.atan2(x, z);
     for (const gun of loadout.weapons) {
@@ -270,7 +319,7 @@ export class Raid {
       if (!e.active) continue;
       e.cooldown = Math.max(0, (e.cooldown || 0) - dt);
       // You, plus raiders who are done for the day (others just passing through don't count).
-      const inside = this.combatants.filter((c) => this.inCircle(e, c) && (c.isPlayer || (c.brain && c.brain.age > c.brain.leaveAt)));
+      const inside = this.combatants.filter((c) => this.inCircle(e, c) && (c.isPlayer || c.human || (c.brain && c.brain.age > c.brain.leaveAt)));
       if (p && p.alive && inside.includes(p)) this.extractAt = e;
       if (!e.call) {
         if (inside.length && !e.cooldown) this.callExtract(e, inside.includes(p) ? p : inside[0]);
@@ -320,6 +369,11 @@ export class Raid {
         const riders = inside.filter((c) => !c.isPlayer);
         for (const c of riders) {
           this.feed(`🚁 ${c.name} extracted${inside.includes(p) ? ' with you' : ''}`);
+          // A friend riding out: tell their game they made it.
+          if (c.human && this.net) {
+            this.net.net.to(c.owner, { k: 'extracted', where: e.name, riders: inside.filter((x) => x !== c).map((x) => x.name) });
+            this.net.gone.add(c.owner);
+          }
           this.removeCombatant(c);
         }
         if (inside.includes(p)) this.extract(e.name, riders.map((c) => c.name));
@@ -340,7 +394,10 @@ export class Raid {
     sfx.extract();
     save.update((d) => {
       d.stash.chips += p.chips;
-      for (const it of items) {
+      for (const raw of items) {
+        // Free-loadout gear you got out with is yours now.
+        const it = { ...raw };
+        delete it.free;
         if (!isGun(it)) {
           const same = d.stash.items.find((o) => o.id === it.id);
           if (same) { same.qty += it.qty; continue; }
@@ -356,6 +413,10 @@ export class Raid {
 
   fail(reason, by) {
     if (!this.active) return;
+    if (this.isClient && reason !== 'dead') {
+      const p = this.player;
+      this.net.send({ k: 'dead', items: [...p.weapons.filter(Boolean), ...p.backpack], chips: p.chips, by: null });
+    }
     const p = this.player;
     const items = [...p.weapons.filter(Boolean), ...p.backpack];
     const value = items.reduce((n, it) => n + itemInfo(it).value, 0) + p.chips;
@@ -371,18 +432,28 @@ export class Raid {
       : killer.team === 'machine' ? ({ shark: 'its blade', gator: 'its jaws', boss: 'the jackpot cannon', dicer: 'dice bullets' }[killer.type] || 'a burst of bullets')
         : killer.team === 'env' ? '' : killer.weaponName || 'their fists';
     this.killcam = {
-      t: 0, dur: 4, killer: real, victimPos: victim.pos.clone(), name: killer ? killer.name : 'Something',
+      t: 0, dur: 4, over: false, killer: real, victimPos: victim.pos.clone(), name: killer ? killer.name : 'Something',
       weapon, dealt: Math.round(killer ? this.hurtBy[killer.name] || 0 : 0), angle: Math.atan2(victim.pos.x - (real ? real.pos.x : victim.pos.x), victim.pos.z - (real ? real.pos.z : victim.pos.z + 1)),
     };
+    // Solo: play back the last few seconds from over the killer's shoulder.
+    if (!this.net && this.recorder && this.recorder.frames.length > 10) {
+      const replay = new Replay(this, this.recorder, victim, real);
+      if (!replay.done) {
+        this.killcam.replay = replay;
+        this.killcam.dur = replay.length + 1.8;
+      }
+    }
   }
 
   skipKillcam() {
-    if (this.killcam && this.killcam.t > 0.4) this.killcam.t = this.killcam.dur;
+    const kc = this.killcam;
+    if (kc && !kc.over && kc.t > 0.3) kc.t = kc.dur;
   }
 
   // Where the kill cam's camera sits and what it looks at.
   killcamView(dt, camera) {
     const k = this.killcam;
+    if (k.replay && !k.replay.done && k.replay.camera(camera, dt)) return;
     const target = k.killer ? k.killer.pos : k.victimPos;
     const big = k.killer && k.killer.isBoss;
     k.angle += dt * 0.35;
@@ -415,7 +486,7 @@ export class Raid {
   // ---------- downed and revives ----------
 
   // Lethal damage on a raider or you: go down instead of dying.
-  down(target, attacker) {
+  down(target, attacker, fromNet = false) {
     target.downed = true;
     target.hp = 0;
     target.downHp = PLAYER.downHp;
@@ -434,12 +505,22 @@ export class Raid {
     };
     // Machines lose interest in someone who's down.
     for (const m of this.machines) if (m.target === target) m.target = null;
-    this.feed(`${attacker ? attacker.name : 'Something'} downed ${target.name}`);
+    if (!fromNet) this.feed(`${attacker ? attacker.name : 'Something'} downed ${target.name}`);
     if (target.isPlayer) sfx.hurt();
   }
 
-  revive(target, by) {
+  revive(target, by, fromNet = false) {
     if (!target.downed || !target.alive) return null;
+    // Multiplayer: someone else's body is theirs to get up.
+    if (this.net && !fromNet && target.puppet) {
+      if (this.isClient) { this.net.send({ k: 'revive', i: target.netId }); return null; }
+      if (target.human) {
+        this.net.net.to(target.owner, { k: 'revived', by: this.net.id(by), byName: by ? by.name : 'Someone' });
+        this.feed(`🤝 ${by ? by.name : 'Someone'} revived ${target.name}`);
+        if (by && by.isPlayer) this.run.revives = (this.run.revives || 0) + 1;
+        return null;
+      }
+    }
     target.downed = false;
     target.reviveSpot = null;
     target.hp = PLAYER.reviveHp;
@@ -494,12 +575,21 @@ export class Raid {
   takeItem(c, pickup) {
     if (!this.pickups.includes(pickup)) return null;
     const item = pickup.item;
+    // Multiplayer client: ask the host for it (first come, first served).
+    if (this.isClient && c.isPlayer) {
+      if (!isGun(item) && !c.backpack.some((x) => x.id === item.id) && c.backpack.length >= c.capacity) return `Backpack full. Press ${keyName('bag')} and drop something.`;
+      if (pickup.requested && performance.now() - pickup.requested < 800) return null;
+      pickup.requested = performance.now();
+      this.net.send({ k: 'take', id: pickup.netId });
+      return null;
+    }
     let ok;
     if (isGun(item)) ok = c.equip(item) || addToList(c.backpack, item, c.capacity);
     else ok = addToList(c.backpack, item, c.capacity);
     if (!ok) return c.isPlayer ? `Backpack full. Press ${keyName('bag')} and drop something.` : 'full';
     pickup.remove();
     this.pickups = this.pickups.filter((p) => p !== pickup);
+    if (this.isHost && pickup.netId) { this.net.rel({ k: 'pg', id: pickup.netId }); this.net.pickupsById.delete(pickup.netId); }
     if (c.isPlayer) {
       const info = itemInfo(item);
       sfx.pickup();
@@ -519,6 +609,11 @@ export class Raid {
     const spot = this.findDropSpot(from || pos, pos);
     const p = new ItemPickup(this, spot, item, from);
     this.pickups.push(p);
+    if (this.isHost) {
+      p.netId = `k${this.net.nextId++}`;
+      this.net.pickupsById.set(p.netId, p);
+      this.net.rel({ k: 'pn', id: p.netId, item, p: [spot.x, spot.y || 0, spot.z], from: from ? [from.x, 1, from.z] : null });
+    }
     return p;
   }
 
@@ -618,6 +713,14 @@ export class Raid {
 
   // Drop something from your inventory onto the floor in front of you.
   dropFromInventory(c, where, index) {
+    if (this.isClient && c.isPlayer) {
+      const item = where === 'weapon' ? c.weapons[index] : c.backpack[index];
+      if (!item) return;
+      if (where === 'weapon') { c.weapons[index] = null; c.refreshWeapon(); } else c.backpack.splice(index, 1);
+      const at = c.pos.clone().addScaledVector(c.forward, 1.5);
+      this.net.send({ k: 'drop', item, at: [at.x, 0, at.z], from: [c.pos.x, 1, c.pos.z] });
+      return;
+    }
     let item;
     if (where === 'weapon') {
       item = c.weapons[index];
@@ -694,7 +797,10 @@ export class Raid {
 
     if (w.projectile) {
       const aim = this.raycast(origin, dir, 200, c).point;
-      this.spawnRocket(muzzle, aim.sub(muzzle).normalize(), c, c.rarity);
+      const rdir = aim.sub(muzzle).normalize();
+      this.spawnRocket(muzzle, rdir, c, c.rarity);
+      if (this.isClient && c.isPlayer) this.net.send({ k: 'rocket', o: [muzzle.x, muzzle.y, muzzle.z], d: [rdir.x, rdir.y, rdir.z], r: c.rarity });
+      else if (this.isHost) this.net.ev({ k: 'rk', o: [muzzle.x, muzzle.y, muzzle.z], d: [rdir.x, rdir.y, rdir.z], r: c.rarity }, muzzle);
     } else {
       // Bad footing means bad aim: even a laser-accurate rifle sprays when you're sprinting or mid-air.
       const pen = c.aimPenalty();
@@ -706,7 +812,14 @@ export class Raid {
         d.z += (Math.random() - 0.5) * 2 * spread;
         d.normalize();
         const hit = this.raycast(origin, d, w.range, c);
-        this.fx.tracer(muzzle, hit.point, c.rarity ? new THREE.Color(RARITIES[c.rarity].css).getHex() : 0xffe066);
+        const color = c.rarity ? new THREE.Color(RARITIES[c.rarity].css).getHex() : 0xffe066;
+        this.fx.tracer(muzzle, hit.point, color);
+        if (this.recorder) this.recorder.shot(muzzle, hit.point, color, c, hit.crit > 1);
+        if (this.net && i < 3) {
+          const shot = { f: [muzzle.x, muzzle.y, muzzle.z], to: [hit.point.x, hit.point.y, hit.point.z], c: color, w: i === 0 ? c.weapon : null };
+          if (this.isClient && c.isPlayer) this.net.send({ k: 'shot', ...shot });
+          else if (this.isHost) this.net.ev({ k: 'tr', ...shot }, muzzle);
+        }
         if (hit.target) this.damage(hit.target, damage * hit.crit, c, hit.point, hit.crit > 1);
         else if (hit.hit) this.fx.puff(hit.point, 0xfff6e0, 0.12);
       }
@@ -717,6 +830,8 @@ export class Raid {
   machineShot(m, origin, dir, damage) {
     const hit = this.raycast(origin, dir, m.def.range + 10, m);
     this.fx.tracer(origin, hit.point, 0xff3fa4);
+    if (this.recorder) this.recorder.shot(origin, hit.point, 0xff3fa4, m);
+    if (this.isHost) this.net.ev({ k: 'tr', f: [origin.x, origin.y, origin.z], to: [hit.point.x, hit.point.y, hit.point.z], c: 0xff3fa4 }, origin);
     this.fx.muzzleFlash(origin);
     sfx.zap(origin, this.listener);
     if (hit.target && hit.target.team !== 'machine') this.damage(hit.target, damage * this.map.toughness, m, hit.point);
@@ -794,8 +909,12 @@ export class Raid {
     const owner = rocket.owner;
     this.fx.explosion(point, w.splash);
     sfx.boom(point, this.listener);
+    if (this.recorder) this.recorder.boom(point, w.splash);
     const pd = this.player && this.player.alive ? this.player.pos.distanceTo(point) : 99;
     this.shake = Math.max(this.shake, Math.max(0, 0.6 - pd / 30));
+    // In a party, the host works out who got hurt; everyone else just sees the boom.
+    if (this.isClient) return;
+    if (this.isHost) this.net.ev({ k: 'bm', s: w.splash }, point);
     const base = rocket.damage || w.damage * RARITIES[rocket.rarity || 0].damage;
     for (const a of this.actors) {
       if (!a.alive) continue;
@@ -812,11 +931,32 @@ export class Raid {
     }
   }
 
-  damage(target, amount, attacker, at, crit = false) {
+  damage(target, amount, attacker, at, crit = false, fromNet = false) {
     if (!target.alive || this.frozen) return;
     if (attacker && attacker !== target && attacker.team === 'machine' && target.team === 'machine') return;
     amount = Math.round(amount);
     if (amount <= 0) return;
+    if (this.net && !fromNet) {
+      if (this.net.blocked(attacker, target)) return;
+      // Client: we only decide our own hits. Send them to the host, show them right away.
+      if (this.isClient && target.puppet) {
+        if (!(attacker && attacker.isPlayer)) return;
+        this.net.send({ k: 'hit', i: target.netId, dmg: amount, crit, at: at ? [at.x, at.y, at.z] : null });
+        this.fx.number(at || target.center(new THREE.Vector3()), crit ? `${amount}!` : `${amount}`, crit ? '#ffd23f' : '#ff5d5d', crit ? 1.6 : 1.1);
+        this.hud.hitmarker(false, crit);
+        if (crit) sfx.crit(); else sfx.hit();
+        return;
+      }
+      // Host: a friend got hit. Their game applies it (armor, downed, death).
+      if (this.isHost && target.human) {
+        this.net.net.to(target.owner, { k: 'hurt', amount, crit, by: this.net.id(attacker), byName: attacker ? attacker.name : null, at: at ? [at.x, at.y, at.z] : null });
+        this.fx.number(at || target.center(new THREE.Vector3()), `${amount}`, '#ff5d5d', attacker && attacker.isPlayer ? 1.1 : 0.8);
+        target.hurt(attacker);
+        if (attacker && attacker.isPlayer) { this.hud.hitmarker(false, crit); sfx.hit(); }
+        return;
+      }
+    }
+    if (target.isPlayer && this.recorder) this.recorder.hurt(amount, crit, at);
     // Already down: hits chew through what's left, armor or not.
     if (target.downed) {
       target.downHp -= amount;
@@ -860,6 +1000,15 @@ export class Raid {
 
   kill(target, attacker) {
     if (!target.alive) return;
+    // Party: tell the host we're out, so our stuff drops for the others.
+    if (target.isPlayer && this.isClient) {
+      this.net.send({ k: 'dead', items: [...target.weapons.filter(Boolean), ...target.backpack], chips: target.chips, by: attacker ? attacker.name : null });
+    }
+    // Host: a friend landed the kill, give them the credit.
+    if (this.isHost && attacker && attacker.human && target !== attacker) {
+      const what = target.isBoss ? 'boss' : target.type === 'gator' ? 'gator' : target.team === 'machine' ? 'machine' : 'raider';
+      this.net.net.to(attacker.owner, { k: 'credit', what });
+    }
     target.downed = false;
     target.alive = false;
     target.hp = 0;
@@ -946,17 +1095,28 @@ export class Raid {
   update(dt) {
     const p = this.player;
     const kc = this.killcam;
-    if (kc && kc.t < kc.dur) {
-      // Slow motion while the kill cam plays.
+    const solo = !this.net;
+    if (kc && !kc.over) {
       kc.t += dt;
-      dt *= 0.35;
-      this.focus.copy(kc.killer ? kc.killer.pos : kc.victimPos);
-      if (kc.t >= kc.dur) { this.hud.killcam(null); if (this.result) this.hud.raidOver(this.result); }
+      if (kc.replay && !kc.replay.done) kc.replay.update(dt);
+      if (kc.t >= kc.dur) {
+        kc.over = true;
+        this.hud.killcam(null);
+        if (this.result) this.hud.raidOver(this.result);
+      } else if (solo) {
+        // Solo: the world holds still while the replay plays.
+        this.focus.copy(kc.killer && kc.killer.pos ? kc.killer.pos : kc.victimPos);
+        this.listener.copy(this.focus).setY(1.5);
+        this.fx.update(dt);
+        this.map.update(dt);
+        this.map.followShadow(this.focus);
+        return;
+      }
     }
     if (p && p.alive) this.focus.copy(p.pos);
     this.listener.copy(this.focus).setY(1.5);
 
-    for (const b of this.bots) b.update(dt);
+    if (!this.isClient) for (const b of this.bots) b.update(dt);
     for (const c of this.combatants.slice()) {
       c.update(dt);
       c.wantJump = false;
@@ -986,25 +1146,44 @@ export class Raid {
     this.fx.update(dt);
     this.shake = Math.max(0, this.shake - dt * 1.5);
     for (const e of this.extracts) e.beam.rotation.y += dt * 0.5;
+    if (this.active && this.recorder) this.recorder.record(dt);
+    if (this.net) this.net.update(dt);
 
-    if (!this.active) return;
-    this.timeLeft -= dt;
-    this.elapsed += dt;
-    if (!this.bossSpawned && this.elapsed >= BOSS_TIME) this.spawnBoss();
-    for (const mark of [300, 120, 60, 30]) {
-      if (this.timeLeft <= mark && !this.warned[mark]) {
-        this.warned[mark] = true;
-        this.hud.toast(`⏰ ${mark >= 60 ? `${mark / 60} minute${mark > 60 ? 's' : ''}` : `${mark} seconds`} until The House locks down ${this.map.name}. Get to an exit!`, 'big');
+    // The host keeps the world running for friends even after they're done themselves.
+    const world = this.active || (this.isHost && this.net.worldAlive());
+    if (!world) {
+      if (this.isHost && !this.net.ended) this.net.endWorld();
+      return;
+    }
+    if (!this.isClient) {
+      this.timeLeft -= dt;
+      this.elapsed += dt;
+    } else {
+      this.timeLeft -= dt;
+    }
+    if (!this.isClient && !this.bossSpawned && this.elapsed >= BOSS_TIME) this.spawnBoss();
+    if (this.active) {
+      for (const mark of [300, 120, 60, 30]) {
+        if (this.timeLeft <= mark && !this.warned[mark]) {
+          this.warned[mark] = true;
+          this.hud.toast(`⏰ ${mark >= 60 ? `${mark / 60} minute${mark > 60 ? 's' : ''}` : `${mark} seconds`} until The House locks down ${this.map.name}. Get to an exit!`, 'big');
+        }
       }
     }
     if (this.timeLeft <= 0) {
       this.timeLeft = 0;
-      p.alive = false;
-      this.fail('time');
+      if (this.active) {
+        p.alive = false;
+        this.fail('time');
+      }
+      if (this.isHost) this.net.endWorld();
       return;
     }
 
-    this.updateExtracts(dt);
+    if (this.isClient) {
+      // The host runs the rides; we just need to know if we're standing in one.
+      this.extractAt = p && p.alive ? this.extracts.find((e) => e.active && this.inCircle(e, p)) || null : null;
+    } else this.updateExtracts(dt);
   }
 }
 

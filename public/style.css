@@ -673,3 +673,20 @@ body.isdowned #vignette { opacity: 0.6 !important; }
 
 .btn.freekit { width: 100%; background: linear-gradient(135deg, #5ee27a, #2ee6d6); display: grid; gap: 2px; margin-bottom: 8px; }
 .btn.freekit small { font: 800 12px var(--body); letter-spacing: 0; opacity: 0.85; }
+
+/* Party */
+.party { margin-bottom: 12px; padding: 10px 12px; border-radius: 14px; border: 4px solid var(--ink); background: linear-gradient(135deg, rgba(46, 230, 214, 0.18), rgba(27, 15, 43, 0.75)); display: grid; gap: 8px; }
+.party.in { background: linear-gradient(135deg, rgba(94, 226, 122, 0.22), rgba(27, 15, 43, 0.75)); }
+.phead { display: grid; gap: 2px; }
+.phead b { font: 400 20px var(--display); letter-spacing: 1px; }
+.phead small { font-weight: 800; font-size: 13px; opacity: 0.85; }
+.pcode { display: inline-block; margin-left: 6px; padding: 0 10px; border-radius: 8px; background: var(--gold); color: var(--ink); letter-spacing: 4px; cursor: pointer; }
+.prow { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+.prow .btn { margin: 0; }
+#partyCode { width: 110px; padding: 8px 10px; border: 4px solid var(--ink); border-radius: 12px; font: 400 20px var(--display); letter-spacing: 4px; text-transform: uppercase; background: var(--cream); color: var(--ink); text-align: center; }
+.pmembers { display: flex; gap: 6px; flex-wrap: wrap; }
+.pm { padding: 4px 10px; border-radius: 10px; background: rgba(27, 15, 43, 0.8); font-weight: 900; font-size: 14px; }
+.pm.lead { border: 2px solid var(--gold); }
+.pffa { font-weight: 800; font-size: 14px; display: flex; gap: 6px; align-items: center; }
+.item { position: relative; }
+.freetag { position: absolute; top: 4px; left: 4px; font: 900 9px var(--body); background: #5ee27a; color: var(--ink); border-radius: 5px; padding: 1px 4px; }

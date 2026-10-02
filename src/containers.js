@@ -73,8 +73,24 @@ export class Container {
   // Containers are searched by holding E; the controller calls open() when it's done.
   get searchTime() { return this.def.time; }
 
+  // Just the lid and sound (multiplayer: the host rolled the loot).
+  showOpened() {
+    if (this.opened) return;
+    this.opened = true;
+    this.lid.position.y = this.h + 0.5;
+    this.lid.rotation.x = -0.9;
+    sfx.open(this.spot, this.raid.listener);
+  }
+
   open(c) {
     if (this.opened) return;
+    const raid = this.raid;
+    // Party client: the host opens it and rolls the loot.
+    if (raid.isClient) {
+      if (c && c.isPlayer) { raid.net.send({ k: 'open', i: raid.containers.indexOf(this) }); raid.run.containers++; }
+      return;
+    }
+    if (raid.isHost) raid.net.rel({ k: 'ko', i: raid.containers.indexOf(this) });
     this.opened = true;
     if (c && c.isPlayer && this.raid.run) this.raid.run.containers++;
     this.lid.position.y = this.h + 0.5;

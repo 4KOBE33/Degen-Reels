@@ -341,6 +341,18 @@ export class Machine {
 
   update(dt) {
     const raid = this.raid;
+    // Driven by the party host: glide to the reported spot.
+    if (this.puppet && this.alive) {
+      const k = Math.min(1, dt * 10);
+      if (this.netPos) this.pos.lerp(this.netPos, k);
+      if (this.netYaw !== undefined) this.yaw += Math.atan2(Math.sin(this.netYaw - this.yaw), Math.cos(this.netYaw - this.yaw)) * k;
+      this.flash = Math.max(0, this.flash - dt);
+      this.parts.bodyMat.emissiveIntensity = this.flash > 0 ? 0.7 : 0;
+      this.group.position.copy(this.pos);
+      this.group.rotation.y = this.yaw;
+      this.group.rotation.z = this.stunned > 0 ? Math.sin(performance.now() / 70) * 0.12 : 0;
+      return true;
+    }
     if (!this.alive) {
       this.dead += dt;
       this.group.rotation.x = Math.min(Math.PI / 2, this.dead * 4) * (this.type === 'dicer' ? 0 : 1);

@@ -78,6 +78,8 @@ export class ChipSystem {
   // Throws `amount` worth of chips out from `origin`. Owner can't re-grab them for a moment.
   spawnBurst(origin, amount, owner, { toward = null, speed = 4 } = {}) {
     if (amount <= 0) return;
+    // Party: everyone gets their own copy of the chips to grab.
+    if (this.raid.isHost) this.raid.net.ev({ k: 'ch', n: amount, sp: speed }, origin);
     for (const d of breakIntoChips(amount)) {
       const value = d.value;
       const mesh = new THREE.Mesh(chipGeo, chipMaterials(DENOMINATIONS.find((x) => x.name === d.name)));

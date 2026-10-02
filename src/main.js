@@ -1,6 +1,8 @@
 // Boots the renderer and ties the Hub, the raid and the HUD together.
 import * as THREE from 'three';
 import { Raid } from './raid.js';
+import { net } from './net.js';
+import { Session } from './multi.js';
 import { Hud } from './hud.js';
 import { Hub } from './hub.js';
 import { PlayerController } from './player.js';
@@ -66,7 +68,7 @@ function setOverlay(name) {
   $('bigmap').hidden = name !== 'map';
   if (name === 'map') hud.drawBigMap(raid);
   if (name && document.pointerLockElement) document.exitPointerLock();
-  if (!name) controller.lock();
+  if (!name && raid.active) controller.lock();
 }
 
 controller.onToggle = (name) => setOverlay(overlay === name ? null : name);
@@ -75,6 +77,14 @@ controller.onLockChange = (locked) => {
   $('paused').hidden = locked || !inRaid || !!overlay;
   if (locked && overlay) setOverlay(null);
 };
+const kcLive = () => raid.killcam && !raid.killcam.over;
+// Results screen: Space / Enter / Esc also take you back to the hub.
+window.addEventListener('keydown', (e) => {
+  if ($('results').hidden || !['Space', 'Enter', 'Escape'].includes(e.code)) return;
+  if (kcLive()) return;
+  e.preventDefault();
+  $('resultsBack').click();
+});
 // Skip the kill cam.
 window.addEventListener('keydown', (e) => { if (e.code === 'Space' || e.code === 'Escape' || e.code === 'Enter') raid.skipKillcam(); });
 window.addEventListener('mousedown', () => raid.skipKillcam());
@@ -133,17 +143,42 @@ hud.onUse = (id) => {
 };
 
 // Build a different map. Takes a second or two, so it only happens when you pick a new one.
-function switchMap(id) {
-  if (raid.mapId === id || raid.active) return;
+// seed: party raids rebuild the map from a shared seed so everyone's world matches.
+function switchMap(id, seed = null) {
+  if (seed === null && raid.mapId === id && raid.seed === null) return;
+  if (raid.active) return;
+  if (session) { session.dispose(); session = null; }
   raid.dispose();
-  raid = new Raid(hud, id);
+  raid = new Raid(hud, id, seed);
   raid.renderer = renderer;
   raid.camera = camera;
   controller.raid = raid;
   window.degen = raid;
 }
 
+// ---------- multiplayer ----------
+let session = null;
+net.connect();
+// The leader's start: everyone (leader included) launches from the server's echo.
+net.on('start', (info) => {
+  if (raid.active) return;
+  hub.launch(info);
+});
+net.on('disconnected', () => {
+  if (session && raid.active) hud.toast('🔌 Lost connection to the party server.', 'big');
+});
+
 const hub = new Hub({
+  net,
+  // Leader hit DEPLOY SQUAD: pick the shared seed, exits and drop point, and tell the party.
+  onPartyStart() {
+    const mapId = save.get().selectedMap;
+    const seed = Math.floor(Math.random() * 2 ** 31);
+    const exits = [0, 1, 2, 3].sort(() => Math.random() - 0.5).slice(0, 2);
+    const spawns = raid.mapId === mapId ? raid.map.spawns : null;
+    const spawn = spawns ? spawns[Math.floor(Math.random() * spawns.length)] : null;
+    net.start({ mapId, seed, exits, spawn });
+  },
   onMapChange(id) {
     $('loading').hidden = false;
     // Let the "Loading" note paint before the heavy build.
@@ -152,8 +187,19 @@ const hub = new Hub({
   onDeploy(opts) {
     applySettings();
     pauseKeys();
-    switchMap(opts.mapId);
-    raid.deploy(opts);
+    if (opts.party) {
+      const info = opts.party;
+      switchMap(info.mapId, info.seed);
+      session = new Session(raid, net, info);
+      const slot = Math.max(0, info.members.findIndex((m) => m.id === net.id));
+      const spawn = info.spawn || raid.map.spawns[0];
+      raid.deploy({ ...opts, opts: { client: !session.host, exits: info.exits, spawn, slot, party: info.members.length } });
+      if (session.host) session.addFriends(new THREE.Vector3(spawn[0], 0, spawn[1]));
+      else session.register(raid.player, `p${net.id}`);
+    } else {
+      switchMap(opts.mapId);
+      raid.deploy(opts);
+    }
     controller.c = raid.player;
     hub.hide();
     $('hud').hidden = false;
@@ -166,6 +212,8 @@ const hub = new Hub({
 window.hub = hub;
 
 hud.onLeave = () => {
+  // Friends' games stop listening once they're out; the leader keeps the world going for the rest.
+  if (session && session.client) { session.dispose(); session = null; }
   $('results').hidden = true;
   $('hud').hidden = true;
   hub.show();
@@ -285,8 +333,10 @@ function step(now) {
     $('bigmap').hidden = true;
   }
   wasActive = raid.active;
+  // Never keep the mouse captured once you're out of the raid.
+  if (!raid.active && document.pointerLockElement && wasActive === false && !kcLive()) document.exitPointerLock();
 
-  const kc = raid.killcam && raid.killcam.t < raid.killcam.dur ? raid.killcam : null;
+  const kc = raid.killcam && !raid.killcam.over ? raid.killcam : null;
   document.body.classList.toggle('killcam', !!kc);
   if (kc && $('hub').hidden) {
     raid.killcamView(dt, camera);

@@ -135,20 +135,21 @@ export class RaiderBrain {
     for (const a of raid.actors) {
       if (!a.alive || a === c || a === this.friend) continue;
       // Someone's down: friendly raiders don't shoot them, hostile ones finish the job.
-      if (a.downed && !(a.isPlayer && this.hostile)) continue;
+      const person = a.isPlayer || a.human;
+      if (a.downed && !(person && this.hostile)) continue;
       // Give you a few seconds after dropping in before anyone comes for you.
-      if (a.isPlayer && raid.elapsed < 12 && c.lastAttacker !== a) continue;
-      const enemy = a.team === 'machine' || (a.isPlayer && (this.hostile || c.lastAttacker === a)) || a === c.lastAttacker;
+      if (person && raid.elapsed < 12 && c.lastAttacker !== a) continue;
+      const enemy = a.team === 'machine' || (person && (this.hostile || c.lastAttacker === a)) || a === c.lastAttacker;
       if (!enemy) continue;
       const d = a.pos.distanceTo(c.pos);
       if (d > (a === c.lastAttacker ? 60 : 36)) continue;
       // Whoever's shooting at me first, then the closest.
-      const score = d - (a === c.lastAttacker ? 25 : 0) - (a.isPlayer && this.hostile ? 8 : 0);
+      const score = d - (a === c.lastAttacker ? 25 : 0) - (person && this.hostile ? 8 : 0);
       if (score < bestScore) { bestScore = score; best = a; }
     }
     if (best && best !== this.target) {
       this.reaction = (0.55 - this.skill * 0.35) + Math.random() * 0.25;
-      if (best.downed && best.isPlayer) say(raid, c, FINISH_LINES);
+      if (best.downed && (best.isPlayer || best.human)) say(raid, c, FINISH_LINES);
     }
     this.target = best;
     this.los = best ? this.canSee(best) : false;
@@ -158,7 +159,7 @@ export class RaiderBrain {
     if (!this.rescue && !this.hostile) {
       for (const a of raid.combatants) {
         if (a === c || !a.alive || !a.downed) continue;
-        if (a.isPlayer && c.lastAttacker === a) continue;
+        if ((a.isPlayer || a.human) && c.lastAttacker === a) continue;
         const d = a.pos.distanceTo(c.pos);
         if (d < 45 && (d < 15 || this.canSee(a))) { this.rescue = a; this.reviveT = 0; say(raid, c, RESCUE_LINES); break; }
       }

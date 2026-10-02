@@ -188,10 +188,20 @@ export class Throwables {
     return bounced;
   }
 
-  spawn(owner, origin, dir, id = 'grenade') {
+  spawn(owner, origin, dir, id = 'grenade', roll = null) {
     const def = ITEMS[id];
     const { pos, vel } = this.launch(origin, dir);
-    const roll = 1 + Math.floor(Math.random() * 6);
+    roll = roll || 1 + Math.floor(Math.random() * 6);
+    const raid = this.raid;
+    // Party: your throw goes to the host (who works out the damage); the host shows everyone its own.
+    if (raid.net && owner === raid.player) {
+      const o = [origin.x, origin.y, origin.z];
+      const d = [dir.x, dir.y, dir.z];
+      if (raid.isClient) raid.net.send({ k: 'throw', o, d, id, roll });
+      else raid.net.ev({ k: 'th', o, d, id, roll, ow: raid.net.id(owner) }, origin);
+    } else if (raid.isHost && owner && !owner.puppet) {
+      raid.net.ev({ k: 'th', o: [origin.x, origin.y, origin.z], d: [dir.x, dir.y, dir.z], id, roll, ow: raid.net.id(owner) }, origin);
+    }
     const { mesh, spark } = buildMesh(id, roll);
     mesh.position.copy(pos);
     this.raid.scene.add(mesh);
@@ -332,7 +342,7 @@ export class Throwables {
     ring.rotation.x = Math.PI / 2;
     ring.position.copy(at);
     raid.fx.add(ring, 0.6, (o, t) => { o.scale.setScalar(1 + t * def.splash); o.material.opacity = 1 - t; });
-    for (const m of raid.machines) {
+    for (const m of raid.isClient ? [] : raid.machines) {
       if (!m.alive) continue;
       const c = m.center ? m.center(new THREE.Vector3()) : m.pos;
       if (c.distanceTo(at) > def.splash + (m.isBoss ? 3 : 0)) continue;
@@ -357,7 +367,7 @@ export class Throwables {
       if (raid.raycast(eye, dir, d, null, { solidsOnly: true }).hit) return 0;
       return 1 - d / def.splash;
     };
-    for (const a of raid.actors) {
+    for (const a of raid.isClient ? [] : raid.actors) {
       if (!a.alive || a.isPlayer) continue;
       const eye = a.center(new THREE.Vector3()).setY(a.pos.y + (a.isBoss ? 4 : 1.4));
       const k = sees(eye);
@@ -416,7 +426,7 @@ export class Throwables {
     const fade = Math.min(1, p.t / 1);
     for (const f of p.flames) f.scale.set(1, (0.6 + Math.abs(Math.sin(p.t * 9 + f.userData.phase)) * 0.8) * fade, 1);
     p.tick -= dt;
-    if (p.tick <= 0) {
+    if (p.tick <= 0 && !this.raid.isClient) {
       p.tick = 0.5;
       for (const a of this.raid.actors) {
         if (!a.alive) continue;

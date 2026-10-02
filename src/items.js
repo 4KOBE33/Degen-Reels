@@ -81,7 +81,8 @@ export function addToList(list, item, capacity = Infinity) {
   if (!isGun(item) && info.stack > 1) {
     let left = item.qty;
     for (const other of list) {
-      if (other.id !== item.id) continue;
+      // Free-loadout items never mix with ones you own.
+      if (other.id !== item.id || !!other.free !== !!item.free) continue;
       const room = info.stack - other.qty;
       const n = Math.min(room, left);
       other.qty += n;

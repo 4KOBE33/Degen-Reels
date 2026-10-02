@@ -502,7 +502,7 @@ function makeNameTag() {
   return sprite;
 }
 
-export function createCharacter({ color, hat = 'top', eyes: eyeStyle = 'normal', mouth: mouthStyle = 'smile', glasses = 'none', neck = 'none', shoes = 0x2b2140 }) {
+export function createCharacter({ color = 0xff5d5d, hat = 'top', eyes: eyeStyle = 'normal', mouth: mouthStyle = 'smile', glasses = 'none', neck = 'none', shoes = 0x2b2140 } = {}) {
   const root = new THREE.Group();
   root.rotation.order = 'YXZ';
   // Everything that squashes and leans hangs off this pivot at the feet.

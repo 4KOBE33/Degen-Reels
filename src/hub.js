@@ -90,8 +90,11 @@ function minesMult(bombs, picks) {
 }
 
 export class Hub {
-  constructor({ onDeploy, onMapChange }) {
+  constructor({ onDeploy, onMapChange, onPartyStart = null, net = null }) {
     this.onDeploy = onDeploy;
+    this.onPartyStart = onPartyStart;
+    this.net = net;
+    this.partyCode = '';
     this.onMapChange = onMapChange || (() => {});
     this.tab = 'loadout';
     this.game = 'slots';
@@ -141,6 +144,12 @@ export class Hub {
       if (e.target.closest('[data-act="cashout"]')) { e.preventDefault(); this.cashOutCrash(); }
     });
     $('hubBody').addEventListener('input', (e) => this.onInput(e));
+    if (net) {
+      const rerender = () => { if (this.tab === 'loadout' && !$('hub').hidden && !(document.activeElement && document.activeElement.id === 'partyCode')) this.render(); else this.renderDeploy(); };
+      net.on('room', rerender);
+      net.on('status', rerender);
+      net.on('error', (m) => this.toast(m.text));
+    }
     $('deploy').addEventListener('click', () => this.deploy());
     this.render();
   }
@@ -190,9 +199,42 @@ export class Hub {
       this.preview.setLook(wornLook(d.look), d.loadout.weapons.find(Boolean));
       this.preview.mount($('lookSlot'));
     }
+    this.renderDeploy();
+  }
+
+  renderDeploy() {
+    const d = this.data;
     const hasGun = d.loadout.weapons.some(Boolean);
     const m = MAPS[d.selectedMap];
-    $('deploy').innerHTML = hasGun ? `DEPLOY<small>${m.icon} ${m.name}</small>` : 'DEPLOY<small>no gun packed!</small>';
+    const party = this.net && this.net.inParty;
+    let html = hasGun ? `DEPLOY<small>${m.icon} ${m.name}</small>` : 'DEPLOY<small>no gun packed!</small>';
+    if (party && !this.net.isHost) html = 'WAITING…<small>the party leader deploys everyone</small>';
+    else if (party) html = `DEPLOY SQUAD<small>${m.icon} ${m.name} · ${this.net.partySize} players</small>`;
+    $('deploy').innerHTML = html;
+  }
+
+  // The party panel: create, join, invite code, who's in.
+  renderParty() {
+    const net = this.net;
+    if (!net) return '';
+    if (net.status !== 'online' && !net.inParty) {
+      return `<section class="party"><div class="phead"><b>👥 Play with friends</b><small>${net.status === 'connecting' ? 'Connecting to the party server…' : 'Multiplayer server not connected.'}</small></div>
+        <div class="prow"><button class="btn" data-act="pconnect">${net.status === 'connecting' ? 'Connecting…' : 'Connect'}</button></div></section>`;
+    }
+    if (!net.inParty) {
+      return `<section class="party"><div class="phead"><b>👥 Play with friends</b><small>Make a party and send your friends the code, or join theirs. Up to 6 players.</small></div>
+        <div class="prow"><button class="btn" data-act="pcreate">Create party</button>
+        <input id="partyCode" maxlength="4" placeholder="CODE" value="${escapeHtml(this.partyCode)}" autocomplete="off">
+        <button class="btn ghost" data-act="pjoin">Join</button></div></section>`;
+    }
+    const r = net.room;
+    const me = net.id;
+    const members = r.members.map((m) => `<span class="pm ${m.id === r.host ? 'lead' : ''}">${m.id === r.host ? '👑' : '🙂'} ${escapeHtml(m.name)}${m.id === me ? ' (you)' : ''}</span>`).join('');
+    return `<section class="party in"><div class="phead"><b>👥 Party <span class="pcode" data-act="pcopy" title="Click to copy">${r.code}</span></b>
+        <small>${net.isHost ? 'You\'re the leader: pick the map and hit DEPLOY SQUAD to drop everyone in together.' : `Waiting for ${escapeHtml((r.members.find((m) => m.id === r.host) || {}).name || 'the leader')} to deploy. Pack your loadout!`}${r.inRaid ? ' · Raid in progress…' : ''}</small></div>
+      <div class="pmembers">${members}</div>
+      <div class="prow">${net.isHost ? `<label class="pffa"><input type="checkbox" data-act="pffa" ${r.ffa ? 'checked' : ''}> Friendly fire (free-for-all)</label>` : `<span class="pffa">${r.ffa ? '⚔️ Friendly fire is ON' : '🤝 Friendly fire is off'}</span>`}
+      <button class="btn ghost" data-act="pleave">Leave party</button></div></section>`;
   }
 
   renderHeader() {
@@ -214,7 +256,7 @@ export class Hub {
   itemCard(item, act, i, extra = '') {
     const info = itemInfo(item);
     return `<button class="item r${info.rarity}" data-act="${act}" data-i="${i}" title="${escapeHtml(info.name)} · worth 🪙${info.value}">
-      <span class="icon">${iconHtml(item)}</span><span class="nm" style="color:${info.css}">${escapeHtml(info.name)}</span>
+      ${item.free ? '<span class="freetag">FREE</span>' : ''}<span class="icon">${iconHtml(item)}</span><span class="nm" style="color:${info.css}">${escapeHtml(info.name)}</span>
       <span class="meta">${isGun(item) ? `${Number.isFinite(item.ammo) ? item.ammo : fullAmmo(item.kind, item.rarity)} ammo` : item.qty > 1 ? `×${item.qty}` : ''}</span>${extra}</button>`;
   }
 
@@ -224,7 +266,7 @@ export class Hub {
     const noGuns = !lo.weapons.some(Boolean);
     const maps = Object.entries(MAPS).map(([id, m]) => `<button class="mapcard ${d.selectedMap === id ? 'on' : ''}" data-act="map" data-m="${id}">
         <span class="icon">${m.icon}</span><b>${m.name}</b><small>${m.size} · ${m.danger}</small><span class="blurb">${m.blurb}</span></button>`).join('');
-    return `<p class="howto">Pick a map, drop in, loot what you can, fight off the machines, and reach an open exit before time runs out. <b>Die and you lose everything you brought.</b> The best loot only drops in deadly zones.</p>
+    return `${this.renderParty()}<p class="howto">Pick a map, drop in, loot what you can, fight off the machines, and reach an open exit before time runs out. <b>Die and you lose everything you brought.</b> The best loot only drops in deadly zones.</p>
       <h3>Choose a map</h3><div class="maps">${maps}</div>
       <div class="cols">
       <section><h3>Raid loadout</h3><p class="hint">Whatever you bring is lost if you die. Click to send it back to the stash.</p>
@@ -708,7 +750,8 @@ export class Hub {
     if (e.target.id === 'sens') { save.update((d) => { d.settings.sensitivity = Number(e.target.value); }); $('sensVal').textContent = `${s.sensitivity.toFixed(2)}x`; }
     if (e.target.id === 'fov') { save.update((d) => { d.settings.fov = Number(e.target.value); }); $('fovVal').textContent = `${s.fov}°`; }
     if (e.target.id === 'vol') { save.update((d) => { d.settings.volume = Number(e.target.value); }); setVolume(s.volume); $('volVal').textContent = `${Math.round(s.volume * 100)}%`; }
-    if (e.target.id === 'lookName') { save.update((d) => { d.look.name = e.target.value.slice(0, 14); }); this.renderHeader(); }
+    if (e.target.id === 'lookName') { save.update((d) => { d.look.name = e.target.value.slice(0, 14); }); this.renderHeader(); if (this.net) this.net.profile(this.profileName(), wornLook(this.data.look)); }
+    if (e.target.id === 'partyCode') this.partyCode = e.target.value.toUpperCase();
   }
 
   onClick(e) {
@@ -741,21 +784,26 @@ export class Hub {
         });
         break;
       }
-      case 'unequip':
-        save.update((x) => { addToStash(x.stash.items, x.loadout.weapons[i]); x.loadout.weapons[i] = null; });
+      // Free-loadout gear can't go in the stash (no selling it); taking it out just puts it back.
+      case 'unequip': {
+        const free = d.loadout.weapons[i] && d.loadout.weapons[i].free;
+        save.update((x) => { if (!free) addToStash(x.stash.items, x.loadout.weapons[i]); x.loadout.weapons[i] = null; });
+        if (free) this.toast('Free loadout gear only exists in a raid. Extract with it to keep it.');
         break;
-      case 'unpack':
-        save.update((x) => { addToStash(x.stash.items, x.loadout.items[i]); x.loadout.items.splice(i, 1); });
+      }
+      case 'unpack': {
+        const free = d.loadout.items[i] && d.loadout.items[i].free;
+        save.update((x) => { if (!free) addToStash(x.stash.items, x.loadout.items[i]); x.loadout.items.splice(i, 1); });
+        if (free) this.toast('Free loadout gear only exists in a raid. Extract with it to keep it.');
         break;
+      }
       case 'freekit': {
         // Free loadout: always available when you've got no gun packed.
-        const gun = makeGun(['pistol', 'smg', 'shotgun', 'revolver'][Math.floor(Math.random() * 4)], 0);
+        const gun = { ...makeGun(['pistol', 'smg', 'shotgun', 'revolver'][Math.floor(Math.random() * 4)], 0), free: true };
         const thrown = ['grenade', 'dice', 'flash', 'sauce', 'sticky', 'smoke'][Math.floor(Math.random() * 6)];
         save.update((x) => {
           x.loadout.weapons[x.loadout.weapons[0] ? 1 : 0] = gun;
-          addToList(x.loadout.items, makeItem('bandage', 2), LOADOUT_SLOTS);
-          addToList(x.loadout.items, makeItem('ammo', 1), LOADOUT_SLOTS);
-          addToList(x.loadout.items, makeItem(thrown, 1), LOADOUT_SLOTS);
+          for (const it of [makeItem('bandage', 2), makeItem('ammo', 1), makeItem(thrown, 1)]) addToList(x.loadout.items, { ...it, free: true }, LOADOUT_SLOTS);
         });
         this.toast(`Free loadout packed: ${itemInfo(gun).name} and a ${ITEMS[thrown].name}. Try not to lose it.`);
         break;
@@ -782,6 +830,19 @@ export class Hub {
         this.toast(`Sold everything for 🪙 ${fmt(total)}`);
         break;
       }
+      case 'pconnect': this.net.connect(); break;
+      case 'pcreate': this.net.create(this.profileName(), wornLook(d.look)); break;
+      case 'pjoin': {
+        const code = (($('partyCode') || {}).value || '').toUpperCase().trim();
+        if (code.length < 4) { this.toast('Type the 4-letter party code first.'); return; }
+        this.net.join(code, this.profileName(), wornLook(d.look));
+        break;
+      }
+      case 'pleave': this.net.leave(); break;
+      case 'pffa': this.net.setFfa(b.checked); return;
+      case 'pcopy':
+        try { navigator.clipboard.writeText(this.net.room.code); this.toast(`Copied ${this.net.room.code}. Send it to your friends!`); } catch (err) { this.toast(`Party code: ${this.net.room.code}`); }
+        return;
       case 'lookpart': this.lookPart = b.dataset.p; break;
       case 'lookopt': {
         const part = b.dataset.p;
@@ -809,6 +870,7 @@ export class Hub {
         this.toast('Progress wiped. Fresh start.');
         break;
       case 'map':
+        if (this.net && this.net.inParty && !this.net.isHost) { this.toast('The party leader picks the map.'); return; }
         if (d.selectedMap !== b.dataset.m) {
           save.update((x) => { x.selectedMap = b.dataset.m; });
           this.onMapChange(b.dataset.m);
@@ -1120,21 +1182,39 @@ export class Hub {
     this.drawCrash();
   }
 
+  profileName() { return (this.data.look.name || '').trim() || 'High Roller'; }
+
   deploy() {
     initAudio();
     const d = this.data;
     const lo = d.loadout;
+    if (window.degen && window.degen.net && window.degen.isHost && !window.degen.net.ended) {
+      this.toast('Your squad is still in the raid. Wait for them to get out first.');
+      return;
+    }
+    const party = this.net && this.net.inParty;
+    if (party && !this.net.isHost) { this.toast('Only the party leader can deploy. Pack your loadout and hang tight!'); return; }
     if (!lo.weapons.some(Boolean) && !this.warnedNoGun) {
       this.warnedNoGun = true;
       this.toast('No gun packed! Click DEPLOY again to go in with just your fists.');
       return;
     }
     this.warnedNoGun = false;
+    // Party leader: tell everyone to drop in. The actual launch happens when the server echoes it back.
+    if (party) { this.onPartyStart(); return; }
+    this.launch();
+  }
+
+  // Pack the loadout and go. `party` is the party start info in multiplayer.
+  launch(party = null) {
+    const d = this.data;
+    const lo = d.loadout;
     // Whatever you bring leaves the stash for good unless you extract with it.
     const loadout = JSON.parse(JSON.stringify(lo));
     save.update((x) => { x.loadout = { weapons: [null, null], items: [] }; });
     this.onDeploy({
-      mapId: d.selectedMap,
+      party,
+      mapId: party ? party.mapId : d.selectedMap,
       name: (d.look.name || '').trim() || 'High Roller',
       look: wornLook(d.look),
       loadout,
