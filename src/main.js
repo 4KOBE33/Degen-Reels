@@ -11,7 +11,14 @@ import { ITEMS } from './config.js';
 
 const $ = (id) => document.getElementById(id);
 
-const renderer = new THREE.WebGLRenderer({ antialias: true });
+let renderer;
+try {
+  renderer = new THREE.WebGLRenderer({ antialias: true });
+} catch (err) {
+  // No 3D in this browser: say so instead of showing an empty screen.
+  document.body.insertAdjacentHTML('beforeend', '<div style="position:fixed;inset:0;display:grid;place-items:center;background:#1b0f2b;color:#fff6e0;font:900 18px Nunito,sans-serif;text-align:center;padding:24px;z-index:999">Your browser couldn\'t start 3D graphics (WebGL).<br>Turn on "Use graphics acceleration" in your browser settings, then reload.</div>');
+  throw err;
+}
 renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;

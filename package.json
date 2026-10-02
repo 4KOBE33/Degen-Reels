@@ -6,7 +6,8 @@
   "scripts": {
     "build": "esbuild src/main.js --bundle --minify --format=iife --target=es2020 --outfile=public/game.js",
     "build:artifact": "npm run build && node scripts/build-artifact.js",
-    "start": "npm run build && node server/index.js"
+    "start": "npm run build && node server/index.js",
+    "postinstall": "npm run build"
   },
   "engines": {
     "node": ">=18"
