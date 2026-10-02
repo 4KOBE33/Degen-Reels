@@ -9,6 +9,7 @@ import { ItemPickup } from './pickups.js';
 import { PLAYER, RARITIES, WEAPONS } from './config.js';
 import { addToList, itemInfo } from './items.js';
 import { sfx } from './audio.js';
+import { localTime, pushSample } from './netsmooth.js';
 
 const SNAP_RATE = 1 / 12;
 const STATE_RATE = 1 / 15;
@@ -312,6 +313,7 @@ export class Session {
       const ev = this.events.filter((e) => !e.at || (Math.abs(e.at[0] - c.pos.x) < VIEW && Math.abs(e.at[2] - c.pos.z) < VIEW));
       this.net.to(m.id, {
         k: 'snap',
+        t: Math.round(now),
         time: r1(raid.timeLeft),
         el: r2(raid.elapsed),
         act: this.pack(m.id, actors, now),
@@ -350,6 +352,7 @@ export class Session {
     const p = this.raid.player;
     this.net.to('host', {
       k: 'state',
+      t: Math.round(performance.now()),
       x: r2(p.pos.x), y: r2(p.pos.y), z: r2(p.pos.z), yw: r2(p.yaw), p: r2(p.pitch),
       vx: r2(p.vel.x), vz: r2(p.vel.z), hp: Math.round(p.hp), mh: p.maxHp, ar: Math.round(p.armor),
       a: p.alive ? 1 : 0, d: p.downed ? 1 : 0, w: p.weapon, r: p.rarity || 0, wn: p.weaponName,
@@ -386,8 +389,9 @@ export class Session {
       case 'state': {
         if (!pup.alive) return;
         pup.netPos = new THREE.Vector3(d.x, d.y, d.z);
+        pushSample(pup, localTime(from, d.t), d.x, d.y, d.z, d.yw);
         pup.netSpeed = Math.hypot(d.vx, d.vz);
-        pup.yaw = d.yw;
+        if (!pup.netBuf) pup.yaw = d.yw;
         pup.pitch = d.p;
         pup.hp = d.hp;
         pup.maxHp = d.mh;
@@ -607,6 +611,7 @@ export class Session {
       raid.elapsed = s.el;
     }
     const seen = new Set();
+    const at = localTime('host', s.t);
     for (const a of s.act) {
       seen.add(a.i);
       let actor = this.byId.get(a.i);
@@ -615,6 +620,7 @@ export class Session {
       actor.lastSeen = performance.now();
       actor.netPos = new THREE.Vector3(a.x, a.y, a.z);
       actor.netYaw = a.yw;
+      pushSample(actor, at, a.x, a.y, a.z, a.yw);
       if (a.mh !== undefined) actor.maxHp = a.mh;
       if (actor.team === 'machine') {
         const dropped = a.hp < actor.hp;

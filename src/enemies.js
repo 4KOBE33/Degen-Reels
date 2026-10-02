@@ -10,6 +10,7 @@ import * as THREE from 'three';
 import { ENEMIES } from './config.js';
 import { part, toon, canvasTexture } from './toon.js';
 import { resolve } from './physics.js';
+import { smoothMove } from './netsmooth.js';
 import { sfx } from './audio.js';
 
 const tmp = new THREE.Vector3();
@@ -477,7 +478,9 @@ export class Machine {
     // Driven by the party host: glide to the reported spot.
     if (this.puppet && this.alive) {
       const k = Math.min(1, dt * 10);
-      if (this.netPos) this.pos.lerp(this.netPos, k);
+      const yaw = this.netBuf ? smoothMove(this, dt) : undefined;
+      if (yaw !== undefined) this.netYaw = yaw;
+      else if (this.netPos) this.pos.lerp(this.netPos, k);
       if (this.netYaw !== undefined) this.yaw += Math.atan2(Math.sin(this.netYaw - this.yaw), Math.cos(this.netYaw - this.yaw)) * k;
       this.flash = Math.max(0, this.flash - dt);
       this.parts.bodyMat.emissiveIntensity = this.flash > 0 ? 0.7 : 0;

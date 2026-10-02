@@ -4,6 +4,7 @@ import { PLAYER, WEAPONS, RARITIES, ITEMS, BACKPACK_SLOTS } from './config.js';
 import { createCharacter } from './character.js';
 import { resolve } from './physics.js';
 import { fullAmmo, itemInfo } from './items.js';
+import { smoothMove } from './netsmooth.js';
 import { sfx } from './audio.js';
 
 export class Combatant {
@@ -189,7 +190,10 @@ export class Combatant {
     const k = Math.min(1, dt * 12);
     if (this.netPos) {
       const before = this.pos.clone();
-      this.pos.lerp(this.netPos, k);
+      // Glide along the buffered updates (see netsmooth.js); older paths just chase the latest.
+      const yaw = this.netBuf ? smoothMove(this, dt) : undefined;
+      if (yaw !== undefined) this.netYaw = yaw;
+      else this.pos.lerp(this.netPos, k);
       const moved = Math.hypot(this.pos.x - before.x, this.pos.z - before.z) / Math.max(dt, 0.001);
       this.netSpeed = this.netSpeed === undefined ? moved : this.netSpeed + (moved - this.netSpeed) * Math.min(1, dt * 6);
     }

@@ -22,7 +22,7 @@ app.use('/api', require('./accounts').router);
 app.get('/health', (req, res) => res.json({ ok: true, rooms: rooms.size }));
 
 const server = http.createServer(app);
-const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 512 * 1024, perMessageDeflate: false });
+const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 4 * 1024 * 1024, perMessageDeflate: false });
 
 // ---------- parties ----------
 // room: { code, host, members: Map(id -> { ws, token, name, look, team, dropTimer }), mode, inRaid }
@@ -32,9 +32,9 @@ let nextId = 1;
 const CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 const MAX_MEMBERS = 6;
 // A dropped connection keeps its place in the party this long, so a blip doesn't kick you out.
-const GRACE_MS = 30000;
+const GRACE_MS = 75000;
 // Game data for a player who's this far behind gets dropped instead of piling up.
-const MAX_BUFFER = 1024 * 1024;
+const MAX_BUFFER = 2 * 1024 * 1024;
 
 function makeCode() {
   for (;;) {

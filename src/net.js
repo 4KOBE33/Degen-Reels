@@ -14,7 +14,10 @@ function serverUrl() {
 }
 
 // How long to keep trying to get back into the party after the connection drops.
-const RESUME_FOR = 25000;
+const RESUME_FOR = 60000;
+// No word from the server for this long means the connection is dead, even if the browser hasn't noticed.
+const SILENT_FOR = 12000;
+const PING_EVERY = 4000;
 // Remembered for this tab, so a refresh (or crash) can get you back into your party.
 const SEAT_KEY = 'bth-seat';
 function loadSeat() {
@@ -36,6 +39,26 @@ export class Net {
     this.resume = null; // { id, token, code, until } while getting back into a party
     this.retryTimer = null;
     this.seat = loadSeat(); // a party seat from before this page loaded
+    this.heardAt = 0;
+    this.pingMs = 0; // round trip to the server, for the UI
+    // Heartbeat: ping the server, and if it goes quiet, drop the connection and get back in.
+    setInterval(() => {
+      if (!this.ws || this.ws.readyState !== 1) return;
+      // (Hidden tabs only get a timer tick now and then, so don't judge them.)
+      if (!document.hidden && performance.now() - this.heardAt > SILENT_FOR) {
+        const ws = this.ws;
+        this.ws = null;
+        ws.onclose = null;
+        try { ws.close(); } catch (e) { /* gone */ }
+        this.dropped();
+        return;
+      }
+      try { ws.send(JSON.stringify({ t: 'ping', at: performance.now() })); } catch (e) { /* closing */ }
+    }, PING_EVERY);
+    // Coming back to the tab or the network: reconnect right away instead of waiting.
+    const poke = () => { if (!this.ws && (this.resume || this.wantOnline)) { clearTimeout(this.retryTimer); this.connect(); } };
+    window.addEventListener('online', poke);
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) poke(); });
   }
 
   on(type, fn) { (this.handlers[type] ||= []).push(fn); }
@@ -68,7 +91,10 @@ export class Net {
       return;
     }
     this.ws = ws;
+    this.wantOnline = true;
     ws.onopen = () => {
+      this.heardAt = performance.now();
+      this.tries = 0;
       if (this.resume) {
         ws.send(JSON.stringify({ t: 'resume', id: this.resume.id, token: this.resume.token, code: this.resume.code }));
         return; // the queue goes out once we're back in
@@ -83,6 +109,7 @@ export class Net {
     };
     ws.onerror = () => {};
     ws.onmessage = (ev) => {
+      this.heardAt = performance.now();
       const str = ev.data;
       // Game data from another player: "<from|json".
       if (str.charCodeAt(0) === 60) {
@@ -108,6 +135,9 @@ export class Net {
           this.flush();
           return;
         }
+        case 'pong':
+          if (msg.at) this.pingMs = Math.round(performance.now() - msg.at);
+          return;
         case 'resumeFail':
           this.giveUp();
           return;
@@ -142,6 +172,10 @@ export class Net {
       return;
     }
     this.setStatus('offline');
+    // Keep trying in the background (the free server may be waking up), backing off to 15s.
+    this.tries = (this.tries || 0) + 1;
+    clearTimeout(this.retryTimer);
+    this.retryTimer = setTimeout(() => this.connect(), Math.min(15000, 1000 * 2 ** Math.min(4, this.tries)));
   }
 
   // Couldn't get back in: we're out of the party.
