@@ -6,6 +6,7 @@ import {
 } from './config.js';
 import { buildMap, drawMinimap, neonSign } from './map.js';
 import { SlotMachine } from './slots.js';
+import { GunWheel } from './gunwheel.js';
 import { Container } from './containers.js';
 import { ChipSystem } from './chips.js';
 import { Fx } from './fx.js';
@@ -83,6 +84,7 @@ export class Raid {
     this.frozen = false;
 
     this.slots = this.map.slotSpots.map((s) => new SlotMachine(this, s));
+    this.gunWheels = this.map.safe ? [] : this.wheelSpots().map((s) => new GunWheel(this, s));
     this.containers = this.map.containers.map((c) => new Container(this, c));
     this.drawDist = 115;
     this.buildVaultDoor();
@@ -329,6 +331,7 @@ export class Raid {
     this.throws.clear();
     for (const k of this.containers) k.reset();
     for (const s of this.slots) s.user = null;
+    for (const w of this.gunWheels) w.spin = null;
     this.closeVault();
     if (this.player) {
       this.scene.remove(this.player.char.root);
@@ -632,7 +635,7 @@ export class Raid {
   // ---------- interaction ----------
 
   get interactables() {
-    const list = [...this.slots, ...this.pickups, this.vaultLock];
+    const list = [...this.slots, ...this.gunWheels, ...this.pickups, this.vaultLock];
     if (this.duel) list.push(...this.duel.interactables());
     for (const k of this.containers) if (!k.opened) list.push(k);
     for (const c of this.combatants) if (c.downed && c.alive && c.reviveSpot) list.push(c.reviveSpot);
@@ -786,6 +789,23 @@ export class Raid {
   }
 
   // The nearest open ground to (x, z), so nobody spawns inside a rock or a wall.
+  // Gun Wheels stand beside a few of the slot machines (the same spots for everyone in a party).
+  wheelSpots() {
+    const spots = this.map.slotSpots;
+    const out = [];
+    const n = Math.min(spots.length, spots.length >= 6 ? 3 : 2);
+    for (let k = 0; k < n; k++) {
+      const s = spots[Math.floor(((k + 0.5) * spots.length) / n)];
+      const rot = s.rot || 0;
+      const fx = Math.sin(rot);
+      const fz = Math.cos(rot);
+      const [x, z] = this.openSpot(s.x + fz * 3.2 + fx * 0.6, s.z - fx * 3.2 + fz * 0.6, 1.9);
+      if (out.some((o) => Math.hypot(o.x - x, o.z - z) < 8)) continue;
+      out.push({ x, z, rot });
+    }
+    return out;
+  }
+
   openSpot(x, z, pad = 0.7) {
     if (this.map.isFree(x, z, pad)) return [x, z];
     for (let r = 1.5; r <= 12; r += 1.5) {
@@ -1344,6 +1364,7 @@ export class Raid {
     this.machines = kept.concat(all.slice(n));
     for (const c of this.combatants) if (!c.isPlayer) c.char.root.visible = c.pos.distanceToSquared(this.focus) < this.drawDist * this.drawDist;
     for (const s of this.slots) s.update(dt);
+    for (const w of this.gunWheels) w.update(dt);
     for (const k of this.containers) k.cull(this.focus);
     for (const pk of this.pickups) pk.update(dt);
     if (this.vaultOpen && this.vaultDoor.position.y < 14) this.vaultDoor.position.y += dt * 4;

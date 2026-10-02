@@ -442,6 +442,12 @@ export class Session {
         if (s && !s.user) s.use(pup, true);
         break;
       }
+      case 'gw': {
+        // A friend bet a gun on a Gun Wheel: we spin it.
+        const w = raid.gunWheels[d.i];
+        if (w && !w.spin && d.gun && d.gun.id === 'gun') w.roll(pup, d.gun);
+        break;
+      }
       case 'vault':
         if (!raid.vaultOpen) raid.openVault(pup);
         break;
@@ -730,6 +736,11 @@ export class Session {
       case 'ss': {
         const s = raid.slots[e.i];
         if (s) s.startSpin(null, e.finals, e.jackpot);
+        break;
+      }
+      case 'gws': {
+        const w = raid.gunWheels[e.i];
+        if (w) w.start(e.slice, e.gun);
         break;
       }
       case 'vo': raid.openVault({ name: e.by || 'Someone' }, true); break;

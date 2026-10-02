@@ -69,18 +69,7 @@ const GAMES = [
   ['crash', '🚀', 'Crash', 'Cash out before it blows'],
   ['mines', '💎', 'Mines', 'Find gems, dodge the bombs'],
   ['plinko', '🔴', 'Plinko', 'Drop a ball, pray for the edges'],
-  ['gunwheel', '🔫', 'Gun Wheel', 'Feed it a gun, spin for a better one'],
 ];
-// The Gun Wheel: 20 slices. Odds are on the wheel for everyone to see.
-const GW_OUT = {
-  bust: { label: 'BUST', icon: '💀', color: '#3a2a4f', text: 'The wheel ate it.' },
-  down: { label: 'DOWN', icon: '⬇️', color: '#64748b', text: 'One rarity worse.' },
-  same: { label: 'SWAP', icon: '🔁', color: '#22a06b', text: 'A different gun, same rarity.' },
-  up: { label: 'UP', icon: '⬆️', color: '#3b82f6', text: 'One rarity better!' },
-  jackpot: { label: 'JACKPOT', icon: '💎', color: '#ffc83d', text: 'Two rarities better!!' },
-};
-const GW_SLICES = ['bust', 'same', 'bust', 'up', 'bust', 'down', 'bust', 'same', 'bust', 'up', 'bust', 'jackpot', 'bust', 'same', 'down', 'bust', 'same', 'up', 'down', 'bust'];
-const GW_SPIN = 4200;
 // Plinko: 12 rows of pegs, 13 buckets. Riskier boards pay more at the edges and less in the middle.
 const PLINKO_ROWS = 12;
 const PLINKO = {
@@ -695,11 +684,11 @@ export class Hub {
     const net = this.session;
     const recent = this.history.slice(-8).reverse().map((h) => `<span class="${h.net > 0 ? 'win' : h.net < 0 ? 'loss' : ''}">${h.icon} ${h.net > 0 ? '+' : ''}${fmt(h.net)}</span>`).join('');
     const stage = {
-      slots: () => this.renderReels(), blackjack: () => this.renderBlackjack(), roulette: () => this.renderRoulette(), crash: () => this.renderCrash(), mines: () => this.renderMines(), plinko: () => this.renderPlinko(), gunwheel: () => this.renderGunWheel(),
+      slots: () => this.renderReels(), blackjack: () => this.renderBlackjack(), roulette: () => this.renderRoulette(), crash: () => this.renderCrash(), mines: () => this.renderMines(), plinko: () => this.renderPlinko(),
     }[this.game]();
     return `<div class="backroom">
       <aside class="gamerail">${rail}
-        <div class="session"><small>This session</small><b class="${net > 0 ? 'win' : net < 0 ? 'loss' : ''}">${net > 0 ? '+' : ''}${fmt(net)}</b><small>Stash 🪙 ${fmt(d.stash.chips)}</small></div>
+        <div class="session"><small>This<br>session</small><b class="${net > 0 ? 'win' : net < 0 ? 'loss' : ''}">${net > 0 ? '+' : ''}${fmt(net)}</b><small>Stash 🪙 ${fmt(d.stash.chips)}</small></div>
       </aside>
       <section class="table">${stage}${recent ? `<div class="recent"><small>Recent</small>${recent}</div>` : ''}</section>
     </div>`;
@@ -1238,103 +1227,10 @@ export class Hub {
       case 'minecash': this.cashMines(); break;
       case 'plinkorisk': if (!this.plinko.balls.length) this.plinko.risk = b.dataset.r; break;
       case 'plinkodrop': this.dropPlinko(); return;
-      case 'gwpick': if (!(this.gw && this.gw.spinning)) this.gw = { pick: i, angle: this.gw ? this.gw.angle : 0 }; break;
-      case 'gwspin': this.spinGunWheel(); return;
       case 'cashout': this.cashOutCrash(); return;
       default: return;
     }
     this.render();
-  }
-
-  // ---------- Gun Wheel ----------
-  // Put a gun on the line and spin: lose it, swap it, or trade up.
-
-  gunWheelGuns() {
-    return this.data.stash.items.map((it, i) => ({ it, i })).filter(({ it }) => isGun(it) && !it.free);
-  }
-
-  renderGunWheel() {
-    const g = this.gw || { angle: 0 };
-    const guns = this.gunWheelGuns();
-    const picked = g.pick !== undefined && g.pick !== null ? this.data.stash.items[g.pick] : null;
-    const valid = picked && isGun(picked) && !picked.free;
-    const n = GW_SLICES.length;
-    const cone = GW_SLICES.map((k, i) => `${GW_OUT[k].color} ${(i * 360) / n}deg ${((i + 1) * 360) / n}deg`).join(',');
-    const labels = GW_SLICES.map((k, i) => `<span style="transform:rotate(${(i + 0.5) * (360 / n)}deg)"><i>${GW_OUT[k].icon}</i></span>`).join('');
-    const odds = Object.keys(GW_OUT).map((k) => `<span><i style="background:${GW_OUT[k].color}"></i>${GW_OUT[k].icon} ${GW_OUT[k].label} ${Math.round((GW_SLICES.filter((x) => x === k).length / n) * 100)}%<small>${GW_OUT[k].text}</small></span>`).join('');
-    let res = '<div class="prize empty">Pick a gun from your stash, then spin. Whatever it lands on, the new gun goes straight to your stash. Legendaries that go UP pay out chips on top.</div>';
-    if (g.result && !g.spinning) {
-      const r = g.result;
-      res = r.gun
-        ? `<div class="prize r${itemInfo(r.gun).rarity}"><span class="pi">${iconHtml(r.gun, 'gicon big')}</span><div><small>${GW_OUT[r.out].icon} ${GW_OUT[r.out].label}${r.chips ? ` · +🪙 ${fmt(r.chips)}` : ''}</small><b style="color:${itemInfo(r.gun).css}">${escapeHtml(itemInfo(r.gun).name)}</b><small>Was: ${escapeHtml(r.was)} · sent to your stash</small></div></div>`
-        : `<div class="prize r0"><span class="pi">💀</span><div><small>BUST</small><b>The wheel ate your ${escapeHtml(r.was)}</b><small>Better luck next spin.</small></div></div>`;
-    }
-    return `<div class="gunwheel">
-      <div class="gwpick"><h4>Your guns</h4><div class="grid">${guns.map(({ it, i }) => `<button class="item r${itemInfo(it).rarity} ${g.pick === i ? 'on' : ''}" data-act="gwpick" data-i="${i}" ${g.spinning ? 'disabled' : ''} title="${escapeHtml(itemInfo(it).name)}"><span class="icon">${iconHtml(it)}</span><span class="nm" style="color:${itemInfo(it).css}">${escapeHtml(itemInfo(it).name)}</span><span class="meta">🪙 ${fmt(itemInfo(it).value)}</span></button>`).join('') || '<p class="hint">No guns in your stash. (Free loadout guns don\'t count.)</p>'}</div></div>
-      <div class="gwstage">
-        <div class="gwheel"><div class="gwdisc" id="gwDisc" style="background:conic-gradient(${cone});transform:rotate(${g.angle || 0}deg)">${labels}</div><div class="gwhub">${valid ? iconHtml(picked) : '🔫'}</div><div class="gwpointer">▼</div></div>
-        <button class="btn big spinbtn" data-act="gwspin" ${!valid || g.spinning ? 'disabled' : ''}>${g.spinning ? 'SPINNING…' : valid ? `SPIN · BET YOUR ${escapeHtml(itemInfo(picked).name).toUpperCase()}` : 'PICK A GUN'}</button>
-        <div class="gwodds">${odds}</div>
-      </div></div>${res}`;
-  }
-
-  spinGunWheel() {
-    const g = this.gw;
-    if (!g || g.spinning) return;
-    const d = this.data;
-    const gun = d.stash.items[g.pick];
-    if (!gun || !isGun(gun) || gun.free) return;
-    const n = GW_SLICES.length;
-    const slice = Math.floor(Math.random() * n);
-    const out = GW_SLICES[slice];
-    const was = itemInfo(gun);
-    const kinds = GUN_KINDS.filter((k) => WEAPONS[k] && k !== 'fists');
-    let prize = null;
-    let chips = 0;
-    if (out !== 'bust') {
-      const step = { down: -1, same: 0, up: 1, jackpot: 2 }[out];
-      const want = gun.rarity + step;
-      if (want >= 0) {
-        const rarity = Math.min(3, want);
-        const others = kinds.filter((k) => k !== gun.kind);
-        prize = makeGun(others[Math.floor(Math.random() * others.length)], rarity);
-        // Already Legendary and still going up: chips on top.
-        if (want > 3) chips = Math.round(was.value * (want - 3));
-      }
-    }
-    // The gun goes on the wheel right away.
-    save.update((x) => { x.stash.items.splice(g.pick, 1); x.stats.wagered += was.value; });
-    // Land the pointer (top) in the middle of the winning slice, after a few full turns.
-    const sliceDeg = 360 / n;
-    const land = 360 - (slice + 0.3 + Math.random() * 0.4) * sliceDeg;
-    const from = g.angle || 0;
-    const to = from - (from % 360) + 360 * 6 + land;
-    this.gw = { pick: null, angle: from, spinning: true, result: null };
-    this.render();
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-      const el = document.getElementById('gwDisc');
-      if (el) { el.style.transition = `transform ${GW_SPIN}ms cubic-bezier(0.15, 0.85, 0.2, 1)`; el.style.transform = `rotate(${to}deg)`; }
-      if (this.gw && this.gw.spinning) this.gw.angle = to;
-    }));
-    sfx.lever();
-    let ticks = 0;
-    const tick = setInterval(() => { if (++ticks < 30) sfx.tick(); else clearInterval(tick); }, 120);
-    setTimeout(() => {
-      let ann = null;
-      if (prize) {
-        const key = itemKey(prize);
-        save.update((x) => { addToStash(x.stash.items, prize); if (chips) x.stash.chips += chips; });
-        ann = progress((x) => { x.collection[key] = (x.collection[key] || 0) + 1; });
-        if (out === 'jackpot' || itemInfo(prize).rarity >= 3) sfx.jackpot(); else if (out === 'down') sfx.deny(); else sfx.win();
-      } else sfx.deny();
-      const payout = (prize ? itemInfo(prize).value : 0) + chips;
-      if (payout) save.update((x) => { x.stats.gambleWon += payout; x.stats.biggestWin = Math.max(x.stats.biggestWin, payout); });
-      this.gw = { pick: null, angle: to, spinning: false, result: { out, gun: prize, chips, was: was.name } };
-      this.settleBet('🔫', was.value, payout);
-      if (ann) this.announce(ann);
-      if (this.tab === 'backroom' && this.game === 'gunwheel') this.render();
-      else this.renderHeader();
-    }, GW_SPIN + 150);
   }
 
   // ---------- Loot Reels ----------

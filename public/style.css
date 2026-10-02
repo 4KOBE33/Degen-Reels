@@ -983,3 +983,24 @@ h3 small.bank { color: var(--gold); opacity: 1; font-weight: 900; }
 #buildTag { opacity: 0.6; }
 .kit .item.empty, .stashsec .item.empty { background: rgba(255, 255, 255, 0.035); border: 2px dashed rgba(255, 255, 255, 0.12); }
 .account .warn { color: #ffb347; font-weight: 800; }
+
+/* ---------- Back Room: game picker across the top, the table gets the room ---------- */
+.backroom { grid-template-columns: 1fr; grid-template-rows: auto 1fr; gap: 10px; }
+.gamerail { display: flex; flex-wrap: wrap; gap: 6px; align-items: stretch; }
+.gamecard { padding: 6px 12px 6px 8px; gap: 6px; border-width: 3px; border-radius: 12px; background: #1f1137; transition: transform 0.12s, background 0.12s; }
+.gamecard:hover:not(.on) { background: #2d1850; transform: translateY(-1px); border-color: var(--ink); }
+.gamecard .gi { font-size: 22px; line-height: 1; }
+.gamecard b { font-size: 16px; white-space: nowrap; }
+.gamecard small { display: none; }
+.gamecard.on { box-shadow: 0 3px 0 #b8860b; }
+.session { margin: 0 0 0 auto; display: flex; align-items: center; gap: 10px; padding: 4px 14px; border-radius: 12px; background: rgba(10, 4, 22, 0.45); text-align: left; }
+.session b { font-size: 22px; }
+.session small { font-size: 11px; }
+.table { border: none; box-shadow: none; border-radius: 16px; padding: 12px; background: radial-gradient(ellipse at top, rgba(70, 36, 120, 0.45) 0%, rgba(10, 4, 22, 0.35) 70%); }
+.table .gametag { margin: -2px 0 0; font: 800 13px var(--body); opacity: 0.6; }
+.felt { padding: 12px 16px 16px; gap: 6px; }
+.recent { margin-top: 2px; }
+@media (max-width: 760px) {
+  .gamerail { display: grid; grid-template-columns: repeat(2, 1fr); }
+  .session { grid-column: 1 / -1; margin: 0; justify-content: center; }
+}
