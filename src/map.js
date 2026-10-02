@@ -126,7 +126,7 @@ export const MAPS = {
     mapGround: '#eef3f8', hemi: [0xeef6ff, 0x8090b0, 1.8], sun: [0xfff4e6, 2.2], mountains: [0xe2e8f0, 0x94a3b8], glow: 0x2ee6d6, tough: 1.3,
   },
   tequila: {
-    name: 'Temakilla', icon: '🌵', size: 'Huge', danger: 'Hard', half: 300, wilds: 'The Agave Fields',
+    name: 'Temakilla', icon: '🌶️', size: 'Huge', danger: 'Hard', half: 300, wilds: 'The Agave Fields',
     blurb: 'A sun-baked tequila town in the agave fields, built around the El Gran Temakilla cantina-casino. Dust storms roll through without warning.',
     sky: [0x3b1d4a, 0xd1495b, 0xf7b267], fog: 0xe08a5a,
     ground: { base: '#d9a066', a: 'rgba(160,82,45,0.22)', b: 'rgba(255,214,165,0.3)' },

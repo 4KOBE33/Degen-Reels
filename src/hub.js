@@ -230,11 +230,11 @@ export class Hub {
     const net = this.net;
     if (!net) return '';
     if (net.status !== 'online' && !net.inParty) {
-      return `<section class="party"><div class="phead"><b>👥 Play with friends</b><small>${net.status === 'connecting' ? 'Connecting to the party server…' : 'Multiplayer server not connected.'}</small></div>
-        <div class="prow"><button class="btn" data-act="pconnect">${net.status === 'connecting' ? 'Connecting…' : 'Connect'}</button></div></section>`;
+      return `<section class="party slim"><b>👥 Play with friends</b><small>${net.status === 'connecting' ? 'Connecting…' : 'Party server offline.'}</small>
+        <div class="prow"><button class="btn ghost" data-act="pconnect">${net.status === 'connecting' ? 'Connecting…' : 'Connect'}</button></div></section>`;
     }
     if (!net.inParty) {
-      return `<section class="party"><div class="phead"><b>👥 Play with friends</b><small>Make a party and send your friends the code, or join theirs. Up to 6 players.</small></div>
+      return `<section class="party slim"><b>👥 Play with friends</b>
         <div class="prow"><button class="btn" data-act="pcreate">Create party</button>
         <input id="partyCode" maxlength="4" placeholder="CODE" value="${escapeHtml(this.partyCode)}" autocomplete="off">
         <button class="btn ghost" data-act="pjoin">Join</button></div></section>`;
@@ -287,8 +287,13 @@ export class Hub {
     const lo = d.loadout;
     const noGuns = !lo.weapons.some(Boolean);
     const freeKit = hasFreeKit(lo);
-    const maps = Object.entries(MAPS).map(([id, m]) => `<button class="mapcard ${d.selectedMap === id ? 'on' : ''}" data-act="map" data-m="${id}">
-        <span class="icon">${m.icon}</span><b>${m.name}</b><small>${m.size} · ${m.danger}</small><span class="blurb">${m.blurb}</span></button>`).join('');
+    const order = ['vegas', 'frost', 'bayou', 'tequila', 'bunker', 'lounge'].filter((id) => MAPS[id]);
+    const maps = order.map((id) => {
+      const m = MAPS[id];
+      return `<button class="mapcard ${d.selectedMap === id ? 'on' : ''}" data-act="map" data-m="${id}">
+        <span class="icon">${m.icon}</span><b>${m.name}</b><span class="tag d-${m.danger.toLowerCase()}">${m.danger}</span></button>`;
+    }).join('');
+    const sel = MAPS[d.selectedMap] || MAPS.vegas;
     const newbie = (d.stats.raids || 0) === 0;
     const guide = newbie ? `<section class="newbie"><b>👋 New to Beat the House? Here's the deal:</b>
       <ol><li><b>Pack a gun.</b> No gear? Grab the 🎁 FREE LOADOUT below.</li>
@@ -296,8 +301,9 @@ export class Hub {
       <li><b>Get to a green exit</b> and survive while your ride comes. Die, and you lose what you brought.</li>
       <li><b>Sell your loot</b> at the 💰 Fence, then gamble it in the 🎰 Back Room, or gear up for a bigger raid.</li></ol>
       <small>Tips will walk you through your first raids. Play with friends using the party panel below.</small></section>` : '';
-    return `${guide}${this.renderParty()}<p class="howto">Pick a map, drop in, loot what you can, fight off the machines, and reach an open exit before time runs out. <b>Die and you lose everything you brought.</b> The best loot only drops in deadly zones.</p>
-      <h3>Choose a map</h3><div class="maps">${maps}</div>
+    return `${guide}${this.renderParty()}
+      <div class="maps">${maps}</div>
+      <p class="mapinfo"><b>${sel.icon} ${sel.name}</b> <span class="tag d-${sel.danger.toLowerCase()}">${sel.size} · ${sel.danger}</span> ${sel.blurb}</p>
       <div class="cols">
       <section><h3>Raid loadout</h3><p class="hint">Whatever you bring is lost if you die. Click to send it back to the stash.</p>
         ${freeKit ? '<p class="hint freelock">🔒 Free loadout is locked in: nothing goes in or out until you raid with it.</p>' : noGuns ? '<button class="btn freekit" data-act="freekit">🎁 FREE LOADOUT<small>A random gun, bandages, an Ammo Box and a throwable. Lose it and grab another.</small></button>' : ''}
