@@ -8,9 +8,8 @@ A 3D cartoon **extraction shooter** set in a casino town gone wrong. Gear up, ra
 |---|---|---|---|
 | 🌵 Lost Vegas | Huge (660m) | Medium | Desert strip, motel, gas station and junkyard around the Lucky Dump Grand. Further out: Neon Boneyard, **Area 52 Test Range**, Starlite Drive-In, bowling alley, Pharaoh's Folly, a ranch, a freight yard and nine desert settlements |
 | 🏔️ Frostbite Peaks | Huge (580m) | Hard (machines have 30% more health and damage) | Ski town, frozen lake, gondola and the Alpine Ace Lodge. Further out: **Summit Observatory**, Frosty's Ice Hotel, ski jump, Avalanche Row, ranger station, old mine and eight mountain outposts |
-| 🍷 Wine Country | Huge (600m) | Medium | Old Town Temecula's wooden Front Street (saloon, general store, tasting room…) below the Grand Vine Casino. Vineyards on every hill, wineries with barrel cellars, a Balloon Launch Park with hot air balloons drifting overhead, Lake Skinner, oak-covered hills fading into desert, and the walled **Château Jackpot** |
+| 🍷 Temakilla | Huge (600m) | Medium | Temecula wine country: Old Town's wooden Front Street (saloon, general store, tasting room…) below the Grand Vine Casino. Vineyards on every hill, wineries with barrel cellars, a Balloon Launch Park with hot air balloons drifting overhead, Lake Skinner, oak-covered hills fading into desert, and the walled **Château Jackpot** |
 | 🐊 Bayou Royale | Huge (540m) | Medium | Swamp boardwalks and the Riverboat Royale paddle-steamer. Further out: **Madame Marie's Mansion**, Gator Farm, a shipwreck, fishing camp, Sunken Chapel, Swamp Gas and eight swamp settlements, each with a gator pond |
-| 🌵 Temakilla | Huge (600m) | Hard | A tequila town in the agave fields around the El Gran Temakilla cantina-casino, the Calle Principal, a church, a bullring, train station, an abandoned mission and the deadly **Temakilla Distillery** |
 | 🥊 The Bunker | Small (190m), all indoors | PvP | An underground den: a poker hall, **The Pit** fighting ring, and a loop of corridors and rooms (Cash Cage, Counting Room, VIP Suite…). Barely any machines, mostly hostile raiders, top-tier loot everywhere, and a 10-minute clock |
 
 Each map has one **deadly outer area** (in bold) with tier-3 loot and heavy guards, so the casino isn't the only place worth risking it.
@@ -20,8 +19,7 @@ Every map has a casino with a vault, a Pit Boss event, and four exits (two open 
 - **Lost Vegas: traffic.** Cars cruise the strip and the cross street, and getting hit hurts. They honk if you're standing in the lane.
 - **Frostbite Peaks: cold.** Your warmth drains outdoors. Stand by a burning barrel 🔥 or get indoors to warm up, or drink ☕ Hot Cocoa (G). At zero warmth you freeze, and frostbite goes straight through armor.
 - **Bayou Royale: gators.** They lurk in every pond with just their eyes showing and lunge at anyone who wanders close. They drop 🦷 Gator Teeth.
-- **Wine Country: traffic.** Tour buses and limos cruise Highway 79 through the middle of town.
-- **Temakilla: dust storms.** Every few minutes a storm rolls in and you can barely see 10 meters. It's perfect for sneaking, or for getting jumped.
+- **Temakilla: dust storms and traffic.** Every few minutes a Santa Ana dust storm blows in off the desert and you can barely see 10 meters, and tour buses cruise Highway 79 through town. It's perfect for sneaking, or for getting jumped.
 - **The Bunker: other people.** You get a few seconds of grace after you drop in. After that, most raiders down here want your stuff.
 
 ## Critical hits

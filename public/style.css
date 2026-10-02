@@ -833,7 +833,7 @@ body.tablemode #hubTabs, body.tablemode .hubfoot, body.tablemode #buildTag { dis
 .hero.m-vegas, .mapcard.m-vegas.on { background: linear-gradient(135deg, #b5452c, #7a1f5c); }
 .hero.m-frost, .mapcard.m-frost.on { background: linear-gradient(135deg, #3b6d99, #1e3a5f); }
 .hero.m-bayou, .mapcard.m-bayou.on { background: linear-gradient(135deg, #3f6212, #1f3d2b); }
-.hero.m-tequila, .mapcard.m-tequila.on { background: linear-gradient(135deg, #c2410c, #7c2d12); }
+.hero.m-tequila, .mapcard.m-tequila.on { background: linear-gradient(135deg, #9d174d, #4c1d95); }
 .hero.m-bunker, .mapcard.m-bunker.on { background: linear-gradient(135deg, #4c0519, #1b0f2b); }
 .hero.m-lounge, .mapcard.m-lounge.on { background: linear-gradient(135deg, #6a2c91, #3a1d5c); }
 .raidpick .maps { grid-template-columns: repeat(3, 1fr); margin: 0; }
@@ -1004,7 +1004,6 @@ h3 small.bank { color: var(--gold); opacity: 1; font-weight: 900; }
   .gamerail { display: grid; grid-template-columns: repeat(2, 1fr); }
   .session { grid-column: 1 / -1; margin: 0; justify-content: center; }
 }
-.hero.m-wine, .mapcard.m-wine.on { background: linear-gradient(135deg, #9d174d, #4c1d95); }
 @media (max-width: 1260px) { .tabs { gap: 6px; } .tabs button { font-size: 15px; padding: 5px 10px; } }
 .raidpick .maps { grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
 .raidpick .mapcard { padding: 6px 4px; gap: 2px; }

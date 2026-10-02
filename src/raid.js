@@ -307,6 +307,7 @@ export class Raid {
     c.equip(makeGun(pick(['pistol', 'pistol', 'smg', 'shotgun', 'revolver', 'ar']), rollRarity(1)));
     if (Math.random() < 0.4) c.equip(makeGun(pick(['smg', 'shotgun', 'revolver', 'dbarrel', 'rifle', 'bat']), rollRarity(1)));
     c.backpack.push(makeItem('bandage', 2), makeItem('ammo', randInt(1, 3)));
+    if (Math.random() < 0.5) c.backpack.push(makeItem('plate', 1));
     if (Math.random() < 0.4) c.backpack.push(makeItem(pick(['grenade', 'grenade', 'dice', 'flash', 'sauce']), randInt(1, 2)));
     if (Math.random() < 0.15) c.backpack.push(makeItem('token', 1));
     if (Math.random() < 0.5) c.backpack.push(rollLoot(2).chips ? makeItem('cards') : rollLoot(2));

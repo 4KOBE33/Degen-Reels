@@ -95,7 +95,7 @@ function minesMult(bombs, picks) {
 // The Shop's supplies: [item, price]. Pricier than the Fence pays, so selling and rebuying loses.
 // [item, price, level it unlocks at]
 const SUPPLIES = [
-  ['bandage', 150, 1], ['ammo', 120, 1], ['plate', 300, 2], ['soda', 350, 3], ['cocoa', 160, 3], ['grenade', 250, 4], ['smoke', 200, 4],
+  ['bandage', 150, 1], ['ammo', 120, 1], ['plate', 200, 1], ['soda', 350, 3], ['cocoa', 160, 3], ['grenade', 250, 4], ['smoke', 200, 4],
   ['dice', 300, 5], ['flash', 260, 5], ['fuel', 220, 6], ['sauce', 280, 7], ['sticky', 350, 8], ['emp', 380, 10], ['cluster', 500, 12],
   ['token', 2500, 14], ['keycard', 4500, 18],
 ];
@@ -328,7 +328,7 @@ export class Hub {
     const noGuns = !lo.weapons.some(Boolean);
     const freeKit = hasFreeKit(lo);
     // Easiest to deadliest.
-    const order = ['lounge', 'vegas', 'wine', 'bayou', 'frost', 'tequila', 'bunker'].filter((id) => MAPS[id]);
+    const order = ['lounge', 'vegas', 'tequila', 'bayou', 'frost', 'bunker'].filter((id) => MAPS[id]);
     const maps = order.map((id) => {
       const m = MAPS[id];
       return `<button class="mapcard m-${id} ${d.selectedMap === id ? 'on' : ''}" data-act="map" data-m="${id}">
@@ -356,7 +356,7 @@ export class Hub {
         <div class="maps">${maps}</div>
       </section>
       <section class="kit"><h3>🎒 Raid Loadout <small>${packed} packed · lost if you die</small></h3>
-        ${freeKit ? '<p class="hint freelock">🔒 Free loadout is locked in: nothing goes in or out until you raid with it.</p>' : noGuns ? '<button class="btn freekit" data-act="freekit">🎁 FREE LOADOUT<small>A random gun, bandages, an Ammo Box and a throwable. Lose it and grab another.</small></button>' : ''}
+        ${freeKit ? '<p class="hint freelock">🔒 Free loadout is locked in: nothing goes in or out until you raid with it.</p>' : noGuns ? '<button class="btn freekit" data-act="freekit">🎁 FREE LOADOUT<small>A random gun, bandages, an Ammo Box, a Chip Plate and a throwable. Lose it and grab another.</small></button>' : ''}
         <div class="wslots">${lo.weapons.map((g, i) => (g ? this.itemCard(g, 'unequip', i) : `<div class="item empty">Weapon ${i + 1}<br><small>empty</small></div>`)).join('')}</div>
         <div class="grid">${lo.items.map((it, i) => this.itemCard(it, 'unpack', i)).join('')}${Array(Math.max(0, LOADOUT_SLOTS - lo.items.length)).fill('<div class="item empty"></div>').join('')}</div>
         <p class="hint">Click anything to send it back to your stash.</p>
@@ -1065,7 +1065,7 @@ export class Hub {
           for (const it of x.loadout.items) if (!it.free) addToStash(x.stash.items, it);
           x.loadout.weapons = x.loadout.weapons.map(() => null);
           x.loadout.weapons[0] = gun;
-          x.loadout.items = [makeItem('bandage', 2), makeItem('ammo', 1), makeItem(thrown, 1)].map((it) => ({ ...it, free: true }));
+          x.loadout.items = [makeItem('bandage', 2), makeItem('ammo', 1), makeItem('plate', 1), makeItem(thrown, 1)].map((it) => ({ ...it, free: true }));
         });
         this.toast(`Free loadout packed: ${itemInfo(gun).name} and a ${ITEMS[thrown].name}. Try not to lose it.`);
         break;

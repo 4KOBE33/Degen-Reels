@@ -126,15 +126,8 @@ export const MAPS = {
     mapGround: '#eef3f8', hemi: [0xeef6ff, 0x8090b0, 1.8], sun: [0xfff4e6, 2.2], mountains: [0xe2e8f0, 0x94a3b8], glow: 0x2ee6d6, tough: 1.3,
   },
   tequila: {
-    name: 'Temakilla', icon: '🌶️', size: 'Huge', danger: 'Hard', half: 300, wilds: 'The Agave Fields',
-    blurb: 'A sun-baked tequila town in the agave fields, built around the El Gran Temakilla cantina-casino. Dust storms roll through without warning.',
-    sky: [0x3b1d4a, 0xd1495b, 0xf7b267], fog: 0xe08a5a,
-    ground: { base: '#d9a066', a: 'rgba(160,82,45,0.22)', b: 'rgba(255,214,165,0.3)' },
-    mapGround: '#dcae7a', hemi: [0xffe0c2, 0x7a3b4a, 1.7], sun: [0xffc58f, 2.4], mountains: [0xb5654a, 0x8f3f2e], glow: 0xff9f1c, tough: 1.15,
-  },
-  wine: {
-    name: 'Wine Country', icon: '🍷', size: 'Huge', danger: 'Medium', half: 300, wilds: 'The Hills',
-    blurb: 'Rolling vineyards, hot air balloons and Old Town Temecula. The Grand Vine Casino sits up the hill, and Château Jackpot keeps the good bottles locked up.',
+    name: 'Temakilla', icon: '🍷', size: 'Huge', danger: 'Medium', half: 300, wilds: 'The Hills',
+    blurb: 'Temecula wine country: Old Town\'s Front Street, vineyards on every hill and hot air balloons overhead. The Grand Vine Casino sits up the hill, Château Jackpot keeps the good bottles locked up, and Santa Ana dust storms roll in off the desert.',
     sky: [0x2b3a67, 0x8fb8de, 0xf7c59f], fog: 0xd9c3a5,
     ground: { base: '#c8b27a', a: 'rgba(120,140,60,0.25)', b: 'rgba(255,236,190,0.25)' },
     mapGround: '#bfae78', hemi: [0xfff1dc, 0x6b5a4a, 1.75], sun: [0xffe2b8, 2.3], mountains: [0x9c7b5b, 0x7a6248], glow: 0xff7eb6, tough: 1.05,
@@ -885,31 +878,13 @@ export function buildMap(scene, mapId = 'vegas') {
     return out.map(([x, z]) => [Math.max(-H + inset, Math.min(H - inset, x)), Math.max(-H + inset, Math.min(H - inset, z))]);
   }
 
-  // Agave: a spiky blue-green rosette, the whole point of Temakilla.
-  const agaveMat = toon(0x5f9e8f);
-  function agave(x, z, s = 1) {
-    const g = new THREE.Group();
-    g.position.set(x, 0, z);
-    for (let i = 0; i < 8; i++) {
-      const leaf = new THREE.Mesh(new THREE.ConeGeometry(0.18 * s, 1.6 * s, 4), agaveMat);
-      const a = (i / 8) * Math.PI * 2;
-      leaf.position.set(Math.cos(a) * 0.35 * s, 0.6 * s, Math.sin(a) * 0.35 * s);
-      leaf.rotation.set(Math.sin(a) * 0.7, 0, -Math.cos(a) * 0.7);
-      g.add(leaf);
-    }
-    const heart = new THREE.Mesh(new THREE.ConeGeometry(0.2 * s, 1.2 * s, 5), agaveMat);
-    heart.position.y = 0.6 * s;
-    g.add(heart);
-    statics.add(g);
-  }
-
   const kit = {
     H, THREE, statics, zones, minimap, containers, slotSpots, enemySpots, solids,
     part, toon, neonSign, carpetTexture, flat, box, circle, addCollider, addRayBlocker,
     car, palm, cactus, rock, streetLight, billboard, crateStack, building, container, enemies,
     pine, snowman, cypress, reeds, pond, mountains, scatter, casino, fire, ponds, fires,
     fence, yard, waterTower, watchtower, tent, boxcar, rails, pyramid, boardTexture,
-    outposts, ringSpawns, agave, def, animate: (fn) => animated.push(fn),
+    outposts, ringSpawns, def, animate: (fn) => animated.push(fn),
   };
   const layout = BUILDERS[mapId in BUILDERS ? mapId : 'vegas'](kit);
   if (def.mountains) mountains(def.mountains);
@@ -1127,7 +1102,7 @@ export function buildMap(scene, mapId = 'vegas') {
         const s = neonSign('OLD CHOMPER', '#5ee27a', 18);
         s.position.set(x, h + 16, z);
         statics.add(s);
-      } else if (mapId === 'wine') {
+      } else if (mapId === 'tequila') {
         // THE BIG POUR: a wine bottle the size of a building, tipping into a giant glass.
         const glassMat = new THREE.MeshBasicMaterial({ color: 0x14532d, transparent: true, opacity: 0.85 });
         const bottle = new THREE.Mesh(new THREE.CylinderGeometry(4.5, 4.5, 18, 24), glassMat);
@@ -1156,22 +1131,6 @@ export function buildMap(scene, mapId = 'vegas') {
         const s = neonSign('THE BIG POUR', '#ff7eb6', 18);
         s.position.set(x, h + 33, z - 5);
         statics.add(s);
-      } else {
-        // LA BOTELLA: a tequila bottle the size of a building.
-        const glass = new THREE.MeshBasicMaterial({ color: 0x86efac, transparent: true, opacity: 0.8 });
-        const body = new THREE.Mesh(new THREE.CylinderGeometry(6, 6, 22, 24), glass);
-        body.position.set(x, h + 11, z - 4);
-        const neck = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 5.5, 8, 20), glass);
-        neck.position.set(x, h + 26, z - 4);
-        const cap = part(new THREE.CylinderGeometry(2.4, 2.4, 3, 16), 0xd4a63a);
-        cap.position.set(x, h + 31.5, z - 4);
-        const label = new THREE.Mesh(new THREE.PlaneGeometry(9, 6), new THREE.MeshBasicMaterial({ map: boardTexture('TEMAKILLA\nAÑEJO', '#fff6e0', '#b5651d') }));
-        label.position.set(x, h + 10, z + 2.05);
-        statics.add(body, neck, cap, label);
-        circle(x, z - 4, 6, h + 22);
-        const s = neonSign('LA BOTELLA', '#ff9f1c', 18);
-        s.position.set(x, h + 37, z - 4);
-        statics.add(s);
       }
       // The good stuff sits on the plaza; a turret and a bouncer keep watch.
       container('safe', ...at(-9, 9), 4, 0, h);
@@ -1180,7 +1139,7 @@ export function buildMap(scene, mapId = 'vegas') {
       enemies('turret', ...at(10, -10), 1, 0, h);
       enemies('bouncer', ...at(0, S / 2 + 10), 1, 2);
       enemies('bouncer', ...at(-6, S / 2 + 8), 1, 2);
-      const name = { vegas: 'Lucky Seven', frost: 'The Ice Crown', bayou: 'Old Chomper', tequila: 'La Botella', wine: 'The Big Pour' }[mapId] || 'The Monument';
+      const name = { vegas: 'Lucky Seven', frost: 'The Ice Crown', bayou: 'Old Chomper', tequila: 'The Big Pour' }[mapId] || 'The Monument';
       zones.push({ name, x, z, w: S, d: S, tier: 3 });
       minimap.push({ x, z, w: S, d: S, color: '#d4a63a', label: name, tier: 3 });
     }
@@ -1189,8 +1148,7 @@ export function buildMap(scene, mapId = 'vegas') {
       vegas: [['Hotel Jackpot', 0xf1faee, 0xe63946, '#ff3fa4'], ['Neon Arms', 0x7b2cbf, 0x1b0f2b, '#2ee6d6'], ['The High Rise', 0xffd6a5, 0x6b3a1e, '#ffd23f']],
       frost: [['Summit Lodge', 0x8d6e63, 0x3e2723, '#7dd3fc'], ['Glacier Suites', 0xe2e8f0, 0x475569, '#2ee6d6'], ['Avalanche Tower', 0x94a3b8, 0x1e293b, '#ff5d5d']],
       bayou: [['Swamp Spire', 0x6b705c, 0x3f3f2f, '#5ee27a'], ['Moonshine Mill', 0x9c6644, 0x3e2723, '#ffd23f'], ['Heron Hotel', 0xa5a58d, 0x3f3f2f, '#ff7eb6']],
-      wine: [['Vineyard View Inn', 0xe9d8a6, 0x3e2716, '#ff7eb6'], ['Barrel Tower', 0x9c6644, 0x2b1a0e, '#ffd23f'], ['Grand Cru Suites', 0x7f1d3a, 0x2b0f1c, '#fff6e0']],
-      tequila: [['Hotel Agave', 0xf4a261, 0x5b2a12, '#5ee27a'], ['Torre Tequila', 0xe76f51, 0x5b2a12, '#ffd23f'], ['El Mirador', 0xe9c46a, 0x5b2a12, '#ff9f1c']],
+      tequila: [['Vineyard View Inn', 0xe9d8a6, 0x3e2716, '#ff7eb6'], ['Barrel Tower', 0x9c6644, 0x2b1a0e, '#ffd23f'], ['Grand Cru Suites', 0x7f1d3a, 0x2b0f1c, '#fff6e0']],
     }[mapId] || [];
     const m = findSpot(30, 52);
     if (m) monument(m[0], m[1] - 8);
@@ -1432,66 +1390,6 @@ export function buildMap(scene, mapId = 'vegas') {
           container('safe', x + 6, z - 5, 2);
           container('crate', x - 9, z + 5, 2);
           enemies('dicer', x, z + 8, 2, 8);
-        },
-      ],
-      tequila: [
-        // El Mercado: rows of market stalls under bright awnings.
-        () => {
-          const at = findSpot(40, 30);
-          if (!at) return;
-          const [x, z] = at;
-          const colors = [0xe63946, 0xffd23f, 0x2ee6d6, 0xff7eb6, 0x5ee27a, 0xc77dff];
-          for (let r = 0; r < 2; r++) {
-            for (let i = 0; i < 5; i++) {
-              const sx = x - 16 + i * 8;
-              const sz = z - 6 + r * 12;
-              const counter = part(new THREE.BoxGeometry(5, 1.1, 2), 0x8b5a2b, { ink: 0.02 });
-              counter.position.set(sx, 0.55, sz);
-              const awning = part(new THREE.BoxGeometry(6, 0.2, 4), colors[(i + r * 2) % colors.length], { ink: 0.02 });
-              awning.position.set(sx, 3.2, sz);
-              awning.rotation.x = r ? 0.15 : -0.15;
-              for (const dx of [-2.8, 2.8]) {
-                const post = part(new THREE.CylinderGeometry(0.1, 0.1, 3.2, 6), 0x5b3a1e, { ink: 0 });
-                post.position.set(sx + dx, 1.6, sz);
-                statics.add(post);
-              }
-              statics.add(counter, awning);
-              box(sx, sz, 5, 2, 1.1);
-              if ((i + r) % 2 === 0) container(i % 3 ? 'crate' : 'register', sx, sz + (r ? 2 : -2), 2);
-            }
-          }
-          mark('El Mercado', x, z, 44, 28, '#ff9f1c');
-          enemies('dicer', x, z, 3, 12);
-        },
-        // La Arena: a lucha libre ring.
-        () => {
-          const at = findSpot(22, 22);
-          if (!at) return;
-          const [x, z] = at;
-          const S = 12;
-          const mat = part(new THREE.BoxGeometry(S, 1.2, S), 0x1d4ed8);
-          mat.position.set(x, 0.6, z);
-          statics.add(mat);
-          addCollider({ type: 'box', minX: x - S / 2, maxX: x + S / 2, minZ: z - S / 2, maxZ: z + S / 2, top: 1.2 });
-          for (const [dx, dz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
-            const post = part(new THREE.CylinderGeometry(0.25, 0.25, 3, 8), 0xe63946, { ink: 0.02 });
-            post.position.set(x + (dx * S) / 2, 2.4, z + (dz * S) / 2);
-            statics.add(post);
-          }
-          for (const h of [1.9, 2.6, 3.3]) {
-            for (const [rx, rz, w, d] of [[0, -S / 2, S, 0.08], [0, S / 2, S, 0.08], [-S / 2, 0, 0.08, S], [S / 2, 0, 0.08, S]]) {
-              const rope = new THREE.Mesh(new THREE.BoxGeometry(w, 0.08, d), new THREE.MeshBasicMaterial({ color: 0xfff6e0 }));
-              rope.position.set(x + rx, h, z + rz);
-              statics.add(rope);
-            }
-          }
-          const sign = neonSign('LUCHA LIBRE', '#ff3fa4', 12);
-          sign.position.set(x, 6.5, z - S / 2 - 1);
-          statics.add(sign);
-          mark('La Arena', x, z, 22, 22, '#1d4ed8');
-          container('safe', x, z, 2, 0, 1.2);
-          enemies('bouncer', x + S / 2 + 3, z, 1, 2);
-          enemies('shark', x - S / 2 - 3, z, 2, 4);
         },
       ],
     }[mapId] || [];
@@ -1846,11 +1744,11 @@ function lostVegas(k) {
   // ---------- the strip ----------
 
   // Main road south from the casino, and a cross street.
-  flat(0, (H - 20) / 2, 16, H + 20, asphalt);
+  flat(0, (H + 14) / 2, 16, H - 14, asphalt);
   flat(0, 40, H * 2, 14, asphalt, 0.025);
-  minimap.push({ x: 0, z: (H - 20) / 2, w: 16, d: H + 20, color: '#3b3548' }, { x: 0, z: 40, w: H * 2, d: 14, color: '#3b3548' });
+  minimap.push({ x: 0, z: (H + 14) / 2, w: 16, d: H - 14, color: '#3b3548' }, { x: 0, z: 40, w: H * 2, d: 14, color: '#3b3548' });
   const dash = toon(0xffd23f);
-  for (let z = -15; z < H; z += 8) if (Math.abs(z - 40) > 9) flat(0, z, 0.4, 3.5, dash, 0.035);
+  for (let z = 18; z < H; z += 8) if (Math.abs(z - 40) > 9) flat(0, z, 0.4, 3.5, dash, 0.035);
   for (let x = -H + 4; x < H; x += 8) if (Math.abs(x) > 10) flat(x, 40, 3.5, 0.4, dash, 0.035);
   // Parking lot behind the casino.
   flat(0, -125, 70, 40, asphalt);
@@ -2212,8 +2110,8 @@ function lostVegas(k) {
     // Cars cruise the strip and the cross street. Don't stand in the road.
     hazards: {
       lanes: [
-        { axis: 'z', at: 3.5, from: -16, to: H - 4, dir: 1 },
-        { axis: 'z', at: -3.5, from: -16, to: H - 4, dir: -1 },
+        { axis: 'z', at: 3.5, from: 16, to: H - 4, dir: 1 },
+        { axis: 'z', at: -3.5, from: 16, to: H - 4, dir: -1 },
         { axis: 'x', at: 43.5, from: -H + 4, to: H - 4, dir: 1 },
         { axis: 'x', at: 36.5, from: -H + 4, to: H - 4, dir: -1 },
       ],
@@ -2814,203 +2712,6 @@ function bayouRoyale(k) {
   };
 }
 
-// ---------- Temakilla: a tequila town in the agave fields ----------
-
-function temakilla(k) {
-  const {
-    H, THREE, statics, zones, minimap, slotSpots, part, toon, neonSign, flat, box, circle,
-    car, cactus, rock, streetLight, billboard, crateStack, building, container, enemies, casino,
-    scatter, agave, waterTower, watchtower, rails, boxcar, yard, fence,
-  } = k;
-  const dirt = toon(0xc98b5a);
-  const cobble = toon(0xb07850);
-  // The calle: one long street south from the cantina, crossed by the old train road.
-  flat(0, (H - 20) / 2 + 10, 14, H + 10, cobble);
-  flat(0, 60, H * 2, 12, dirt, 0.025);
-  minimap.push({ x: 0, z: (H - 20) / 2 + 10, w: 14, d: H + 10, color: '#a0663f' }, { x: 0, z: 60, w: H * 2, d: 12, color: '#a0663f' });
-
-  const adobe = [0xe9c46a, 0xf4a261, 0xe76f51, 0xffd6a5, 0xf1c0e8, 0x8ecae6, 0xcdb4db];
-  const cas = casino({
-    x: 0, z: -40, name: 'El Gran Temakilla', sign: 'EL GRAN TEMAKILLA', signColor: '#ff9f1c',
-    color: 0xc2410c, trim: 0x431407, mapColor: '#c2410c', felt: 0x14532d,
-    plaza(px, pz) {
-      // The town well and strings of papel picado over the plaza.
-      const well = part(new THREE.CylinderGeometry(3, 3.3, 1.4, 20), 0xe9c46a);
-      well.position.set(px, 0.7, pz);
-      statics.add(well);
-      circle(px, pz, 3.3, 1.4);
-      const flags = [0xe63946, 0xffd23f, 0x2ee6d6, 0xff7eb6, 0x5ee27a, 0xc77dff];
-      for (let row = 0; row < 3; row++) {
-        for (let i = 0; i < 14; i++) {
-          const f = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 0.8), new THREE.MeshBasicMaterial({ color: flags[(i + row) % flags.length], side: THREE.DoubleSide }));
-          f.position.set(px - 18 + i * 2.7, 7.5 - Math.sin((i / 13) * Math.PI) * 1.2, pz - 6 + row * 6);
-          statics.add(f);
-        }
-      }
-      for (const [dx, dz] of [[-14, 8], [14, 8], [-20, -4], [20, -4]]) agave(px + dx, pz + dz, 1.3);
-      enemies('dicer', px, pz + 4, 2, 16);
-    },
-  });
-
-  // ----- Calle Principal: shops down both sides of the street -----
-  const shops = [
-    ['Cantina La Ruina', 'CANTINA', '#ff9f1c'], ['Mercado', 'MERCADO', '#5ee27a'], ['Farmacia', 'FARMACIA', '#2ee6d6'],
-    ['Barbería', 'BARBERIA', '#ff7eb6'], ['Casa de Empeño', 'EMPEÑO', '#ffd23f'], ['Panadería', 'PANADERIA', '#c77dff'],
-  ];
-  shops.forEach(([name, sign, sc], i) => {
-    const side = i % 2 ? 1 : -1;
-    const x = side * 26;
-    const z = [25, 86, 114][Math.floor(i / 2)];
-    building({ name, x, z, w: 18, d: 14, h: 5, color: adobe[i % adobe.length], trim: 0x5b2a12, tier: 2, sign, signColor: sc, mapColor: '#b5651d', doors: [{ side: side < 0 ? 'e' : 'w', at: 0, width: 3 }] });
-    container(i % 3 === 0 ? 'register' : 'locker', x - side * 4, z - 3, 2);
-    container('crate', x - side * 4, z + 3, 2);
-    if (i % 2 === 0) slotSpots.push({ x: x + side * 5, z: z + 4, rot: side < 0 ? Math.PI / 2 : -Math.PI / 2, tier: 2 });
-    enemies(['slotbot', 'shark', 'dicer'][i % 3], x - side * 10, z, 1);
-  });
-  zones.push({ name: 'Calle Principal', x: 0, z: 70, w: 70, d: 110, tier: 2 });
-  for (let z = 0; z < H - 10; z += 20) { streetLight(-8, z); streetLight(8, z + 10); }
-
-  // ----- La Iglesia: a church with a bell tower -----
-  building({ name: 'La Iglesia', x: -70, z: -30, w: 18, d: 28, h: 7, color: 0xfff6e0, trim: 0x8b5a2b, tier: 2, sign: 'IGLESIA', signColor: '#ffd23f', mapColor: '#d6c7a1', doors: [{ side: 's', at: 0, width: 4 }] });
-  {
-    const tower = part(new THREE.BoxGeometry(6, 16, 6), 0xfff6e0);
-    tower.position.set(-70, 8, -46);
-    const cap = part(new THREE.ConeGeometry(4.4, 4, 4), 0xc2410c);
-    cap.position.set(-70, 18, -46);
-    cap.rotation.y = Math.PI / 4;
-    const bell = part(new THREE.SphereGeometry(1, 12, 8, 0, Math.PI * 2, 0, Math.PI / 1.6), 0xd4a63a);
-    bell.position.set(-70, 13, -46);
-    statics.add(tower, cap, bell);
-    box(-70, -46, 6, 6, 16);
-  }
-  container('safe', -74, -38, 2);
-  container('locker', -66, -24, 2);
-  enemies('dicer', -70, -10, 2, 14);
-
-  // ----- Temakilla Distillery (deadly): copper stills and barrel rooms -----
-  {
-    const dx0 = 150;
-    const dz0 = -130;
-    yard({ name: 'Temakilla Distillery', x: dx0, z: dz0, w: 80, d: 64, gates: ['w', 's'], tier: 3, mapColor: '#7c2d12' });
-    building({ name: 'Still House', x: dx0 - 10, z: dz0 - 12, w: 36, d: 24, h: 9, color: 0x9a3412, trim: 0x1c1917, tier: 3, sign: 'DESTILERIA', signColor: '#ff9f1c', mapColor: '#7c2d12', doors: [{ side: 's', at: 0, width: 6 }, { side: 'w', at: 0, width: 3 }] });
-    for (const sx of [-18, -6, 6]) {
-      const still = part(new THREE.SphereGeometry(2.4, 16, 12), 0xb87333);
-      still.position.set(dx0 - 10 + sx, 2.4, dz0 - 16);
-      const neck = part(new THREE.CylinderGeometry(0.4, 0.8, 3, 10), 0xb87333, { ink: 0.02 });
-      neck.position.set(dx0 - 10 + sx, 5.6, dz0 - 16);
-      statics.add(still, neck);
-      circle(dx0 - 10 + sx, dz0 - 16, 2.4, 4.8);
-    }
-    building({ name: 'Barrel Room', x: dx0 + 24, z: dz0 + 8, w: 20, d: 26, h: 6, color: 0x78350f, trim: 0x1c1917, tier: 3, mapColor: '#5b2a12', doors: [{ side: 'w', at: 0, width: 3 }] });
-    for (let i = 0; i < 8; i++) {
-      const barrel = part(new THREE.CylinderGeometry(0.9, 0.9, 1.8, 12), 0x8b5a2b, { ink: 0.02 });
-      barrel.rotation.z = Math.PI / 2;
-      barrel.position.set(dx0 + 20 + (i % 2) * 7, 0.9, dz0 - 2 + Math.floor(i / 2) * 5);
-      statics.add(barrel);
-      box(dx0 + 20 + (i % 2) * 7, dz0 - 2 + Math.floor(i / 2) * 5, 1.8, 1.8, 1.8);
-    }
-    for (const [cx, cz, kind] of [[-24, -20, 'safe'], [4, -20, 'safe'], [-24, -4, 'locker'], [4, -4, 'crate']]) container(kind, dx0 - 10 + cx, dz0 - 12 + cz + 12, 3);
-    container('safe', dx0 + 28, dz0 + 18, 3);
-    container('crate', dx0 + 18, dz0 + 18, 3);
-    for (const [wx, wz] of [[-38, -30], [38, -30], [-38, 30], [38, 30]]) watchtower(dx0 + wx, dz0 + wz, 0x78350f);
-    enemies('slotbot', dx0, dz0, 3, 30);
-    enemies('shark', dx0 + 20, dz0 + 10, 2, 10);
-    enemies('dicer', dx0 - 20, dz0 + 20, 2, 16);
-  }
-
-  // ----- Plaza de Toros: a bullring -----
-  {
-    const bx = -150;
-    const bz = 120;
-    const R = 22;
-    for (let i = 0; i < 28; i++) {
-      const a = (i / 28) * Math.PI * 2;
-      if (i === 0 || i === 14) continue;
-      const seg = part(new THREE.BoxGeometry(5.2, 3, 1.2), i % 2 ? 0xe63946 : 0xfff6e0, { ink: 0.03 });
-      seg.position.set(bx + Math.cos(a) * R, 1.5, bz + Math.sin(a) * R);
-      seg.rotation.y = -a + Math.PI / 2;
-      statics.add(seg);
-      circle(bx + Math.cos(a) * R, bz + Math.sin(a) * R, 1.6, 3);
-    }
-    const sand = new THREE.Mesh(new THREE.CircleGeometry(R - 1, 32), new THREE.MeshBasicMaterial({ color: 0xe9c46a }));
-    sand.rotation.x = -Math.PI / 2;
-    sand.position.set(bx, 0.03, bz);
-    statics.add(sand);
-    zones.push({ name: 'Plaza de Toros', x: bx, z: bz, w: R * 2 + 6, d: R * 2 + 6, tier: 2 });
-    minimap.push({ x: bx, z: bz, w: R * 1.6, d: R * 1.6, color: '#e9c46a', label: 'Plaza de Toros', tier: 2 });
-    container('safe', bx, bz, 2);
-    crateStack(bx - 8, bz + 6);
-    crateStack(bx + 8, bz - 6);
-    enemies('shark', bx, bz, 3, 20);
-  }
-
-  // ----- Agave fields: rows and rows of blue agave -----
-  for (const [fx, fz, w, d, name] of [[140, 80, 90, 70, 'East Agave Field'], [-130, -150, 90, 60, 'West Agave Field'], [-40, 210, 100, 50, 'South Agave Field']]) {
-    for (let x = fx - w / 2 + 3; x < fx + w / 2; x += 6) {
-      for (let z = fz - d / 2 + 3; z < fz + d / 2; z += 5) agave(x + (Math.random() - 0.5), z + (Math.random() - 0.5), 0.8 + Math.random() * 0.4);
-    }
-    zones.push({ name, x: fx, z: fz, w, d, tier: 1 });
-    minimap.push({ x: fx, z: fz, w, d, color: '#7aa89a', label: name, tier: 1 });
-    container('crate', fx, fz, 1);
-    enemies('dicer', fx, fz, 2, w * 0.6);
-  }
-
-  // ----- Tequila Express: the train station -----
-  rails(H - 14, -H + 10, H - 10);
-  minimap.push({ x: H - 14, z: 0, w: 3, d: H * 2 - 20, color: '#5b4636' });
-  building({ name: 'Estación', x: H - 34, z: 60, w: 18, d: 26, h: 5, color: 0xffd6a5, trim: 0x5b2a12, tier: 2, sign: 'ESTACION', signColor: '#ffd23f', mapColor: '#b5651d', doors: [{ side: 'w', at: 0, width: 4 }, { side: 'e', at: 0, width: 4 }] });
-  container('register', H - 36, 54, 2);
-  container('locker', H - 36, 66, 2);
-  for (const [z, c] of [[-80, 0x9b2226], [-40, 0x005f73], [140, 0xca6702]]) boxcar(H - 14, z, c);
-  waterTower(H - 40, 20, 0xd1d5db, 'TEMAKILLA');
-  enemies('slotbot', H - 40, 60, 1);
-
-  // ----- Misión Abandonada: a crumbling mission -----
-  {
-    const mx = -200;
-    const mz = -40;
-    building({ name: 'Misión Abandonada', x: mx, z: mz, w: 30, d: 20, h: 6, color: 0xd6c7a1, trim: 0x78716c, tier: 2, roof: false, mapColor: '#a8a29e', doors: [{ side: 'e', at: 0, width: 5 }, { side: 'n', at: -8, width: 3 }] });
-    for (let i = 0; i < 5; i++) rock(mx - 12 + i * 6, mz + 14, 1 + Math.random());
-    container('safe', mx - 10, mz - 5, 2);
-    container('crate', mx + 8, mz + 5, 2);
-    enemies('shark', mx, mz, 2, 12);
-  }
-
-  billboard(-25, 100, Math.PI / 2, 'SALUD!\nTHE HOUSE\nPOURS', '#c2410c', '#fff6e0');
-  billboard(25, 160, -Math.PI / 2, 'ONE MORE\nSHOT', '#14532d', '#ffd23f');
-  for (let i = 0; i < 8; i++) car(i % 2 ? 11 : -11, 40 + i * 14, 'z', undefined, i % 3 === 0);
-
-  const extracts = [
-    { name: 'Burro Trail', x: -H + 12, z: 60 },
-    { name: 'Tequila Express', x: H - 22, z: -H + 30 },
-    { name: 'Border Crossing', x: 0, z: H - 12 },
-    { name: 'Hot Air Balloon', x: -60, z: -H + 15 },
-  ];
-  k.outposts({
-    exits: extracts,
-    names: ['Rancho Loco', 'Taquería El Jefe', 'Hacienda Dorada', 'Cactus Cantina', 'El Pozo Mine', 'Coyote Motel', 'Mezcal Shack', 'Los Dados'],
-    colors: adobe, inner: 215, outer: H - 22, count: 8,
-    avoid: (x, z) => Math.abs(x) < 28 || Math.abs(z - 60) < 28 || x > H - 30,
-    extra: (x, z) => { for (let i = 0; i < 6; i++) agave(x + (Math.random() - 0.5) * 40, z + (Math.random() - 0.5) * 40); },
-  });
-  scatter(750, (x, z) => {
-    const r = Math.random();
-    if (r < 0.35) agave(x, z, 0.8 + Math.random() * 0.6);
-    else if (r < 0.65) cactus(x, z);
-    else if (r < 0.92) rock(x, z, 0.8 + Math.random() * 2);
-    else crateStack(x, z);
-  }, (x, z) => Math.abs(x) < 18 || Math.abs(z - 60) < 17 || x > H - 25 || extracts.some((e) => Math.hypot(x - e.x, z - e.z) < 22));
-  for (let i = 0; i < 16; i++) enemies('dicer', (Math.random() * 2 - 1) * H * 0.85, (Math.random() * 2 - 1) * H * 0.85, 1);
-  for (let i = 0; i < 6; i++) enemies('shark', (Math.random() * 2 - 1) * H * 0.85, (Math.random() * 2 - 1) * H * 0.85, 1);
-  for (let i = 0; i < 40; i++) {
-    const x = (Math.random() * 2 - 1) * (H - 20);
-    const z = (Math.random() * 2 - 1) * (H - 20);
-    if (zones.some((zn) => Math.abs(x - zn.x) < zn.w / 2 + 4 && Math.abs(z - zn.z) < zn.d / 2 + 4)) continue;
-    container('crate', x, z, 1);
-  }
-  return { ...cas, extracts, spawns: k.ringSpawns(12, 22), hazards: { dust: true } };
-}
-
 // ---------- The Bunker: underground, all indoors, built for gunfights ----------
 
 function theBunker(k) {
@@ -3287,7 +2988,7 @@ function theLounge(k) {
   };
 }
 
-// ---------- Wine Country: vineyards, hot air balloons and Old Town Temecula ----------
+// ---------- Temakilla: Temecula wine country. Vineyards, hot air balloons and Old Town ----------
 
 function wineCountry(k) {
   const {
@@ -3299,11 +3000,11 @@ function wineCountry(k) {
   const dirt = toon(0xc9a37a);
   const boards = toon(0x8b5a2b);
   // Highway 79 runs north-south past the casino; Front Street (Old Town) runs east-west.
-  flat(0, (H - 20) / 2, 14, H + 20, road);
+  flat(0, (H + 14) / 2, 14, H - 14, road);
   flat(0, 60, H * 2, 14, road, 0.025);
-  minimap.push({ x: 0, z: (H - 20) / 2, w: 14, d: H + 20, color: '#4a4453' }, { x: 0, z: 60, w: H * 2, d: 14, color: '#4a4453' });
+  minimap.push({ x: 0, z: (H + 14) / 2, w: 14, d: H - 14, color: '#4a4453' }, { x: 0, z: 60, w: H * 2, d: 14, color: '#4a4453' });
   const dash = toon(0xfff6e0);
-  for (let z = -15; z < H; z += 8) if (Math.abs(z - 60) > 9) flat(0, z, 0.4, 3.5, dash, 0.035);
+  for (let z = 18; z < H; z += 8) if (Math.abs(z - 60) > 9) flat(0, z, 0.4, 3.5, dash, 0.035);
 
   // ----- props -----
   const leaf = [toon(0x4d7c0f), toon(0x3f6212), toon(0x65a30d)];
@@ -3508,7 +3209,7 @@ function wineCountry(k) {
   vineyard('Cabernet Rows', 150, -40, 90, 80, 'x', 1);
   vineyard('Merlot Hill', -150, -60, 80, 90, 'z', 1);
   vineyard('Zinfandel Slope', 140, 170, 100, 60, 'x', 1);
-  vineyard('Syrah Bench', -120, 190, 70, 60, 'z', 1);
+  vineyard('Syrah Bench', -75, 205, 70, 60, 'z', 1);
 
   // ----- wineries -----
   function winery({ name, sign, x, z, color, tier = 2, deadly = false }) {
@@ -3537,8 +3238,8 @@ function wineCountry(k) {
   winery({ name: 'Vino Bandito', sign: 'VINO BANDITO', x: -100, z: -150, color: 0xcb997e });
   // Château Jackpot: the deadly estate, walled in with watchtowers.
   {
-    const cx = -175;
-    const cz = 70;
+    const cx = -200;
+    const cz = 150;
     yard({ name: 'Château Jackpot', x: cx, z: cz, w: 64, d: 70, gates: ['e', 's'], tier: 3, mapColor: '#7f1d3a' });
     winery({ name: 'Château Jackpot', sign: 'CHATEAU JACKPOT', x: cx, z: cz + 6, color: 0xfff6e0, tier: 3, deadly: true });
     for (const [wx, wz] of [[-28, -31], [28, -31], [-28, 31], [28, 31]]) watchtower(cx + wx, cz + wz, 0x7f1d3a);
@@ -3548,7 +3249,7 @@ function wineCountry(k) {
   // ----- Balloon Launch Park: balloons on the ground, ready to go -----
   {
     const bx = 160;
-    const bz = 60;
+    const bz = 108;
     flat(bx, bz, 70, 50, toon(0x9bc26b), 0.03);
     for (let i = 0; i < 4; i++) {
       const g = balloonModel(i, 0.9);
@@ -3591,7 +3292,7 @@ function wineCountry(k) {
 
   // ----- Lake Skinner: a reservoir with a boat dock -----
   {
-    const lx = 50;
+    const lx = 85;
     const lz = 240;
     const LR = 22;
     const water = new THREE.Mesh(new THREE.CircleGeometry(LR, 32), new THREE.MeshBasicMaterial({ color: 0x4dabff }));
@@ -3614,7 +3315,7 @@ function wineCountry(k) {
   }
 
   const extracts = [
-    { name: 'Balloon Ride', x: 205, z: 60 },
+    { name: 'Balloon Ride', x: 215, z: 108 },
     { name: 'I-15 On-Ramp', x: -H + 14, z: -20 },
     { name: 'Wine Train', x: 40, z: -H + 15 },
     { name: 'Vail Lake Trail', x: -40, z: H - 12 },
@@ -3648,14 +3349,15 @@ function wineCountry(k) {
     ...cas,
     extracts,
     spawns: k.ringSpawns(12, 22),
-    // Tour buses and wine-tasting limos cruise Highway 79 and Front Street.
+    // Tour buses and wine-tasting limos cruise Highway 79, and Santa Ana dust storms blow in off the desert.
     hazards: {
+      dust: true,
       lanes: [
-        { axis: 'z', at: 3.5, from: -16, to: H - 4, dir: 1 },
-        { axis: 'z', at: -3.5, from: -16, to: H - 4, dir: -1 },
+        { axis: 'z', at: 3.5, from: 16, to: H - 4, dir: 1 },
+        { axis: 'z', at: -3.5, from: 16, to: H - 4, dir: -1 },
       ],
     },
   };
 }
 
-const BUILDERS = { vegas: lostVegas, wine: wineCountry, frost: frostbitePeaks, bayou: bayouRoyale, tequila: temakilla, bunker: theBunker, lounge: theLounge };
+const BUILDERS = { vegas: lostVegas, frost: frostbitePeaks, bayou: bayouRoyale, tequila: wineCountry, bunker: theBunker, lounge: theLounge };

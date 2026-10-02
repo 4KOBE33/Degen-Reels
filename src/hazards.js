@@ -75,7 +75,7 @@ export class Hazards {
           this.storm = 30 + Math.random() * 15;
           this.dustIn = 110 + Math.random() * 90;
           raid.hud.toast('🌪️ DUST STORM! You can barely see your own hands.', 'big');
-          raid.feed('🌪️ A dust storm is rolling through Temakilla');
+          raid.feed('🌪️ A Santa Ana dust storm is blowing through');
         }
       }
       const want = this.storm > 0 ? 1 : 0;
