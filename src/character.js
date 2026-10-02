@@ -14,6 +14,37 @@ function buildHat(kind) {
     const band = part(new THREE.CylinderGeometry(0.305, 0.305, 0.1, 20), 0xe63946, { ink: 0 });
     band.position.y = 0.08;
     hat.add(band);
+  } else if (kind === 'goldtop') {
+    // The gold top hat: the top hat, but money.
+    hat.add(part(new THREE.CylinderGeometry(0.42, 0.42, 0.05, 20), 0xd4a63a));
+    const crown = part(new THREE.CylinderGeometry(0.28, 0.3, 0.5, 20), 0xffd23f);
+    crown.position.y = 0.27;
+    hat.add(crown);
+    const band = part(new THREE.CylinderGeometry(0.305, 0.305, 0.1, 20), 0x1b0f2b, { ink: 0 });
+    band.position.y = 0.08;
+    hat.add(band);
+  } else if (kind === 'fez') {
+    const body = part(new THREE.CylinderGeometry(0.2, 0.27, 0.36, 18), 0xb5172b);
+    body.position.y = 0.18;
+    const tassel = part(new THREE.CylinderGeometry(0.02, 0.02, 0.28, 6), 0x111111, { ink: 0 });
+    tassel.position.set(0.16, 0.26, 0);
+    tassel.rotation.z = -0.5;
+    hat.add(body, tassel);
+  } else if (kind === 'horns') {
+    for (const side of [-1, 1]) {
+      const horn = part(new THREE.ConeGeometry(0.08, 0.32, 10), 0xe63946, { ink: 0.02 });
+      horn.position.set(side * 0.2, 0.18, 0);
+      horn.rotation.z = -side * 0.35;
+      hat.add(horn);
+    }
+  } else if (kind === 'sombrero') {
+    const brim = part(new THREE.CylinderGeometry(0.75, 0.75, 0.05, 28), 0xe9c46a);
+    const crown = part(new THREE.ConeGeometry(0.3, 0.45, 20), 0xe9c46a);
+    crown.position.y = 0.24;
+    const band = part(new THREE.TorusGeometry(0.62, 0.035, 6, 28), 0xe63946, { ink: 0 });
+    band.rotation.x = Math.PI / 2;
+    band.position.y = 0.03;
+    hat.add(brim, crown, band);
   } else if (kind === 'cowboy') {
     const brim = part(new THREE.CylinderGeometry(0.62, 0.62, 0.05, 24), 0x8b5a2b);
     brim.scale.z = 0.85;

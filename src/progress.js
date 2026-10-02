@@ -170,6 +170,7 @@ export function lookUnlocked(opt, d = save.get()) {
   if (!u) return true;
   if (u.level) return levelInfo(d.xp).level >= u.level;
   if (u.ach) return !!d.achievements[u.ach];
+  if (u.buy) return !!(d.owned && d.owned[String(opt.id)]);
   return false;
 }
 function unlockedLookSet() {

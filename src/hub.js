@@ -1,7 +1,7 @@
 // The Hub between raids: stash and loadout, the Back Room (gambling), the Fence (selling),
 // your look, your records (stats, achievements, collection log) and settings.
 // Everything here is plain HTML on top of the 3D backdrop.
-import { BACKPACK_SLOTS, BAG_UPGRADES, HUB_SLOTS, ITEMS, LOOT, QUALITY, RARITY_BY_TIER, bagBonus } from './config.js';
+import { BACKPACK_SLOTS, BAG_UPGRADES, HUB_SLOTS, ITEMS, LOOT, QUALITY, RARITY_BY_TIER, WEAPONS, bagBonus } from './config.js';
 import {
   itemInfo, isGun, rollLoot, addToList, addToStash, makeGun, makeItem, fullAmmo,
 } from './items.js';
@@ -91,6 +91,13 @@ function minesMult(bombs, picks) {
   for (let i = 0; i < picks; i++) m *= (25 - i) / (25 - bombs - i);
   return m;
 }
+
+// The Shop's supplies: [item, price]. Pricier than the Fence pays, so selling and rebuying loses.
+const SUPPLIES = [
+  ['bandage', 150], ['soda', 350], ['plate', 300], ['ammo', 120], ['cocoa', 160], ['fuel', 220],
+  ['grenade', 250], ['dice', 300], ['flash', 260], ['sauce', 280], ['sticky', 350], ['smoke', 200], ['emp', 380], ['cluster', 500],
+  ['token', 2500], ['keycard', 4500],
+];
 
 const FREE_LOCKED = 'The free loadout is locked in. Raid with it as is.';
 const hasFreeKit = (lo) => lo.weapons.some((g) => g && g.free) || lo.items.some((it) => it.free);
@@ -343,10 +350,76 @@ export class Hub {
       </section>`;
   }
 
-  // The Shop: permanent upgrades (for now, a bigger backpack).
+  // Today's guns: six offers that change every day (the same for everyone on that day).
+  armory() {
+    const day = new Date().toISOString().slice(0, 10);
+    let seed = Number(day.replace(/-/g, ''));
+    const rnd = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; };
+    const kinds = Object.keys(WEAPONS).filter((k) => k !== 'fists');
+    const offers = [];
+    for (let i = 0; i < 6; i++) {
+      const kind = kinds[Math.floor(rnd() * kinds.length)];
+      const r = rnd();
+      const rarity = i === 5 ? (r < 0.35 ? 3 : 2) : r < 0.5 ? 0 : r < 0.82 ? 1 : 2;
+      const gun = makeGun(kind, rarity);
+      const price = Math.max(150, Math.round((itemInfo(gun).value * (2.2 + rarity * 0.3)) / 50) * 50);
+      offers.push({ gun, price });
+    }
+    return { day, offers };
+  }
+
+  // The Shop: guns, supplies, insurance, looks and backpacks. Somewhere to put all those chips.
   renderShop() {
     const d = this.data;
     const lv = d.bag || 0;
+    const chips = d.stash.chips;
+    const sec = this.shopSec || 'armory';
+    const tabs = [['armory', '🔫 Armory'], ['supplies', '🎒 Supplies'], ['insurance', '🛡️ Insurance'], ['looks', '✨ Looks'], ['bags', '👜 Backpacks']]
+      .map(([k, l]) => `<button class="subtab ${sec === k ? 'on' : ''}" data-act="shopsec" data-s="${k}">${l}</button>`).join('');
+    let body = '';
+    if (sec === 'armory') {
+      const { day, offers } = this.armory();
+      const bought = d.shopDay && d.shopDay.day === day ? d.shopDay.bought : [];
+      body = `<p class="hint">Six guns, new every day. One of each. The last one's always something special.</p><div class="shopgrid">${offers.map((o, i) => {
+        const info = itemInfo(o.gun);
+        const gone = bought.includes(i);
+        return `<div class="shopcard r${info.rarity} ${gone ? 'locked' : ''}"><span class="sicon">${iconHtml(o.gun)}</span><b style="color:${info.css}">${escapeHtml(info.name)}</b><small>Fence value 🪙 ${fmt(info.value)}</small>
+          ${gone ? '<span class="own">SOLD OUT</span>' : `<button class="btn" data-act="buygun" data-i="${i}" ${chips < o.price ? 'disabled' : ''}>BUY · 🪙 ${fmt(o.price)}</button>`}</div>`;
+      }).join('')}</div>`;
+    } else if (sec === 'supplies') {
+      body = `<p class="hint">Stock up before a raid. It all goes to your stash.</p><div class="shopgrid">${SUPPLIES.map(([id, price]) => {
+        const it = ITEMS[id];
+        return `<div class="shopcard"><span class="sicon">${it.icon}</span><b>${it.name}</b><small>${escapeHtml(it.desc).slice(0, 70)}${it.desc.length > 70 ? '…' : ''}</small>
+          <button class="btn" data-act="buyitem" data-id="${id}" data-p="${price}" ${chips < price ? 'disabled' : ''}>BUY · 🪙 ${fmt(price)}</button></div>`;
+      }).join('')}</div>`;
+    } else if (sec === 'insurance') {
+      const guns = d.loadout.weapons.filter((g) => g && !g.free);
+      // Insurance covers the guns that were packed when you bought it, not whatever you swap in later.
+      const covered = Array.isArray(d.insured) ? d.insured : null;
+      const worth = guns.reduce((n, g) => n + itemInfo(g).value, 0);
+      const price = Math.max(100, Math.round((worth * 0.3) / 10) * 10);
+      body = `<p class="hint">Insure the guns in your raid loadout. If you die (or time runs out) on your next raid, they come back to your stash. One raid only, and only the guns packed when you buy it.</p>
+        <div class="insure ${covered ? 'on' : ''}">
+          <div><b>🛡️ Gear Insurance</b><small>${guns.length ? guns.map((g) => `${covered && covered.includes(`${g.kind}:${g.rarity}`) ? '✓ ' : ''}${escapeHtml(itemInfo(g).name)}`).join(' + ') : 'No guns packed yet. Pack your guns on the Loadout tab first.'}</small></div>
+          ${covered ? '<span class="own">✓ INSURED FOR THE NEXT RAID</span>' : guns.length ? `<button class="btn" data-act="insure" data-p="${price}" ${chips < price ? 'disabled' : ''}>INSURE · 🪙 ${fmt(price)}</button>` : ''}
+        </div><p class="hint">Costs 30% of what the guns are worth. Free loadout guns can't be insured.</p>`;
+    } else if (sec === 'looks') {
+      const items = [];
+      for (const [part, label] of LOOK_PARTS) for (const o of LOOKS[part]) if (o.unlock && o.unlock.buy) items.push({ part, label, o });
+      body = `<p class="hint">Looks you can only get here. Buy once, wear forever (Look tab).</p><div class="shopgrid">${items.map(({ part, label, o }) => {
+        const owned = !!(d.owned && d.owned[String(o.id)]);
+        const icon = part === 'color' ? `<span class="swatchbig" style="background:#${Number(o.id).toString(16).padStart(6, '0')}"></span>` : o.icon;
+        return `<div class="shopcard ${owned ? 'owned' : ''}"><span class="sicon">${icon}</span><b>${o.name}</b><small>${label}</small>
+          ${owned ? '<span class="own">✓ OWNED</span>' : `<button class="btn" data-act="buylook" data-id="${o.id}" data-p="${o.unlock.buy}" ${chips < o.unlock.buy ? 'disabled' : ''}>BUY · 🪙 ${fmt(o.unlock.buy)}</button>`}</div>`;
+      }).join('')}</div>`;
+    } else {
+      body = this.renderBags(lv);
+    }
+    return `<h3>🛒 Shop <small class="bank">Bank: 🪙 ${fmt(chips)}</small></h3><div class="subtabs shoptabs">${tabs}</div>${body}`;
+  }
+
+  renderBags(lv) {
+    const d = this.data;
     const tiers = [{ name: 'Starter Backpack', icon: '🎒', slots: 0, cost: 0 }, ...BAG_UPGRADES];
     const cards = tiers.map((u, i) => {
       const owned = i <= lv;
@@ -358,8 +431,7 @@ export class Hub {
           : next ? `<button class="btn" data-act="bagup" ${d.stash.chips < u.cost ? 'disabled' : ''}>BUY · 🪙 ${fmt(u.cost)}</button>`
             : `<span class="lockd">🔒 🪙 ${fmt(u.cost)}</span>`}</div>`;
     }).join('');
-    return `<h3>🛒 Shop</h3><p class="hint">Upgrades here are yours for good, even if you die.</p>
-      <h3 class="sub">🎒 Backpacks <small>more room for loot in every raid</small></h3><div class="shopgrid">${cards}</div>`;
+    return `<p class="hint">Backpack upgrades are yours for good, even if you die: more room for loot in every raid.</p><div class="shopgrid">${cards}</div>`;
   }
 
   renderFence() {
@@ -1010,6 +1082,45 @@ export class Hub {
         if (this.onSettings) this.onSettings();
         break;
       case 'tutorial': save.update((x) => { x.settings.tutorial = b.dataset.t; }); break;
+      case 'shopsec': this.shopSec = b.dataset.s; break;
+      case 'buygun': {
+        const { day, offers } = this.armory();
+        const o = offers[i];
+        const bought = d.shopDay && d.shopDay.day === day ? d.shopDay.bought : [];
+        if (!o || bought.includes(i) || d.stash.chips < o.price) break;
+        save.update((x) => {
+          x.stash.chips -= o.price;
+          addToStash(x.stash.items, { ...o.gun });
+          x.shopDay = { day, bought: [...bought, i] };
+        });
+        sfx.pickup();
+        this.toast(`🔫 ${itemInfo(o.gun).name} is in your stash.`);
+        break;
+      }
+      case 'buyitem': {
+        const price = Number(b.dataset.p);
+        if (d.stash.chips < price) break;
+        save.update((x) => { x.stash.chips -= price; addToStash(x.stash.items, makeItem(b.dataset.id, 1)); });
+        sfx.pickup();
+        this.toast(`${ITEMS[b.dataset.id].icon} ${ITEMS[b.dataset.id].name} added to your stash.`);
+        break;
+      }
+      case 'insure': {
+        const price = Number(b.dataset.p);
+        if (d.stash.chips < price || d.insured) break;
+        save.update((x) => { x.stash.chips -= price; x.insured = x.loadout.weapons.filter((g) => g && !g.free).map((g) => `${g.kind}:${g.rarity}`); });
+        sfx.pickup();
+        this.toast('🛡️ Insured. If you die next raid, your guns come back.');
+        break;
+      }
+      case 'buylook': {
+        const price = Number(b.dataset.p);
+        if (d.stash.chips < price) break;
+        save.update((x) => { x.stash.chips -= price; x.owned = { ...(x.owned || {}), [b.dataset.id]: true }; });
+        sfx.jackpot();
+        this.toast('✨ Yours! Put it on in the 🎨 Look tab.');
+        break;
+      }
       case 'bagup': {
         const lv = d.bag || 0;
         const next = BAG_UPGRADES[lv];
@@ -1403,7 +1514,8 @@ export class Hub {
     const restoring = party && party.join && party.join.restore;
     // Whatever you bring leaves the stash for good unless you extract with it.
     const loadout = restoring ? { weapons: [], items: [] } : JSON.parse(JSON.stringify(lo));
-    if (!restoring) save.update((x) => { x.loadout = { weapons: [null, null], items: [] }; });
+    if (!restoring && Array.isArray(d.insured)) loadout.insured = d.insured;
+    if (!restoring) save.update((x) => { x.loadout = { weapons: [null, null], items: [] }; x.insured = false; });
     this.onDeploy({
       party,
       mapId: party ? party.mapId : d.selectedMap,

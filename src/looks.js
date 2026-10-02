@@ -10,6 +10,8 @@ export const LOOKS = {
     { id: 0x2b2140, name: 'Midnight', unlock: { level: 8 } }, { id: 0xe5e7eb, name: 'Chrome', unlock: { level: 12 } },
     { id: 0x16a34a, name: 'Felt Green', unlock: { ach: 'blackjack' } }, { id: 0x7b2cbf, name: 'Epic Purple', unlock: { ach: 'epic' } },
     { id: 0xffc83d, name: 'Jackpot Gold', unlock: { ach: 'legendary' } },
+    { id: 0x9cff00, name: 'Toxic', unlock: { buy: 8000 } }, { id: 0x111111, name: 'Obsidian', unlock: { buy: 15000 } },
+    { id: 0xe8a598, name: 'Rose Gold', unlock: { buy: 20000 } }, { id: 0xb9f2ff, name: 'Diamond', unlock: { buy: 40000 } },
   ],
   hat: [
     { id: 'none', name: 'Nothing', icon: '🚫' }, { id: 'top', name: 'Top hat', icon: '🎩' }, { id: 'party', name: 'Party hat', icon: '🥳' },
@@ -18,6 +20,8 @@ export const LOOKS = {
     { id: 'chef', name: "Chef's hat", icon: '👨‍🍳', unlock: { ach: 'containers100' } }, { id: 'visor', name: "Dealer's visor", icon: '🃏', unlock: { ach: 'extract10' } },
     { id: 'viking', name: 'Viking helmet', icon: '🪖', unlock: { ach: 'gators10' } }, { id: 'halo', name: 'Halo', icon: '😇', unlock: { level: 20 } },
     { id: 'crown', name: 'Crown', icon: '👑', unlock: { ach: 'boss1' } },
+    { id: 'fez', name: 'Fez', icon: '🔴', unlock: { buy: 6000 } }, { id: 'horns', name: 'Devil horns', icon: '😈', unlock: { buy: 12000 } },
+    { id: 'sombrero', name: 'Sombrero', icon: '👒', unlock: { buy: 15000 } }, { id: 'goldtop', name: 'Gold top hat', icon: '🎩', unlock: { buy: 75000 } },
   ],
   eyes: [
     { id: 'normal', name: 'Classic', icon: '👀' }, { id: 'sleepy', name: 'Sleepy', icon: '😪' }, { id: 'angry', name: 'Angry', icon: '😠' },
@@ -53,6 +57,7 @@ export const LOOK_PARTS = [
 export function unlockText(opt) {
   if (!opt.unlock) return '';
   if (opt.unlock.level) return `Reach level ${opt.unlock.level}`;
+  if (opt.unlock.buy) return `Buy it in the 🛒 Shop for 🪙 ${opt.unlock.buy.toLocaleString('en-US')}`;
   const a = ACHIEVEMENTS.find((x) => x.id === opt.unlock.ach);
   return a ? `Achievement: ${a.name} (${a.desc.charAt(0).toLowerCase()}${a.desc.slice(1)})` : 'Achievement';
 }
@@ -67,9 +72,9 @@ export function wornLook(look) {
   return out;
 }
 
-// A random look for rival raiders.
+// A random look for rival raiders (never the shop exclusives).
 export function randomLook() {
-  const pick = (a) => a[Math.floor(Math.random() * a.length)].id;
+  const pick = (a) => { const free = a.filter((o) => !(o.unlock && o.unlock.buy)); return free[Math.floor(Math.random() * free.length)].id; };
   return {
     color: pick(LOOKS.color), hat: pick(LOOKS.hat), eyes: pick(LOOKS.eyes), mouth: pick(LOOKS.mouth),
     glasses: Math.random() < 0.35 ? pick(LOOKS.glasses) : 'none', neck: Math.random() < 0.4 ? pick(LOOKS.neck) : 'none', shoes: pick(LOOKS.shoes),

@@ -658,6 +658,7 @@ export class Hud {
     $('downed').hidden = true;
     document.body.classList.remove('isdowned');
     const el = $('results');
+    const insuredNote = r.insured && r.insured.length ? ` 🛡️ Insurance sent your ${r.insured.join(' and ')} back to the stash.` : '';
     let title;
     let line;
     if (r.success) {
@@ -674,7 +675,7 @@ export class Hud {
       line = `${r.by ? `${escapeHtml(r.by)} got you.` : 'You died.'} Everything you carried is gone.`;
     }
     $('resultsTitle').textContent = title;
-    $('resultsLine').innerHTML = `${line}<br><small>Machines destroyed: ${r.run.machines} · Raiders busted: ${r.run.raiders}${r.run.boss ? ' · 👑 Took down the Pit Boss!' : ''}</small>`;
+    $('resultsLine').innerHTML = `${line}${insuredNote}<br><small>Machines destroyed: ${r.run.machines} · Raiders busted: ${r.run.raiders}${r.run.boss ? ' · 👑 Took down the Pit Boss!' : ''}</small>`;
     $('resultsItems').innerHTML = r.items.length || r.chips
       ? `${r.chips ? `<span class="chip">🪙 ${r.chips} chips</span>` : ''}${r.items.map((it) => `<span class="chip ${r.success ? '' : 'lost'}" style="color:${itemInfo(it).css}">${iconHtml(it)} ${escapeHtml(itemTitle(it).slice(itemInfo(it).icon.length + 1))}</span>`).join('')}`
       : '<span class="chip">Nothing</span>';

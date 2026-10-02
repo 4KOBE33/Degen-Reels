@@ -314,7 +314,7 @@ export class PlayerController {
 
     // Pull the camera in if a wall is in the way.
     const hit = raid.raycast(head, offset.clone().normalize(), want + 0.3, c, { solidsOnly: true });
-    const allowed = hit.hit ? Math.max(0.6, hit.distance - 0.3) : want;
+    const allowed = hit.hit ? Math.max(0.3, hit.distance - 0.3) : want;
     this.camDist += (allowed - this.camDist) * Math.min(1, dt * (allowed < this.camDist ? 30 : 6));
 
     this.camera.position.copy(head).addScaledVector(offset.normalize(), this.camDist);

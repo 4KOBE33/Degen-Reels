@@ -19,6 +19,7 @@ import { RaiderBrain } from './bots.js';
 import { ItemPickup } from './pickups.js';
 import {
   makeGun, makeItem, rollLoot, randInt, pick, addToList, itemInfo, isGun, rollRarity, fullAmmo,
+  addToStash,
 } from './items.js';
 import { part } from './toon.js';
 import { save } from './save.js';
@@ -368,7 +369,8 @@ export class Raid {
     const [sx, sz] = opts.spawn || pick(this.map.spawns);
     const slot = opts.slot || 0;
     // Dropping back into a raid in progress: right where the leader says.
-    const [x, z] = opts.at ? this.openSpot(opts.at[0], opts.at[2]) : this.openSpot(sx + (slot % 3) * 2 - 2, sz + Math.floor(slot / 3) * 2);
+    // Room to breathe: start a couple of meters off any wall so the camera isn't inside it.
+    const [x, z] = opts.at ? this.openSpot(opts.at[0], opts.at[2]) : this.openSpot(sx + (slot % 3) * 2 - 2, sz + Math.floor(slot / 3) * 2, 2.2);
     p.pos.set(x, 0, z);
     p.yaw = Math.atan2(x, z);
     for (const gun of loadout.weapons) {
@@ -378,6 +380,13 @@ export class Raid {
       p.equip(g);
     }
     for (const it of loadout.items) addToList(p.backpack, { ...it }, p.capacity);
+    // Insured guns (bought in the Shop) come back if this raid goes wrong.
+    const cover = Array.isArray(loadout.insured) ? [...loadout.insured] : [];
+    this.insured = loadout.weapons.filter((g) => {
+      const at = g && !g.free ? cover.indexOf(`${g.kind}:${g.rarity}`) : -1;
+      if (at >= 0) cover.splice(at, 1);
+      return at >= 0;
+    }).map((g) => ({ ...g, ammo: fullAmmo(g.kind, g.rarity) }));
     // Back from a refresh or crash: what you were carrying.
     const back = opts.restore;
     if (back) {
@@ -543,7 +552,11 @@ export class Raid {
     const p = this.player;
     const items = [...p.weapons.filter(Boolean), ...p.backpack];
     const value = items.reduce((n, it) => n + itemInfo(it).value, 0) + p.chips;
-    this.finish({ success: false, reason, by, items, chips: p.chips, value });
+    // Gear Insurance: the guns you insured come back to the stash.
+    const insured = this.insured || [];
+    if (insured.length) save.update((d) => { for (const g of insured) addToStash(d.stash.items, { ...g }); });
+    this.insured = [];
+    this.finish({ success: false, reason, by, items, chips: p.chips, value, insured: insured.map((g) => itemInfo(g).name) });
   }
 
   // ---------- kill cam ----------
