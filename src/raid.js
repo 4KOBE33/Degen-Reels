@@ -2,7 +2,7 @@
 // then reach an extraction point before time runs out. Die and you lose everything you carried.
 import * as THREE from 'three';
 import {
-  PLAYER, WEAPONS, RARITIES, RAID_TIME, EXTRACT_TIME, BOSS_TIME, RAIDERS, RAIDER_NAMES, COLORS, HATS, ENEMIES, ITEMS,
+  PLAYER, WEAPONS, RARITIES, RAID_TIME, EXTRACT_TIME, EXTRACT_RADIUS, EXTRACT_COOLDOWN, BOSS_TIME, RAIDERS, RAIDER_NAMES, COLORS, HATS, ENEMIES, ITEMS,
 } from './config.js';
 import { buildMap, drawMinimap, neonSign } from './map.js';
 import { SlotMachine } from './slots.js';
@@ -221,7 +221,7 @@ export class Raid {
 
     this.timeLeft = RAID_TIME;
     this.elapsed = 0;
-    this.extractT = 0;
+    for (const e of this.extracts) { e.call = null; e.cooldown = 0; }
     this.bossSpawned = false;
     this.boss = null;
     this.warned = {};
@@ -237,8 +237,95 @@ export class Raid {
     this.hud.raidIntro(this);
   }
 
+  // ---------- extraction ----------
+  // Step into an open exit to call the ride. It takes EXTRACT_TIME to arrive, a siren tells the
+  // whole map, and every machine nearby comes running. Whoever is in the circle when it lands
+  // gets out: you, and any raiders riding with you.
+
+  inCircle(e, c) {
+    return c.alive && !c.downed && Math.hypot(c.pos.x - e.x, c.pos.z - e.z) < EXTRACT_RADIUS;
+  }
+
+  callExtract(e, by) {
+    if (!e.active || e.call || e.cooldown > 0) return;
+    e.call = { t: 0, by, siren: 0, wave: 0 };
+    e.beam.material.color.setHex(0xffd23f);
+    e.ring.material.color.setHex(0xffd23f);
+    this.feed(`📣 ${by.name} called the ${e.name} extraction!`);
+    if (by.isPlayer) this.hud.toast(`📣 Extraction called! The ride lands in ${EXTRACT_TIME}s. Everything nearby heard that…`, 'big');
+    else if (this.player && this.player.alive) this.hud.toast(`📣 ${by.name} called the ${e.name} extraction. Get there in ${EXTRACT_TIME}s to ride out too!`, 'big');
+  }
+
+  updateExtracts(dt) {
+    const p = this.player;
+    this.extractAt = null;
+    for (const e of this.extracts) {
+      if (!e.active) continue;
+      e.cooldown = Math.max(0, (e.cooldown || 0) - dt);
+      // You, plus raiders who are done for the day (others just passing through don't count).
+      const inside = this.combatants.filter((c) => this.inCircle(e, c) && (c.isPlayer || (c.brain && c.brain.age > c.brain.leaveAt)));
+      if (p && p.alive && inside.includes(p)) this.extractAt = e;
+      if (!e.call) {
+        if (inside.length && !e.cooldown) this.callExtract(e, inside.includes(p) ? p : inside[0]);
+        continue;
+      }
+      const call = e.call;
+      call.t += dt;
+      e.beam.material.opacity = 0.18 + Math.abs(Math.sin(call.t * 4)) * 0.25;
+      // The siren, every couple of seconds, louder the closer you are.
+      call.siren -= dt;
+      if (call.siren <= 0) {
+        call.siren = 2.2;
+        const d = p ? Math.hypot(p.pos.x - e.x, p.pos.z - e.z) : 999;
+        sfx.siren(Math.max(0, 1 - d / 150));
+      }
+      // Everything within earshot comes for whoever's waiting.
+      const bait = inside[0] || call.by;
+      for (const m of this.machines) {
+        if (!m.alive || m.isBoss || m.type === 'gator' || m.target) continue;
+        if (Math.hypot(m.pos.x - e.x, m.pos.z - e.z) < 140 && bait && bait.alive && !bait.downed) m.target = bait;
+      }
+      // Hostile raiders smell an easy ambush.
+      for (const b of this.bots) {
+        if (b.hostile && b.c.alive && Math.hypot(b.c.pos.x - e.x, b.c.pos.z - e.z) < 120) b.goal = new THREE.Vector3(e.x, 0, e.z);
+      }
+      // Reinforcements: three waves of machines pour in from the edges.
+      const waves = [0.15, 0.45, 0.75];
+      if (call.wave < waves.length && call.t >= EXTRACT_TIME * waves[call.wave]) {
+        call.wave++;
+        const n = 2 + Math.floor(Math.random() * 2) + (call.wave === 3 ? 1 : 0);
+        for (let i = 0; i < n; i++) {
+          const a = Math.random() * Math.PI * 2;
+          const r = 38 + Math.random() * 14;
+          const type = pick(['dicer', 'dicer', 'shark', 'slotbot']);
+          const m = this.spawnMachine(type, e.x + Math.cos(a) * r, e.z + Math.sin(a) * r);
+          if (bait && bait.alive && !bait.downed) m.target = bait;
+        }
+        if (p && p.alive && Math.hypot(p.pos.x - e.x, p.pos.z - e.z) < 80) this.hud.toast(`⚠️ More machines incoming! (${call.wave}/${waves.length})`);
+      }
+      if (call.t >= EXTRACT_TIME) {
+        // The ride is here. Everyone in the circle goes.
+        e.call = null;
+        e.cooldown = EXTRACT_COOLDOWN;
+        e.beam.material.color.setHex(0x5ee27a);
+        e.ring.material.color.setHex(0x5ee27a);
+        e.beam.material.opacity = 0.18;
+        const riders = inside.filter((c) => !c.isPlayer);
+        for (const c of riders) {
+          this.feed(`🚁 ${c.name} extracted${inside.includes(p) ? ' with you' : ''}`);
+          this.removeCombatant(c);
+        }
+        if (inside.includes(p)) this.extract(e.name, riders.map((c) => c.name));
+        else {
+          this.feed(`🚁 The ${e.name} ride left${riders.length ? ` with ${riders.length} raider${riders.length > 1 ? 's' : ''}` : ' empty'}`);
+          if (p && p.alive && Math.hypot(p.pos.x - e.x, p.pos.z - e.z) < 60) this.hud.toast(`🚁 You missed the ride! ${e.name} can be called again in ${EXTRACT_COOLDOWN}s.`, 'big');
+        }
+      }
+    }
+  }
+
   // Successful extraction: everything you're carrying goes to the stash.
-  extract(where) {
+  extract(where, riders = []) {
     if (!this.active) return;
     const p = this.player;
     const items = [...p.weapons.filter(Boolean), ...p.backpack];
@@ -254,7 +341,7 @@ export class Raid {
         d.stash.items.push({ ...it });
       }
     });
-    this.finish({ success: true, where, items, chips: p.chips, value });
+    this.finish({ success: true, where, items, chips: p.chips, value, riders });
     // The player escapes: pull them out of the world.
     p.alive = false;
     p.char.root.visible = false;
@@ -879,21 +966,7 @@ export class Raid {
       return;
     }
 
-    // Extraction: stand in an open exit's circle until the countdown finishes.
-    this.extractAt = null;
-    if (p.alive) {
-      for (const e of this.extracts) {
-        if (e.active && Math.hypot(p.pos.x - e.x, p.pos.z - e.z) < 5) this.extractAt = e;
-      }
-    }
-    if (this.extractAt) {
-      this.extractT += dt;
-      // The noise draws in nearby machines.
-      if (Math.floor(this.extractT * 2) !== Math.floor((this.extractT - dt) * 2)) {
-        for (const m of this.machines) if (m.alive && !m.target && m.pos.distanceTo(p.pos) < 45) m.target = p;
-      }
-      if (this.extractT >= EXTRACT_TIME) this.extract(this.extractAt.name);
-    } else this.extractT = 0;
+    this.updateExtracts(dt);
   }
 }
 

@@ -111,6 +111,8 @@ export const ACHIEVEMENTS = [
   { id: 'green', group: 'Gambling', icon: '🟢', tier: 1, name: 'Going Green', desc: 'Win on green in Roulette', prog: (d) => [S(d).rouletteGreens, 1] },
   { id: 'crash10', group: 'Gambling', icon: '🚀', tier: 2, name: 'To the Moon', desc: 'Cash out at 10x or more in Crash', prog: (d) => [Math.min(S(d).crashBest, 10), 10] },
   { id: 'bigwin', group: 'Gambling', icon: '💸', tier: 2, name: 'High Roller', desc: 'Win 🪙 5,000 on a single bet', prog: (d) => [Math.min(S(d).biggestWin, 5000), 5000] },
+  { id: 'mines10', group: 'Gambling', icon: '💎', tier: 2, name: 'Minesweeper', desc: 'Cash out of Mines after finding 10 gems', prog: (d) => [Math.min(S(d).minesBest, 10), 10] },
+  { id: 'plinko24', group: 'Gambling', icon: '🔴', tier: 2, name: 'Edge Lord', desc: 'Land a 24x or better in Plinko', prog: (d) => [Math.min(S(d).plinkoBest, 24), 24] },
   { id: 'reels50', group: 'Gambling', icon: '🎰', tier: 1, name: 'Reel Regular', desc: 'Pull the Loot Reels 50 times', prog: (d) => [S(d).reelsPulled, 50] },
   // Levels
   { id: 'level5', group: 'Levels', icon: '⭐', tier: 0, name: 'Getting Started', desc: 'Reach level 5', prog: (d) => [Math.min(levelInfo(d.xp).level, 5), 5] },

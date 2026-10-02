@@ -137,6 +137,8 @@ const hub = new Hub({
   },
 });
 
+window.hub = hub;
+
 hud.onLeave = () => {
   $('results').hidden = true;
   $('hud').hidden = true;

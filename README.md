@@ -35,9 +35,11 @@ Every enemy has a small weak spot that takes extra damage. A crit pops a yellow 
 
 1. **The Hub.** Pack a loadout from your stash: two guns plus up to 8 items. Gamble stash chips in the **Back Room**:
    - **Loot Reels:** three machines with real spinning reels, and the odds shown on each.
-   - **Blackjack** on a felt table.
+   - **Blackjack** on a felt table. You can split any pair, up to 4 hands.
    - **Roulette:** a 37-number wheel.
    - **Crash.**
+   - **Mines:** pick 1 to 10 bombs on a 5×5 grid, flip tiles for gems, and cash out before you hit a bomb.
+   - **Plinko:** low, medium or high risk, with up to 170x at the edges.
 
    Sell loot to **the Fence**, dress up in **Look**, and check your **Records**. Broke? Grab a free kit.
 2. **Deploy.** You spawn at the edge of the map with an 18-minute clock. Two of the four exits are open each raid.
@@ -58,7 +60,12 @@ Every enemy has a small weak spot that takes extra damage. A crit pops a yellow 
 
      Explosions and fire hurt you too. You start with 2 Cherry Bombs, and all of them drop from crates, slots and raiders. Some raiders throw them at you.
    - **🧃 Rocket Fuel Energy (Z):** 15 seconds of running 25% faster, and sprinting costs no stamina.
-5. **Extract.** Stand in an open exit's green circle for 8 seconds, and everything you're carrying goes to your stash.
+5. **Extract.** Step into an open exit's circle to **call the ride**. It takes 25 seconds to land, and:
+   - a siren goes off that the whole map hears, and everyone gets a notice;
+   - every machine within earshot comes for you, and three waves of reinforcements pour in;
+   - hostile raiders come to ambush you.
+
+   Whoever is in the circle when it lands gets out, including other raiders riding with you. Miss it and the exit needs 40 seconds before it can be called again.
 
 ## Getting downed
 

@@ -107,6 +107,9 @@ export class RaiderBrain {
       }
     }
 
+    // Someone called a ride nearby? Friendly raiders who are done looting hitch along.
+    const called = raid.extracts.find((e) => e.call && Math.hypot(e.x - c.pos.x, e.z - c.pos.z) < 70);
+    if (called && !this.hostile && this.age > this.leaveAt * 0.6) this.leaveAt = Math.min(this.leaveAt, this.age);
     // Time to go home?
     if (this.age > this.leaveAt) {
       let exitD = Infinity;
@@ -211,15 +214,10 @@ export class RaiderBrain {
       c.sprint = d > 25;
     }
 
-    // Leaving through an exit.
+    // Leaving: wait in the circle (the raid handles calling the ride and taking off).
     if (this.age > this.leaveAt) {
-      const at = raid.extracts.find((e) => e.active && Math.hypot(e.x - c.pos.x, e.z - c.pos.z) < 5);
-      this.atExit = at ? this.atExit + dt : 0;
-      if (this.atExit > 6) {
-        raid.feed(`🚁 ${c.name} extracted`);
-        raid.removeCombatant(c);
-        return;
-      }
+      const at = raid.extracts.find((e) => e.active && Math.hypot(e.x - c.pos.x, e.z - c.pos.z) < 4.5);
+      if (at && !this.target) c.move.set(0, 0);
     }
 
     // Hop over things if stuck.

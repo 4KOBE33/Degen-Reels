@@ -31,6 +31,7 @@ const WHEEL = [0, 32, 15, 19, 4, 21, 2, 25, 17, 34, 6, 27, 13, 36, 11, 30, 8, 23
 const SUITS = ['♠', '♥', '♦', '♣'];
 const RANKS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
 const drawCard = () => ({ rank: RANKS[Math.floor(Math.random() * 13)], suit: SUITS[Math.floor(Math.random() * 4)] });
+const cardValue = (c) => (c.rank === 'A' ? 11 : 'JQK'.includes(c.rank) ? 10 : Number(c.rank));
 function handValue(hand) {
   let total = 0;
   let aces = 0;
@@ -63,7 +64,30 @@ const GAMES = [
   ['blackjack', '🃏', 'Blackjack', 'Beat the dealer to 21'],
   ['roulette', '🎡', 'Roulette', 'Pick a color, spin the wheel'],
   ['crash', '🚀', 'Crash', 'Cash out before it blows'],
+  ['mines', '💎', 'Mines', 'Find gems, dodge the bombs'],
+  ['plinko', '🔴', 'Plinko', 'Drop a ball, pray for the edges'],
 ];
+// Plinko: 12 rows of pegs, 13 buckets. Riskier boards pay more at the edges and less in the middle.
+const PLINKO_ROWS = 12;
+const PLINKO = {
+  low: [10, 3, 1.6, 1.4, 1.1, 1, 0.5, 1, 1.1, 1.4, 1.6, 3, 10],
+  medium: [33, 11, 4, 2, 1.1, 0.6, 0.3, 0.6, 1.1, 2, 4, 11, 33],
+  high: [170, 24, 8.1, 2, 0.7, 0.2, 0.2, 0.2, 0.7, 2, 8.1, 24, 170],
+};
+const PW = 560;
+const PH = 430;
+const PDX = 38;
+const PDY = 29;
+const PTOP = 34;
+const pegX = (row, k) => PW / 2 + (k - (row + 2) / 2) * PDX;
+const bucketColor = (m) => (m >= 10 ? '#e63946' : m >= 3 ? '#ff6b3d' : m >= 1.5 ? '#ff9f43' : m >= 1 ? '#ffc83d' : '#ffe08a');
+const MINE_COUNTS = [1, 3, 5, 10];
+// Payout multiplier after `picks` safe tiles with `bombs` hidden in 25 (with a small house edge).
+function minesMult(bombs, picks) {
+  let m = 0.97;
+  for (let i = 0; i < picks; i++) m *= (25 - i) / (25 - bombs - i);
+  return m;
+}
 
 export class Hub {
   constructor({ onDeploy, onMapChange }) {
@@ -75,6 +99,9 @@ export class Hub {
     this.bj = null;
     this.crash = null;
     this.roulette = null;
+    this.mines = null;
+    this.mineCount = 3;
+    this.plinko = { risk: 'medium', balls: [], results: [], flash: [], loop: false };
     this.reels = null;
     this.machine = 0;
     this.session = 0;
@@ -158,6 +185,7 @@ export class Hub {
     $('hubBody').innerHTML = body;
     $('hubBody').dataset.tab = this.tab;
     if (this.tab === 'backroom' && this.game === 'crash') this.drawCrash();
+    if (this.tab === 'backroom' && this.game === 'plinko') this.drawPlinko();
     if (this.tab === 'look') {
       this.preview.setLook(wornLook(d.look), d.loadout.weapons.find(Boolean));
       this.preview.mount($('lookSlot'));
@@ -290,7 +318,7 @@ export class Hub {
       <h3>The Back Room</h3>
       <div class="stat-tiles">
         ${tile('🪙', 'Chips wagered', fmt(s.wagered))}${tile('🤑', 'Chips won', fmt(s.gambleWon))}${tile('📊', 'Net', `${s.gambleWon - s.wagered >= 0 ? '+' : ''}${fmt(s.gambleWon - s.wagered)}`)}${tile('💸', 'Biggest win', `🪙 ${fmt(s.biggestWin)}`)}
-        ${tile('🎰', 'Reels pulled', fmt(s.reelsPulled))}${tile('🂡', 'Blackjacks', fmt(s.blackjacks))}${tile('🚀', 'Best Crash', `${s.crashBest.toFixed(2)}x`)}${tile('🟢', 'Green wins', fmt(s.rouletteGreens))}
+        ${tile('🎰', 'Reels pulled', fmt(s.reelsPulled))}${tile('🂡', 'Blackjacks', fmt(s.blackjacks))}${tile('🚀', 'Best Crash', `${s.crashBest.toFixed(2)}x`)}${tile('🟢', 'Green wins', fmt(s.rouletteGreens))}${tile('💎', 'Most Mines gems', fmt(s.minesBest))}${tile('🔴', 'Best Plinko hit', `${s.plinkoBest || 0}x`)}
       </div></div>`;
   }
 
@@ -360,7 +388,9 @@ export class Hub {
       <span class="gi">${icon}</span><span><b>${name}</b><small>${tag}</small></span></button>`).join('');
     const net = this.session;
     const recent = this.history.slice(-8).reverse().map((h) => `<span class="${h.net > 0 ? 'win' : h.net < 0 ? 'loss' : ''}">${h.icon} ${h.net > 0 ? '+' : ''}${fmt(h.net)}</span>`).join('');
-    const stage = { slots: () => this.renderReels(), blackjack: () => this.renderBlackjack(), roulette: () => this.renderRoulette(), crash: () => this.renderCrash() }[this.game]();
+    const stage = {
+      slots: () => this.renderReels(), blackjack: () => this.renderBlackjack(), roulette: () => this.renderRoulette(), crash: () => this.renderCrash(), mines: () => this.renderMines(), plinko: () => this.renderPlinko(),
+    }[this.game]();
     return `<div class="backroom">
       <aside class="gamerail">${rail}
         <div class="session"><small>This session</small><b class="${net > 0 ? 'win' : net < 0 ? 'loss' : ''}">${net > 0 ? '+' : ''}${fmt(net)}</b><small>Stash 🪙 ${fmt(d.stash.chips)}</small></div>
@@ -405,13 +435,24 @@ export class Hub {
     const playing = g && g.state === 'play';
     const dealerVal = g ? (playing ? handValue([g.dealer[0]]) : handValue(g.dealer)) : '';
     const ghost = '<span class="pcard ghost"></span><span class="pcard ghost"></span>';
+    const hands = g ? g.hands.map((h, i) => {
+      const v = handValue(h.cards);
+      const on = playing && i === g.active && g.hands.length > 1;
+      const tag = h.result ? `<span class="hres ${h.result.cls}">${h.result.text}</span>` : '';
+      return `<div class="hand ${on ? 'active' : ''} ${playing && i !== g.active && g.hands.length > 1 ? 'idle' : ''}">
+        <span class="who">${g.hands.length > 1 ? `HAND ${i + 1}` : 'YOU'} <b>${v}</b> <small>🪙 ${fmt(h.bet)}${h.doubled ? ' · doubled' : ''}</small></span>
+        <div class="cards">${h.cards.map((c, k) => cardHtml(c, false, k)).join('')}</div>${tag}</div>`;
+    }).join('') : `<div class="hand"><span class="who">YOU</span><div class="cards">${ghost}</div></div>`;
+    const h = playing ? g.hands[g.active] : null;
+    const canSplit = h && h.cards.length === 2 && cardValue(h.cards[0]) === cardValue(h.cards[1]) && g.hands.length < 4 && !h.fromAces;
+    const canDouble = h && h.cards.length === 2 && !h.fromAces;
     return `${this.betChips(playing)}
       <div class="felt bjtable">
         <div class="hand"><span class="who">DEALER ${g ? `<b>${dealerVal}${playing ? ' + ?' : ''}</b>` : ''}</span><div class="cards">${g ? g.dealer.map((c, i) => cardHtml(c, playing && i === 1, i)).join('') : ghost}</div></div>
-        <div class="felttext">BLACKJACK PAYS 3 TO 2 · DEALER STANDS ON 17</div>
-        <div class="hand"><span class="who">YOU ${g ? `<b>${handValue(g.hand)}</b>` : ''}</span><div class="cards">${g ? g.hand.map((c, i) => cardHtml(c, false, i)).join('') : ghost}</div></div>
+        <div class="felttext">BLACKJACK PAYS 3 TO 2 · DEALER STANDS ON 17 · SPLIT ANY PAIR</div>
+        <div class="hands">${hands}</div>
       </div>
-      <div class="row">${playing ? `<button class="btn" data-act="hit">Hit</button><button class="btn" data-act="stand">Stand</button>${g.hand.length === 2 ? `<button class="btn" data-act="double">Double · 🪙 ${fmt(g.bet)}</button>` : ''}`
+      <div class="row">${playing ? `<button class="btn" data-act="hit">Hit</button><button class="btn" data-act="stand">Stand</button>${canDouble ? `<button class="btn" data-act="double">Double · 🪙 ${fmt(h.bet)}</button>` : ''}${canSplit ? `<button class="btn split" data-act="split">✂️ Split · 🪙 ${fmt(h.bet)}</button>` : ''}`
     : `<button class="btn big" data-act="deal">DEAL · 🪙 ${fmt(this.bet)}</button>`}</div>
       ${g && g.msg ? `<p class="msg ${g.win ? 'win' : g.win === false ? 'loss' : ''}">${g.msg}</p>` : ''}`;
   }
@@ -430,6 +471,200 @@ export class Hub {
         <div class="rbets">${choices.map(([k, n, x]) => `<button class="rbet ${k}" data-act="spin" data-k="${k}" ${r && r.spinning ? 'disabled' : ''}><b>${n}</b><small>pays ${x}</small></button>`).join('')}</div>
       </div>
       ${r && r.msg ? `<p class="msg ${r.won ? 'win' : 'loss'}">${r.msg}</p>` : '<p class="hint">Pick what to bet on. The wheel does the rest.</p>'}`;
+  }
+
+  renderMines() {
+    const g = this.mines;
+    const playing = g && g.running;
+    const bombs = playing || g ? (g ? g.bombs : this.mineCount) : this.mineCount;
+    const picks = g ? g.picks : 0;
+    const mult = g ? minesMult(g.bombs, picks) : 1;
+    const nextMult = minesMult(bombs, picks + 1);
+    const tiles = Array.from({ length: 25 }, (_, i) => {
+      const open = g && (g.revealed.has(i) || !g.running);
+      const bomb = g && g.bombsAt.has(i);
+      const cls = !g ? '' : g.revealed.has(i) ? (bomb ? 'boom' : 'gem') : !g.running ? (bomb ? 'bomb dim' : 'gem dim') : '';
+      return `<button class="mtile ${cls}" data-act="mine" data-i="${i}" ${!playing || g.revealed.has(i) ? 'disabled' : ''}>${open ? (bomb ? '💣' : '💎') : ''}</button>`;
+    }).join('');
+    return `${playing ? '' : this.betChips()}
+      ${playing ? '' : `<div class="minecount"><small>BOMBS</small>${MINE_COUNTS.map((n) => `<button class="subtab ${n === this.mineCount ? 'on' : ''}" data-act="minecount" data-n="${n}">${n}</button>`).join('')}</div>`}
+      <div class="mines">
+        <div class="mgrid">${tiles}</div>
+        <div class="mside">
+          <div class="mstat"><small>MULTIPLIER</small><b>${mult.toFixed(2)}x</b></div>
+          <div class="mstat"><small>NEXT GEM</small><b>${nextMult.toFixed(2)}x</b></div>
+          <div class="mstat"><small>${playing ? 'CASH OUT FOR' : 'BOMBS'}</small><b>${playing ? `🪙 ${fmt(Math.floor(g.bet * mult))}` : `💣 ${bombs}`}</b></div>
+          ${playing
+    ? `<button class="btn big cashout" data-act="minecash" ${picks ? '' : 'disabled'}>CASH OUT</button>`
+    : `<button class="btn big" data-act="minestart">START · 🪙 ${fmt(this.bet)}</button>`}
+        </div>
+      </div>
+      ${g && g.msg ? `<p class="msg ${g.won ? 'win' : 'loss'}">${g.msg}</p>` : '<p class="hint">Pick tiles to find gems. Every gem raises the multiplier. Hit a bomb and you lose the bet. More bombs, bigger multipliers.</p>'}`;
+  }
+
+  startMines() {
+    if (this.mines && this.mines.running) return;
+    if (!this.spend(this.bet)) return;
+    const bombsAt = new Set();
+    while (bombsAt.size < this.mineCount) bombsAt.add(Math.floor(Math.random() * 25));
+    this.mines = { bet: this.bet, bombs: this.mineCount, bombsAt, revealed: new Set(), picks: 0, running: true, msg: '' };
+    sfx.lever();
+  }
+
+  pickMine(i) {
+    const g = this.mines;
+    if (!g || !g.running || g.revealed.has(i)) return;
+    g.revealed.add(i);
+    if (g.bombsAt.has(i)) {
+      g.running = false;
+      g.won = false;
+      g.msg = `💥 BOOM! Lost 🪙 ${fmt(g.bet)} after ${g.picks} gem${g.picks === 1 ? '' : 's'}.`;
+      sfx.boom();
+      this.settleBet('💎', g.bet, 0);
+      return;
+    }
+    g.picks++;
+    sfx.pickup();
+    // Found every gem: auto cash out.
+    if (g.picks === 25 - g.bombs) this.cashMines();
+  }
+
+  cashMines() {
+    const g = this.mines;
+    if (!g || !g.running || !g.picks) return;
+    g.running = false;
+    const win = Math.floor(g.bet * minesMult(g.bombs, g.picks));
+    g.won = true;
+    g.msg = `✅ Cashed out at ${minesMult(g.bombs, g.picks).toFixed(2)}x: won 🪙 ${fmt(win)}!`;
+    this.earn(win);
+    sfx.win();
+    this.settleBet('💎', g.bet, win, (s) => { s.minesBest = Math.max(s.minesBest || 0, g.picks); });
+  }
+
+  renderPlinko() {
+    const pl = this.plinko;
+    const risks = ['low', 'medium', 'high'].map((r) => `<button class="subtab ${pl.risk === r ? 'on' : ''}" data-act="plinkorisk" data-r="${r}" ${pl.balls.length ? 'disabled' : ''}>${r[0].toUpperCase() + r.slice(1)}</button>`).join('');
+    const last = pl.results.slice(-10).reverse().map((m) => `<span style="background:${bucketColor(m)}">${m}x</span>`).join('');
+    return `${this.betChips()}
+      <div class="minecount"><small>RISK</small>${risks}</div>
+      <div class="plinko"><canvas id="plinkoBoard" width="${PW}" height="${PH}"></canvas><div class="plast">${last}</div></div>
+      <div class="row"><button class="btn big" data-act="plinkodrop">DROP · 🪙 ${fmt(this.bet)}</button></div>
+      <p class="hint">Every drop costs one bet, and you can have several balls bouncing at once. Edges pay big; the middle doesn't.</p>`;
+  }
+
+  dropPlinko() {
+    if (!this.spend(this.bet)) return;
+    const pl = this.plinko;
+    // Decide the path up front: left or right at every row.
+    const steps = Array.from({ length: PLINKO_ROWS }, () => (Math.random() < 0.5 ? 0 : 1));
+    pl.balls.push({ bet: this.bet, risk: pl.risk, steps, t: 0, jitter: (Math.random() - 0.5) * 6 });
+    sfx.tick();
+    this.renderHeader();
+    if (!pl.loop) this.plinkoLoop();
+  }
+
+  plinkoLoop() {
+    const pl = this.plinko;
+    let last = performance.now();
+    pl.loop = true;
+    const tick = (now) => {
+      const dt = Math.min(0.05, (now - last) / 1000);
+      last = now;
+      for (const b of pl.balls) {
+        const before = Math.floor(b.t);
+        b.t += dt * 7.5;
+        if (Math.floor(b.t) !== before && b.t < PLINKO_ROWS) sfx.tick();
+      }
+      // Balls that reached the bottom pay out.
+      for (const b of pl.balls.filter((x) => x.t >= PLINKO_ROWS + 0.6)) {
+        const bucket = b.steps.reduce((n, st) => n + st, 0);
+        const mult = PLINKO[b.risk][bucket];
+        const win = Math.floor(b.bet * mult);
+        if (win) this.earn(win);
+        pl.results.push(mult);
+        pl.flash[bucket] = 1;
+        if (mult >= 3) sfx.win(); else if (mult < 1) sfx.deny();
+        this.settleBet('🔴', b.bet, win, (st) => { st.plinkoBest = Math.max(st.plinkoBest || 0, mult); });
+        if (this.tab === 'backroom' && this.game === 'plinko') {
+          const el = document.querySelector('.plast');
+          if (el) el.innerHTML = pl.results.slice(-10).reverse().map((m) => `<span style="background:${bucketColor(m)}">${m}x</span>`).join('');
+          const ses = document.querySelector('.session b');
+          if (ses) { ses.textContent = `${this.session > 0 ? '+' : ''}${fmt(this.session)}`; ses.className = this.session > 0 ? 'win' : this.session < 0 ? 'loss' : ''; }
+        }
+        this.renderHeader();
+      }
+      pl.balls = pl.balls.filter((x) => x.t < PLINKO_ROWS + 0.6);
+      for (let i = 0; i < pl.flash.length; i++) pl.flash[i] = Math.max(0, (pl.flash[i] || 0) - dt * 2);
+      this.drawPlinko();
+      if (pl.balls.length || pl.flash.some((f) => f > 0)) requestAnimationFrame(tick);
+      else {
+        pl.loop = false;
+        if (this.tab === 'backroom' && this.game === 'plinko') this.render();
+      }
+    };
+    requestAnimationFrame(tick);
+  }
+
+  // Where a ball is: hop from gap to gap down the rows with a little bounce.
+  plinkoPos(b) {
+    const row = Math.min(PLINKO_ROWS, Math.floor(b.t));
+    const f = Math.min(1, b.t - row);
+    let rights = 0;
+    for (let i = 0; i < row; i++) rights += b.steps[i];
+    const xAt = (r, n) => PW / 2 + (n - r / 2) * PDX;
+    const x0 = xAt(row, rights);
+    const x1 = row < PLINKO_ROWS ? xAt(row + 1, rights + b.steps[row]) : x0;
+    const y0 = PTOP - 16 + row * PDY;
+    const x = x0 + (x1 - x0) * f + (row === 0 ? b.jitter * (1 - f) : 0);
+    const y = y0 + PDY * f - Math.sin(f * Math.PI) * 9;
+    return [x, Math.min(y, PTOP + PLINKO_ROWS * PDY + 8)];
+  }
+
+  drawPlinko() {
+    const canvas = document.getElementById('plinkoBoard');
+    if (!canvas) return;
+    const c = canvas.getContext('2d');
+    const pl = this.plinko;
+    c.clearRect(0, 0, PW, PH);
+    for (let r = 0; r < PLINKO_ROWS; r++) {
+      for (let k = 0; k < r + 3; k++) {
+        c.beginPath();
+        c.arc(pegX(r, k), PTOP + r * PDY, 4.5, 0, Math.PI * 2);
+        c.fillStyle = '#fff6e0';
+        c.fill();
+      }
+    }
+    const mults = PLINKO[pl.risk];
+    const by = PTOP + PLINKO_ROWS * PDY + 2;
+    mults.forEach((m, i) => {
+      const x = PW / 2 + (i - PLINKO_ROWS / 2) * PDX;
+      const lift = (pl.flash[i] || 0) * 6;
+      c.fillStyle = bucketColor(m);
+      c.beginPath();
+      if (c.roundRect) c.roundRect(x - PDX / 2 + 2, by + 6 - lift, PDX - 4, 26, 6); else c.rect(x - PDX / 2 + 2, by + 6 - lift, PDX - 4, 26);
+      c.fill();
+      c.lineWidth = 3;
+      c.strokeStyle = (pl.flash[i] || 0) > 0 ? '#ffffff' : '#1b0f2b';
+      c.stroke();
+      c.fillStyle = '#1b0f2b';
+      c.font = `900 ${m >= 100 ? 10 : 11}px Nunito, sans-serif`;
+      c.textAlign = 'center';
+      c.fillText(`${m}x`, x, by + 23 - lift);
+    });
+    for (const b of pl.balls) {
+      const [x, y] = this.plinkoPos(b);
+      c.beginPath();
+      c.arc(x, y, 8, 0, Math.PI * 2);
+      c.fillStyle = '#ff3fa4';
+      c.fill();
+      c.lineWidth = 3;
+      c.strokeStyle = '#1b0f2b';
+      c.stroke();
+      c.beginPath();
+      c.arc(x - 2.5, y - 2.5, 2.5, 0, Math.PI * 2);
+      c.fillStyle = 'rgba(255,255,255,0.8)';
+      c.fill();
+    }
   }
 
   renderCrash() {
@@ -575,16 +810,18 @@ export class Hub {
       case 'machine': if (!(this.reels && this.reels.running)) { this.machine = i; this.reels = null; } break;
       case 'pull': this.pullReels(); return;
       case 'deal': this.deal(); break;
-      case 'hit': this.bj.hand.push(drawCard()); sfx.tick(); if (handValue(this.bj.hand) >= 21) this.settle(); break;
-      case 'stand': this.settle(); break;
-      case 'double':
-        if (!this.spend(this.bj.bet)) return;
-        this.bj.bet *= 2;
-        this.bj.hand.push(drawCard());
-        this.settle();
-        break;
+      case 'hit': if (this.bj && this.bj.state === 'play') this.bjHit(); break;
+      case 'stand': if (this.bj && this.bj.state === 'play') this.bjNext(); break;
+      case 'double': if (this.bj && this.bj.state === 'play') this.bjDouble(); break;
+      case 'split': if (this.bj && this.bj.state === 'play') this.bjSplit(); break;
       case 'spin': this.spinRoulette(b.dataset.k); return;
       case 'launch': this.launchCrash(); return;
+      case 'minecount': this.mineCount = Number(b.dataset.n); break;
+      case 'minestart': this.startMines(); break;
+      case 'mine': this.pickMine(i); break;
+      case 'minecash': this.cashMines(); break;
+      case 'plinkorisk': if (!this.plinko.balls.length) this.plinko.risk = b.dataset.r; break;
+      case 'plinkodrop': this.dropPlinko(); return;
       case 'cashout': this.cashOutCrash(); return;
       default: return;
     }
@@ -660,27 +897,80 @@ export class Hub {
   deal() {
     if (this.bj && this.bj.state === 'play') return;
     if (!this.spend(this.bet)) return;
-    this.bj = { bet: this.bet, hand: [drawCard(), drawCard()], dealer: [drawCard(), drawCard()], state: 'play', msg: '' };
+    this.bj = { hands: [{ cards: [drawCard(), drawCard()], bet: this.bet }], active: 0, dealer: [drawCard(), drawCard()], state: 'play', msg: '', wagered: this.bet };
     sfx.tick();
-    if (handValue(this.bj.hand) === 21) this.settle();
+    if (handValue(this.bj.hands[0].cards) === 21) this.settle();
+  }
+
+  bjHit() {
+    const g = this.bj;
+    const h = g.hands[g.active];
+    h.cards.push(drawCard());
+    sfx.tick();
+    if (handValue(h.cards) >= 21) this.bjNext();
+  }
+
+  bjDouble() {
+    const g = this.bj;
+    const h = g.hands[g.active];
+    if (!this.spend(h.bet)) return;
+    g.wagered += h.bet;
+    h.bet *= 2;
+    h.doubled = true;
+    h.cards.push(drawCard());
+    this.bjNext();
+  }
+
+  // Split a pair into two hands, each with its own bet. Split aces get one card each.
+  bjSplit() {
+    const g = this.bj;
+    const h = g.hands[g.active];
+    if (!this.spend(h.bet)) return;
+    g.wagered += h.bet;
+    const aces = h.cards[0].rank === 'A';
+    const a = { cards: [h.cards[0], drawCard()], bet: h.bet, fromAces: aces, split: true };
+    const b = { cards: [h.cards[1], drawCard()], bet: h.bet, fromAces: aces, split: true };
+    g.hands.splice(g.active, 1, a, b);
+    sfx.lever();
+    if (aces) { a.done = true; b.done = true; this.bjNext(); return; }
+    if (handValue(a.cards) === 21) this.bjNext();
+  }
+
+  // Move to the next hand that's still in play, or let the dealer go.
+  bjNext() {
+    const g = this.bj;
+    g.hands[g.active].done = true;
+    const next = g.hands.findIndex((h) => !h.done);
+    if (next >= 0) g.active = next;
+    else this.settle();
   }
 
   settle() {
     const g = this.bj;
-    const p = handValue(g.hand);
-    if (p <= 21) while (handValue(g.dealer) < 17) g.dealer.push(drawCard());
+    const live = g.hands.some((h) => handValue(h.cards) <= 21);
+    if (live) while (handValue(g.dealer) < 17) g.dealer.push(drawCard());
     const dv = handValue(g.dealer);
+    const dealerBJ = dv === 21 && g.dealer.length === 2;
     let pay = 0;
     let natural = false;
-    if (p > 21) g.msg = `Bust with ${p}. Lost 🪙 ${fmt(g.bet)}.`;
-    else if (p === 21 && g.hand.length === 2 && !(dv === 21 && g.dealer.length === 2)) { pay = Math.floor(g.bet * 2.5); natural = true; g.msg = `🂡 BLACKJACK! Won 🪙 ${fmt(pay)}.`; }
-    else if (dv > 21 || p > dv) { pay = g.bet * 2; g.msg = `${dv > 21 ? `Dealer busts with ${dv}` : `${p} beats ${dv}`}. Won 🪙 ${fmt(pay)}.`; }
-    else if (p === dv) { pay = g.bet; g.msg = `Push at ${p}. Bet returned.`; }
-    else g.msg = `Dealer has ${dv}. Lost 🪙 ${fmt(g.bet)}.`;
-    g.win = pay > g.bet ? true : pay === g.bet ? null : false;
-    if (pay) { this.earn(pay); sfx.win(); } else sfx.deny();
+    for (const h of g.hands) {
+      const p = handValue(h.cards);
+      let won = 0;
+      if (p > 21) h.result = { text: 'BUST', cls: 'loss' };
+      else if (p === 21 && h.cards.length === 2 && !h.split && !dealerBJ) { won = Math.floor(h.bet * 2.5); natural = true; h.result = { text: 'BLACKJACK!', cls: 'win' }; }
+      else if (dv > 21 || p > dv) { won = h.bet * 2; h.result = { text: 'WIN', cls: 'win' }; }
+      else if (p === dv) { won = h.bet; h.result = { text: 'PUSH', cls: '' }; }
+      else h.result = { text: 'LOSE', cls: 'loss' };
+      pay += won;
+    }
+    const net = pay - g.wagered;
+    const dealerText = dv > 21 ? `Dealer busts with ${dv}` : `Dealer has ${dv}`;
+    g.msg = net > 0 ? `${natural ? '🂡 BLACKJACK! ' : ''}${dealerText}. Won 🪙 ${fmt(net)}.` : net < 0 ? `${dealerText}. Lost 🪙 ${fmt(-net)}.` : `${dealerText}. Even money.`;
+    g.win = net > 0 ? true : net < 0 ? false : null;
+    if (pay) this.earn(pay);
+    if (net > 0) sfx.win(); else if (net < 0) sfx.deny();
     g.state = 'done';
-    this.settleBet('🃏', g.bet, pay, (s) => { if (natural) s.blackjacks++; });
+    this.settleBet('🃏', g.wagered, pay, (s) => { if (natural) s.blackjacks++; });
   }
 
   // ---------- Roulette ----------

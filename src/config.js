@@ -34,7 +34,10 @@ export const PLAYER = {
 // Lost Vegas: the raid map. Half-size in meters.
 export const MAP = { half: 175, wallH: 6 };
 export const RAID_TIME = 18 * 60;
-export const EXTRACT_TIME = 8;
+// Calling an extraction: the ride takes this long to arrive, and the whole map hears about it.
+export const EXTRACT_TIME = 25;
+export const EXTRACT_RADIUS = 5;
+export const EXTRACT_COOLDOWN = 40;
 // The Pit Boss shows up this many seconds into a raid.
 export const BOSS_TIME = 4 * 60;
 export const BACKPACK_SLOTS = 12;

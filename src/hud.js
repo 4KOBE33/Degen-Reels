@@ -152,9 +152,18 @@ export class Hud {
     }
 
     // Extraction countdown.
-    if (raid.extractAt && raid.active) {
+    const call = raid.active ? raid.extracts.find((e) => e.call) : null;
+    if (call) {
+      const left = Math.ceil(EXTRACT_TIME - call.call.t);
+      const inside = raid.extractAt === call;
+      const dist = Math.round(Math.hypot(call.x - p.pos.x, call.z - p.pos.z));
       $('extracting').hidden = false;
-      this.set('extracting', `EXTRACTING… ${Math.ceil(EXTRACT_TIME - raid.extractT)}<small>Stay in the circle</small>`);
+      $('extracting').classList.toggle('away', !inside);
+      this.set('extracting', inside ? `🚁 RIDE IN ${left}s<small>Hold the circle. Everything heard that siren.</small>`
+        : `📣 ${escapeHtml(call.name)} RIDE IN ${left}s<small>${dist}m away · be in the circle when it lands</small>`);
+    } else if (raid.extractAt && raid.active && raid.extractAt.cooldown > 0) {
+      $('extracting').hidden = false;
+      this.set('extracting', `RIDE COMING BACK IN ${Math.ceil(raid.extractAt.cooldown)}s<small>Someone just left from here</small>`);
     } else $('extracting').hidden = true;
 
     // Boss health bar while it's close.
@@ -267,7 +276,7 @@ export class Hud {
     for (const e of raid.extracts) {
       if (!e.active) continue;
       const [x, y, edge] = clampEdge(...toMini(e.x, e.z), 11);
-      ctx.fillStyle = '#5ee27a';
+      ctx.fillStyle = e.call ? (Math.floor(performance.now() / 250) % 2 ? '#ffd23f' : '#ff9f43') : '#5ee27a';
       ctx.strokeStyle = '#1b0f2b';
       ctx.lineWidth = 2;
       ctx.beginPath();
@@ -542,7 +551,7 @@ export class Hud {
     let line;
     if (r.success) {
       title = '🚁 EXTRACTED!';
-      line = `You got out through the ${escapeHtml(r.where)} with <b>🪙 ${r.value}</b> worth of stuff.`;
+      line = `You got out through the ${escapeHtml(r.where)} with <b>🪙 ${r.value}</b> worth of stuff.${r.riders && r.riders.length ? ` Rode out with ${r.riders.map(escapeHtml).join(', ')}.` : ''}`;
     } else if (r.reason === 'time') {
       title = '⏰ LOCKED DOWN';
       line = 'The House locked the place down with you inside. Everything you carried is gone.';
