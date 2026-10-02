@@ -1,6 +1,7 @@
 // Your keyboard/mouse controls and the over-the-shoulder camera.
 //   WASD move · Space jump · Shift sprint · Mouse aim · Left click shoot · Right click aim down sights
 //   1/2 or Q swap guns · R reload · E use (hold to search) · H heal · F armor plate · I (or Tab/B) bag · M map
+//   V switch first/third person
 import * as THREE from 'three';
 import { WEAPONS } from './config.js';
 
@@ -25,6 +26,9 @@ export class PlayerController {
     this.search = null;
     this.onLockChange = () => {};
     this.onToggle = () => {};
+    this.onPov = () => {};
+    this.firstPerson = false;
+    this.bob = 0;
 
     window.addEventListener('keydown', (e) => {
       if (e.target.tagName === 'INPUT') return;
@@ -44,6 +48,7 @@ export class PlayerController {
       if (k === 'f') this.say(c.startUsing('plate'), null);
       if (k === 'tab' || k === 'i' || k === 'b') this.onToggle('bag');
       if (k === 'm') this.onToggle('map');
+      if (k === 'v') this.togglePov();
     });
     window.addEventListener('keyup', (e) => { this.keys[e.key.toLowerCase()] = false; });
     window.addEventListener('blur', () => { this.keys = {}; this.firing = false; this.aimHeld = false; });
@@ -74,6 +79,11 @@ export class PlayerController {
       if (!this.locked) { this.firing = false; this.aimHeld = false; this.keys = {}; }
       this.onLockChange(this.locked);
     });
+  }
+
+  togglePov() {
+    this.firstPerson = !this.firstPerson;
+    this.onPov(this.firstPerson);
   }
 
   say(refusal, ok) {
@@ -159,6 +169,26 @@ export class PlayerController {
 
     const head = c.head(new THREE.Vector3());
     const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(c.pitch, c.yaw, 0, 'YXZ'));
+    c.char.firstPerson(this.firstPerson && c.alive);
+
+    if (this.firstPerson && c.alive) {
+      // Eyes just in front of the face, with a little bob while you move.
+      const speed = Math.hypot(c.vel.x, c.vel.z);
+      this.bob += dt * speed * (c.isSprinting ? 1.6 : 1.3);
+      const bobAmt = c.onGround ? Math.min(1, speed / 6) * (c.aiming ? 0.2 : 1) : 0;
+      this.camera.position.copy(head).addScaledVector(c.forward, 0.05);
+      this.camera.position.y += 0.12 + Math.sin(this.bob * 2) * 0.05 * bobAmt;
+      this.camera.position.addScaledVector(new THREE.Vector3(-c.forward.z, 0, c.forward.x), Math.cos(this.bob) * 0.03 * bobAmt);
+      this.camera.quaternion.copy(q);
+      this.camDist = 0.6;
+      const s = raid.shake;
+      if (s > 0) {
+        this.camera.position.x += (Math.random() - 0.5) * s * 0.5;
+        this.camera.position.y += (Math.random() - 0.5) * s * 0.5;
+      }
+      return;
+    }
+
     const offset = CAM_OFFSET.clone().lerp(AIM_OFFSET, this.zoom).applyQuaternion(q);
     const want = offset.length();
 

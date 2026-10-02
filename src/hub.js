@@ -5,6 +5,7 @@ import {
   itemInfo, itemTitle, isGun, rollLoot, addToList, addToStash, makeGun, makeItem, weightedIndex, fullAmmo,
 } from './items.js';
 import { save } from './save.js';
+import { MAPS } from './map.js';
 import { escapeHtml } from './hud.js';
 import { sfx, initAudio, setVolume } from './audio.js';
 
@@ -31,8 +32,9 @@ const cardHtml = (c, hidden) => (hidden ? '<span class="pcard back"></span>'
   : `<span class="pcard ${c.suit === '♥' || c.suit === '♦' ? 'red' : ''}">${c.rank}${c.suit}</span>`);
 
 export class Hub {
-  constructor({ onDeploy }) {
+  constructor({ onDeploy, onMapChange }) {
     this.onDeploy = onDeploy;
+    this.onMapChange = onMapChange || (() => {});
     this.tab = 'loadout';
     this.game = 'slots';
     this.bet = 100;
@@ -42,6 +44,7 @@ export class Hub {
     this.armedReset = false;
     const d = save.get();
     if (!d.loadout) save.update((x) => { x.loadout = { weapons: [null, null], items: [] }; });
+    if (!d.selectedMap || !MAPS[d.selectedMap]) save.update((x) => { x.selectedMap = 'vegas'; });
     if (d.look.color === null) save.update((x) => { x.look.color = COLORS[Math.floor(Math.random() * COLORS.length)]; });
 
     $('hubTabs').addEventListener('click', (e) => {
@@ -87,7 +90,8 @@ export class Hub {
     $('hubBody').innerHTML = body;
     const lo = d.loadout;
     const hasGun = lo.weapons.some(Boolean);
-    $('deploy').innerHTML = hasGun ? 'DEPLOY TO LOST VEGAS' : 'DEPLOY (no gun!)';
+    const m = MAPS[d.selectedMap];
+    $('deploy').innerHTML = hasGun ? `DEPLOY TO ${m.name.toUpperCase()}` : 'DEPLOY (no gun!)';
   }
 
   itemCard(item, act, i, extra = '') {
@@ -101,7 +105,10 @@ export class Hub {
     const d = this.data;
     const lo = d.loadout;
     const noGuns = !d.stash.items.some(isGun) && !lo.weapons.some(Boolean);
-    return `<div class="cols">
+    const maps = Object.entries(MAPS).map(([id, m]) => `<button class="mapcard ${d.selectedMap === id ? 'on' : ''}" data-act="map" data-m="${id}">
+        <span class="icon">${m.icon}</span><b>${m.name}</b><small>${m.size} · ${m.danger}</small><span class="blurb">${m.blurb}</span></button>`).join('');
+    return `<h3>Choose a map</h3><div class="maps">${maps}</div>
+      <div class="cols">
       <section><h3>Raid loadout</h3><p class="hint">Whatever you bring is lost if you die. Click to send it back to the stash.</p>
         <div class="wslots">${lo.weapons.map((g, i) => (g ? this.itemCard(g, 'unequip', i) : `<div class="item empty">Weapon ${i + 1}<br><small>empty</small></div>`)).join('')}</div>
         <div class="grid">${lo.items.map((it, i) => this.itemCard(it, 'unpack', i)).join('')}${Array(Math.max(0, LOADOUT_SLOTS - lo.items.length)).fill('<div class="item empty"></div>').join('')}</div>
@@ -277,6 +284,12 @@ export class Hub {
         save.update((x) => { x.loadout = { weapons: [null, null], items: [] }; x.look.color = COLORS[0]; });
         this.toast('Progress wiped. Fresh start.');
         break;
+      case 'map':
+        if (d.selectedMap !== b.dataset.m) {
+          save.update((x) => { x.selectedMap = b.dataset.m; });
+          this.onMapChange(b.dataset.m);
+        }
+        break;
       case 'game': this.game = b.dataset.g; break;
       case 'bet': this.bet = Number(b.dataset.b); break;
       case 'pull': this.pullSlot(HUB_SLOTS[i]); return;
@@ -419,6 +432,7 @@ export class Hub {
     const loadout = JSON.parse(JSON.stringify(lo));
     save.update((x) => { x.loadout = { weapons: [null, null], items: [] }; });
     this.onDeploy({
+      mapId: d.selectedMap,
       name: (d.look.name || '').trim() || 'High Roller',
       color: d.look.color,
       hat: save.hatUnlocked(d.look.hat) ? d.look.hat : 'top',

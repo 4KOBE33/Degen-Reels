@@ -246,6 +246,12 @@ export function createCharacter({ color, hat }) {
     },
     setTag(name, chips, armor) { tag.userData.set(name, chips, armor, cssColor); },
     showTag(v) { tag.visible = v; },
+    // First person: hide everything but the gun arm so it doesn't block the camera.
+    firstPerson(on) {
+      body.visible = !on;
+      leftHand.visible = !on;
+      for (const f of feet) f.visible = !on;
+    },
     jump() { anim.squashVel = 4; },
     land(speed) { anim.squashVel = -Math.min(6, speed * 0.6); },
     recoil(amount = 1) { anim.recoil = amount; },

@@ -1,11 +1,72 @@
 // Physical poker chips: the raid's currency. Enemies and containers spill them; walk over to grab.
 import * as THREE from 'three';
-import { CHIP_VALUE } from './config.js';
 import { toon, outline } from './toon.js';
 import { sfx } from './audio.js';
 
-const chipGeo = new THREE.CylinderGeometry(0.2, 0.2, 0.07, 16);
-const MATS = [0xe63946, 0x1d4ed8, 0x2a9d8f, 0xffd23f].map((c) => toon(c));
+// Casino denominations: the color tells you what it's worth.
+export const DENOMINATIONS = [
+  { value: 100, color: '#1b0f2b', edge: '#ffd23f', name: 'black' },
+  { value: 25, color: '#1f9d55', edge: '#fff6e0', name: 'green' },
+  { value: 5, color: '#e63946', edge: '#fff6e0', name: 'red' },
+  { value: 1, color: '#f1f5f9', edge: '#4dabff', name: 'white' },
+];
+
+const chipGeo = new THREE.CylinderGeometry(0.24, 0.24, 0.08, 18);
+
+// Top/bottom face: colored disc, striped edge, and the value in the middle.
+function faceTexture(d) {
+  const canvas = document.createElement('canvas');
+  canvas.width = 128;
+  canvas.height = 128;
+  const c = canvas.getContext('2d');
+  c.fillStyle = d.color;
+  c.beginPath();
+  c.arc(64, 64, 64, 0, Math.PI * 2);
+  c.fill();
+  c.strokeStyle = d.edge;
+  c.lineWidth = 16;
+  c.setLineDash([18, 14]);
+  c.beginPath();
+  c.arc(64, 64, 54, 0, Math.PI * 2);
+  c.stroke();
+  c.setLineDash([]);
+  c.lineWidth = 4;
+  c.beginPath();
+  c.arc(64, 64, 36, 0, Math.PI * 2);
+  c.stroke();
+  c.fillStyle = d.edge;
+  c.font = "bold 40px 'Luckiest Guy', 'Arial Black', sans-serif";
+  c.textAlign = 'center';
+  c.textBaseline = 'middle';
+  c.fillText(String(d.value), 64, 68);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+const MATS = new Map();
+function chipMaterials(d) {
+  if (!MATS.has(d.value)) {
+    const face = toon(0xffffff, { map: faceTexture(d) });
+    MATS.set(d.value, [toon(new THREE.Color(d.color).getHex()), face, face]);
+  }
+  return MATS.get(d.value);
+}
+
+// Break an amount into the fewest chips: 100s, then 25s, then 5s, then 1s.
+export function breakIntoChips(amount) {
+  const out = [];
+  let left = Math.round(amount);
+  for (const d of DENOMINATIONS) {
+    while (left >= d.value && out.length < 40) {
+      out.push(d);
+      left -= d.value;
+    }
+  }
+  if (left > 0 && out.length) out[out.length - 1] = { ...out[out.length - 1], value: out[out.length - 1].value + left };
+  return out;
+}
+
 const MAX_CHIPS = 400;
 
 export class ChipSystem {
@@ -17,13 +78,9 @@ export class ChipSystem {
   // Throws `amount` worth of chips out from `origin`. Owner can't re-grab them for a moment.
   spawnBurst(origin, amount, owner, { toward = null, speed = 4 } = {}) {
     if (amount <= 0) return;
-    const count = Math.min(24, Math.ceil(amount / CHIP_VALUE));
-    const base = Math.floor(amount / count);
-    let left = amount;
-    for (let i = 0; i < count; i++) {
-      const value = i === count - 1 ? left : base;
-      left -= value;
-      const mesh = new THREE.Mesh(chipGeo, MATS[Math.floor(Math.random() * MATS.length)]);
+    for (const d of breakIntoChips(amount)) {
+      const value = d.value;
+      const mesh = new THREE.Mesh(chipGeo, chipMaterials(DENOMINATIONS.find((x) => x.name === d.name)));
       mesh.castShadow = true;
       outline(mesh, 0.02);
       mesh.position.copy(origin);
@@ -85,7 +142,10 @@ export class ChipSystem {
       }
       if (collector) {
         collector.chips += chip.value;
-        if (collector.isPlayer) sfx.pickup();
+        if (collector.isPlayer) {
+          sfx.pickup(chip.value);
+          if (chip.value >= 25) this.raid.fx.number(p.clone().setY(p.y + 1.2), `+${chip.value}`, chip.value >= 100 ? '#ffd23f' : '#5ee27a', 0.8);
+        }
         this.remove(i);
         continue;
       }

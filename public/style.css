@@ -115,6 +115,16 @@ kbd { display: inline-block; min-width: 20px; padding: 0 5px; margin-right: 3px;
 #hubToast.show { animation: toastIn 2.6s ease forwards; }
 @keyframes toastIn { 0% { opacity: 0; } 10%, 80% { opacity: 1; } 100% { opacity: 0; } }
 
+.maps { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin-bottom: 14px; }
+.mapcard {
+  display: grid; gap: 2px; text-align: left; cursor: pointer; padding: 10px 12px;
+  background: rgba(27, 15, 43, 0.75); color: var(--cream); border: 4px solid var(--ink); border-radius: 14px; font: 900 13px var(--body);
+}
+.mapcard .icon { font-size: 26px; }
+.mapcard b { font: 400 20px var(--display); color: var(--gold); letter-spacing: 1px; }
+.mapcard small { opacity: 0.8; }
+.mapcard .blurb { font-weight: 700; opacity: 0.85; font-size: 12px; }
+.mapcard.on { border-color: var(--gold); box-shadow: 0 0 0 3px var(--gold); background: rgba(58, 29, 92, 0.95); }
 .cols { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
 .cols section { min-width: 0; }
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(118px, 1fr)); gap: 8px; }
@@ -197,6 +207,11 @@ input#lookName { width: 100%; max-width: 360px; padding: 10px 12px; border: 4px 
 .bar.hp > div.low { background: var(--red); }
 .bar.armor { height: 8px; }
 .bar.armor > div { background: var(--sky); }
+.bar.stamina { height: 6px; }
+.bar.stamina > div { background: var(--gold); transition: none; }
+.bar.stamina > div.winded { background: #f97316; animation: winded 0.5s infinite alternate; }
+@keyframes winded { to { opacity: 0.4; } }
+.pauseBtns { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; margin: 6px 0; }
 .row2 { display: flex; justify-content: space-between; align-items: center; margin-top: 8px; gap: 8px; }
 #raidChips { color: var(--gold); font: 400 22px var(--display); }
 #quick span { margin-left: 8px; font-size: 14px; }
@@ -218,13 +233,12 @@ input#lookName { width: 100%; max-width: 360px; padding: 10px 12px; border: 4px 
 @keyframes newItem { 0% { transform: scale(1.6); background: var(--gold); } 100% { transform: scale(1); } }
 @media (max-width: 1100px) { #packbar .s { width: 24px; height: 24px; font-size: 14px; } }
 
-#crosshair { position: absolute; left: 50%; top: 50%; width: 0; height: 0; transition: transform 0.1s; }
-#crosshair.aim { transform: scale(0.6); }
+#crosshair { --gap: 8px; position: absolute; left: 50%; top: 50%; width: 0; height: 0; }
 #crosshair i { position: absolute; background: #fff; border: 2px solid var(--ink); border-radius: 3px; }
-#crosshair i:nth-child(1) { width: 6px; height: 14px; left: -3px; top: -22px; }
-#crosshair i:nth-child(2) { width: 6px; height: 14px; left: -3px; top: 8px; }
-#crosshair i:nth-child(3) { width: 14px; height: 6px; left: -22px; top: -3px; }
-#crosshair i:nth-child(4) { width: 14px; height: 6px; left: 8px; top: -3px; }
+#crosshair i:nth-child(1) { width: 6px; height: 14px; left: -3px; top: calc(-14px - var(--gap)); }
+#crosshair i:nth-child(2) { width: 6px; height: 14px; left: -3px; top: var(--gap); }
+#crosshair i:nth-child(3) { width: 14px; height: 6px; left: calc(-14px - var(--gap)); top: -3px; }
+#crosshair i:nth-child(4) { width: 14px; height: 6px; left: var(--gap); top: -3px; }
 #hitmarker { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); font: 40px var(--display); color: #fff; text-shadow: 2px 2px 0 var(--ink); opacity: 0; }
 #hitmarker.show { animation: hit 0.2s ease-out; }
 #hitmarker.kill { color: var(--red); }
@@ -275,3 +289,5 @@ input#lookName { width: 100%; max-width: 360px; padding: 10px 12px; border: 4px 
 @media (prefers-reduced-motion: reduce) {
   #hitmarker.show, #vignette.show, .wheel.spin { animation-duration: 0.01s; }
 }
+
+#loading { position: fixed; left: 50%; top: 45%; transform: translateX(-50%); font: 400 36px var(--display); color: var(--gold); text-shadow: 3px 3px 0 var(--ink); }

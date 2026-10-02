@@ -1,4 +1,4 @@
-// A raid on Lost Vegas: drop in with a loadout, loot, fight machines (and maybe other raiders),
+// A raid: drop into a map with a loadout, loot, fight machines (and maybe other raiders),
 // then reach an extraction point before time runs out. Die and you lose everything you carried.
 import * as THREE from 'three';
 import {
@@ -24,10 +24,11 @@ const raycaster = new THREE.Raycaster();
 const tmp = new THREE.Vector3();
 
 export class Raid {
-  constructor(hud) {
+  constructor(hud, mapId = 'vegas') {
+    this.mapId = mapId;
     this.hud = hud;
     this.scene = new THREE.Scene();
-    this.map = buildMap(this.scene);
+    this.map = buildMap(this.scene, mapId);
     this.fx = new Fx(this.scene);
     this.chips = new ChipSystem(this);
     this.listener = new THREE.Vector3();
@@ -61,15 +62,15 @@ export class Raid {
   buildVaultDoor() {
     const { vault } = this.map;
     this.vaultDoor = part(new THREE.BoxGeometry(5, 9.5, 0.6), 0x9ca3af, { ink: 0.05 });
-    this.vaultDoor.position.set(0, 4.75, vault.doorZ);
+    this.vaultDoor.position.set(vault.x, 4.75, vault.doorZ);
     const wheel = part(new THREE.TorusGeometry(1.1, 0.15, 8, 20), 0xd4a63a, { ink: 0.02 });
     wheel.position.set(0, -0.5, 0.4);
     this.vaultDoor.add(wheel);
     this.scene.add(this.vaultDoor);
-    this.vaultCollider = this.map.addCollider({ type: 'box', minX: -2.5, maxX: 2.5, minZ: vault.doorZ - 0.4, maxZ: vault.doorZ + 0.4, top: 10 });
+    this.vaultCollider = this.map.addCollider({ type: 'box', minX: vault.x - 2.5, maxX: vault.x + 2.5, minZ: vault.doorZ - 0.4, maxZ: vault.doorZ + 0.4, top: 10 });
     this.vaultOpen = false;
     this.vaultLock = {
-      spot: new THREE.Vector3(0, 0, vault.doorZ + 1.6),
+      spot: new THREE.Vector3(vault.x, 0, vault.doorZ + 1.6),
       range: 2.2,
       prompt: (c) => {
         if (this.vaultOpen) return null;
@@ -114,6 +115,15 @@ export class Raid {
       sign.position.set(e.x, 7, e.z);
       this.scene.add(beam, ring, sign);
       return { ...e, beam, ring, sign, active: false };
+    });
+  }
+
+  // Free GPU memory when switching to a different map.
+  dispose() {
+    this.scene.traverse((o) => {
+      if (o.geometry) o.geometry.dispose();
+      const m = o.material;
+      if (m && !Array.isArray(m) && m.map && m.map.userData && m.map.userData.canvas) m.map.dispose();
     });
   }
 
@@ -366,7 +376,9 @@ export class Raid {
       const aim = this.raycast(origin, dir, 200, c).point;
       this.spawnRocket(muzzle, aim.sub(muzzle).normalize(), c, c.rarity);
     } else {
-      const spread = w.spread * (c.aiming ? 0.4 : 1);
+      // Bad footing means bad aim: even a laser-accurate rifle sprays when you're sprinting or mid-air.
+      const pen = c.aimPenalty();
+      const spread = w.spread * pen + Math.max(0, pen - 1) * 0.012;
       for (let i = 0; i < w.pellets; i++) {
         const d = dir.clone();
         d.x += (Math.random() - 0.5) * 2 * spread;
@@ -387,7 +399,7 @@ export class Raid {
     this.fx.tracer(origin, hit.point, 0xff3fa4);
     this.fx.muzzleFlash(origin);
     sfx.zap(origin, this.listener);
-    if (hit.target && hit.target.team !== 'machine') this.damage(hit.target, damage, m, hit.point);
+    if (hit.target && hit.target.team !== 'machine') this.damage(hit.target, damage * this.map.toughness, m, hit.point);
     else if (hit.hit) this.fx.puff(hit.point, 0xff7eb6, 0.12);
   }
 

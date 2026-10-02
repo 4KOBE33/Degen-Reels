@@ -69,7 +69,7 @@ export function rollLoot(tier) {
   const what = table[weightedIndex(table.map(([w]) => w))][1];
   if (what === 'chips') {
     const [a, b] = CHIPS_BY_TIER[tier];
-    return { chips: randInt(a, b) };
+    return { chips: Math.max(5, Math.round(randInt(a, b) / 5) * 5) };
   }
   if (what === 'gun') return makeGun(pick(GUN_TIERS[tier - 1]), rollRarity(tier));
   return makeItem(what, 1);

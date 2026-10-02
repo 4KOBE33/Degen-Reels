@@ -9,6 +9,13 @@ export const PLAYER = {
   headHeight: 1.45,
   maxHp: 100,
   maxArmor: 100,
+  // Sprinting burns stamina; jumping takes a chunk. Run dry and you're winded until it refills a bit.
+  maxStamina: 100,
+  sprintDrain: 20,
+  jumpCost: 14,
+  staminaRegen: 22,
+  staminaDelay: 0.8,
+  windedUntil: 30,
 };
 
 // Lost Vegas: the raid map. Half-size in meters.
@@ -85,7 +92,7 @@ export const ENEMIES = {
 // Raider bots: other players looting the same map. Neutral unless provoked.
 export const RAIDERS = { count: 4, hostileChance: 0.25, accuracy: 0.16, reaction: 0.9 };
 
-export const SETTINGS_DEFAULT = { sensitivity: 1, fov: 72, volume: 0.6 };
+export const SETTINGS_DEFAULT = { sensitivity: 1, fov: 72, volume: 0.6, firstPerson: false };
 
 // Back Room slot machines in the hub: pay chips, roll a prize.
 export const HUB_SLOTS = [

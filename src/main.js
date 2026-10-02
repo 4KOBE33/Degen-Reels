@@ -17,7 +17,7 @@ $('app').appendChild(renderer.domElement);
 
 const camera = new THREE.PerspectiveCamera(72, 1, 0.1, 900);
 const hud = new Hud();
-const raid = new Raid(hud);
+let raid = new Raid(hud, save.get().selectedMap || 'vegas');
 const controller = new PlayerController(raid, camera, renderer.domElement);
 // Handy for poking at the game from the browser console.
 window.degen = raid;
@@ -32,10 +32,17 @@ function resize() {
 window.addEventListener('resize', resize);
 resize();
 
+function povLabel() {
+  const b = document.getElementById('povBtn');
+  if (b) b.textContent = controller.firstPerson ? '🎥 Switch to third person (V)' : '👁️ Switch to first person (V)';
+}
+
 function applySettings() {
   const s = save.get().settings;
   controller.sensitivity = s.sensitivity;
   controller.fov = s.fov;
+  controller.firstPerson = !!s.firstPerson;
+  povLabel();
   setVolume(s.volume);
 }
 applySettings();
@@ -69,6 +76,13 @@ window.addEventListener('keydown', (e) => {
 });
 document.querySelectorAll('[data-close]').forEach((b) => b.addEventListener('click', () => setOverlay(null)));
 
+controller.onPov = (first) => {
+  save.update((d) => { d.settings.firstPerson = first; });
+  povLabel();
+  hud.toast(first ? 'First person' : 'Third person');
+};
+$('povBtn').addEventListener('click', () => controller.togglePov());
+
 hud.onDrop = (where, i) => raid.dropFromInventory(raid.player, where, i);
 hud.onUse = (id) => {
   const refusal = raid.player.startUsing(id);
@@ -76,9 +90,26 @@ hud.onUse = (id) => {
   else setOverlay(null);
 };
 
+// Build a different map. Takes a second or two, so it only happens when you pick a new one.
+function switchMap(id) {
+  if (raid.mapId === id || raid.active) return;
+  raid.dispose();
+  raid = new Raid(hud, id);
+  raid.renderer = renderer;
+  raid.camera = camera;
+  controller.raid = raid;
+  window.degen = raid;
+}
+
 const hub = new Hub({
+  onMapChange(id) {
+    $('loading').hidden = false;
+    // Let the "Loading" note paint before the heavy build.
+    setTimeout(() => { switchMap(id); $('loading').hidden = true; }, 30);
+  },
   onDeploy(opts) {
     applySettings();
+    switchMap(opts.mapId);
     raid.deploy(opts);
     controller.c = raid.player;
     hub.hide();

@@ -2,6 +2,16 @@
 
 A 3D cartoon **extraction shooter** set in a casino town gone wrong. Gear up, raid **Lost Vegas**, grab what you can, and get out alive. If you die, you lose everything you carried.
 
+## Maps
+
+| Map | Size | Danger | Vibe |
+|---|---|---|---|
+| 🌵 Lost Vegas | Huge | Medium | Desert strip, motel, gas station and junkyard around the Lucky Dump Grand |
+| 🏔️ Frostbite Peaks | Large | Hard (machines have 30% more health and damage) | Snowed-in ski town, frozen lake, gondola, the Alpine Ace Lodge |
+| 🐊 Bayou Royale | Medium | Medium | Swamp boardwalks, stilt shacks and the Riverboat Royale paddle-steamer casino |
+
+Every map has a casino with a vault, a Pit Boss event, and four exits (two open per raid).
+
 ## The loop
 
 1. **The Hub.** Pack a loadout from your stash: two guns plus up to 8 items. Gamble stash chips in the **Back Room** (Loot Reels, Blackjack, Roulette, Crash), sell loot to **the Fence**, and pick your look. Broke? Grab a free kit.
@@ -29,9 +39,13 @@ Gun rarities: **Common**, **Rare**, **Epic** and **Legendary**, each with more d
 
 Unlockable hats: cowboy (extract once), dealer visor (extract 10 times), crown (beat the Pit Boss).
 
+**Chips** come in colors: white $1, red $5, green $25, black $100.
+
 ## Controls
 
-WASD move · Space jump · Shift sprint · Mouse aim · Left click shoot · **Right click aim down sights** · E use (**hold** to search) · 1/2/Q swap guns · R reload (uses an Ammo Box) · H heal · F armor plate · I backpack (also Tab or B) · M map · Esc pause and settings (**mouse sensitivity**, FOV, volume)
+WASD move · Space jump · Shift sprint (uses stamina; jumping costs some too) · Mouse aim · Left click shoot · **Right click aim down sights** · E use (**hold** to search) · 1/2/Q swap guns · R reload (uses an Ammo Box) · H heal · F armor plate · I backpack (also Tab or B) · M map · **V first/third person** · Esc pause and settings (**mouse sensitivity**, FOV, volume)
+
+Running, jumping and moving make your shots spray. The crosshair opens up to show it, and aiming down sights tightens it.
 
 ## Run it
 
@@ -51,7 +65,7 @@ Then open http://localhost:3000. `npm run build:artifact` packs the whole game i
 | File | What's in it |
 |---|---|
 | `src/config.js` | Every tunable number: weapons, items, loot tables, rarity odds, enemies, timers |
-| `src/map.js` | Lost Vegas: buildings, props, zones, extracts, collision grid, minimap |
+| `src/map.js` | All maps: a shared kit (buildings, props, casino, collision grid, minimap) plus one layout builder per map |
 | `src/raid.js` | The raid: deploy, combat, loot, the vault, the boss event, extraction |
 | `src/enemies.js` | Slotbot, Dicer, Card Shark and Pit Boss models and AI |
 | `src/bots.js` | Rival raider AI |

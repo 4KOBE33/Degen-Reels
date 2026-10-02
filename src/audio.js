@@ -81,7 +81,11 @@ export const sfx = {
   hit() { tone({ freq: 1400, to: 1800, dur: 0.05, type: 'triangle', vol: 0.12 }); },
   hurt() { tone({ freq: 300, to: 120, dur: 0.15, type: 'sawtooth', vol: 0.12 }); },
   bonk(pos, listener) { tone({ freq: 500, to: 200, dur: 0.1, type: 'triangle', vol: 0.15 * falloff(pos, listener) }); },
-  pickup() { tone({ freq: 1600 + Math.random() * 400, to: 2400, dur: 0.06, type: 'triangle', vol: 0.06 }); },
+  // Bigger chips make a lower, chunkier clink.
+  pickup(value = 5) {
+    const f = value >= 100 ? 900 : value >= 25 ? 1300 : 1700;
+    tone({ freq: f + Math.random() * 200, to: f * 1.5, dur: value >= 25 ? 0.1 : 0.06, type: 'triangle', vol: value >= 25 ? 0.1 : 0.06 });
+  },
   boom(pos, listener) {
     const v = falloff(pos, listener) * 0.7 + 0.3;
     noise({ dur: 0.9, vol: 0.6 * v, freq: 1200, to: 60 });

@@ -58,6 +58,8 @@ export class Hud {
     $('hpFill').style.width = `${Math.max(0, (p.hp / p.maxHp) * 100)}%`;
     $('hpFill').classList.toggle('low', p.hp < 35);
     $('armorFill').style.width = `${(p.armor / PLAYER.maxArmor) * 100}%`;
+    $('staminaFill').style.width = `${(p.stamina / PLAYER.maxStamina) * 100}%`;
+    $('staminaFill').classList.toggle('winded', p.winded);
     this.set('hpText', `❤️ ${Math.ceil(Math.max(0, p.hp))}${p.armor > 0 ? ` · 🛡️ ${Math.ceil(p.armor)}` : ''}`);
     this.set('raidChips', `🪙 ${p.chips}`);
     this.set('quick', [
@@ -121,7 +123,10 @@ export class Hud {
     this.toastTimer -= dt;
     if (this.toastTimer <= 0) $('toast').classList.remove('show');
     $('crosshair').hidden = !p.alive || !raid.active;
-    $('crosshair').classList.toggle('aim', !!p.aiming);
+    // The crosshair opens up when your aim is worse (running, jumping) and tightens when aiming.
+    const gap = 8 * p.aimPenalty();
+    this.gap = (this.gap || gap) + (gap - (this.gap || gap)) * Math.min(1, dt * 12);
+    $('crosshair').style.setProperty('--gap', `${this.gap.toFixed(1)}px`);
     if (!$('bag').hidden) this.renderBag(p);
   }
 
@@ -184,6 +189,7 @@ export class Hud {
   }
 
   drawBigMap(raid) {
+    $('bigmapTitle').textContent = raid.map.name.toUpperCase();
     const canvas = $('bigmapCanvas');
     const ctx = canvas.getContext('2d');
     const size = canvas.width;
@@ -285,7 +291,7 @@ export class Hud {
   raidIntro(raid) {
     const open = raid.extracts.filter((e) => e.active).map((e) => e.name).join(' and ');
     const el = $('intro');
-    el.innerHTML = `<div class="kicker">DEPLOYING TO</div><h2>LOST VEGAS</h2><p>Exits open: <b>${open}</b>. Loot, survive, get out.</p>`;
+    el.innerHTML = `<div class="kicker">DEPLOYING TO</div><h2>${escapeHtml(raid.map.name.toUpperCase())}</h2><p>Exits open: <b>${open}</b>. Loot, survive, get out.</p>`;
     el.classList.remove('show');
     void el.offsetWidth;
     el.classList.add('show');
@@ -300,7 +306,7 @@ export class Hud {
       line = `You got out through the ${escapeHtml(r.where)} with <b>🪙 ${r.value}</b> worth of stuff.`;
     } else if (r.reason === 'time') {
       title = '⏰ LOCKED DOWN';
-      line = 'The House sealed Lost Vegas with you inside. Everything you carried is gone.';
+      line = 'The House locked the place down with you inside. Everything you carried is gone.';
     } else if (r.reason === 'abandon') {
       title = '🏳️ ABANDONED';
       line = 'You bailed on the raid. Everything you carried is gone.';

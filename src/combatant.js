@@ -41,6 +41,10 @@ export class Combatant {
     this.sprint = false;
     this.wantJump = false;
     this.aiming = false;
+    this.stamina = PLAYER.maxStamina;
+    this.staminaWait = 0;
+    this.winded = false;
+    this.isSprinting = false;
     this.refreshWeapon();
   }
 
@@ -120,6 +124,17 @@ export class Combatant {
     return out.set(this.pos.x, this.pos.y + 1.0, this.pos.z);
   }
 
+  // How much worse your aim is right now: running, jumping and moving all throw it off.
+  aimPenalty() {
+    let m = 1;
+    const speed = Math.hypot(this.vel.x, this.vel.z);
+    if (speed > 2) m = 1.6;
+    if (this.isSprinting) m = 3;
+    if (!this.onGround) m = Math.max(m, 3.5);
+    if (this.aiming) m *= 0.4;
+    return m;
+  }
+
   hurt(attacker) {
     this.char.hurt();
     if (attacker && attacker !== this) this.lastAttacker = attacker;
@@ -127,7 +142,20 @@ export class Combatant {
 
   update(dt) {
     const canMove = this.alive && !this.raid.frozen;
-    let speed = this.sprint && !this.aiming ? PLAYER.sprint : PLAYER.walk;
+    // Stamina: sprinting drains it, standing still or walking refills it after a short pause.
+    const moving = this.move.lengthSq() > 0.01;
+    this.isSprinting = this.sprint && moving && !this.aiming && !this.using && !this.winded && this.stamina > 0;
+    if (this.isSprinting) {
+      this.stamina = Math.max(0, this.stamina - PLAYER.sprintDrain * dt);
+      this.staminaWait = PLAYER.staminaDelay;
+      if (this.stamina <= 0) this.winded = true;
+    } else {
+      this.staminaWait -= dt;
+      if (this.staminaWait <= 0) this.stamina = Math.min(PLAYER.maxStamina, this.stamina + PLAYER.staminaRegen * dt);
+      if (this.winded && this.stamina >= PLAYER.windedUntil) this.winded = false;
+    }
+    let speed = this.isSprinting ? PLAYER.sprint : PLAYER.walk;
+    if (this.winded) speed *= 0.85;
     if (this.aiming) speed *= 0.6;
     if (this.using) speed *= 0.45;
     const tx = canMove ? this.move.x * speed : 0;
@@ -136,7 +164,9 @@ export class Combatant {
     this.vel.x += (tx - this.vel.x) * accel;
     this.vel.z += (tz - this.vel.z) * accel;
 
-    if (this.wantJump && this.onGround && canMove) {
+    if (this.wantJump && this.onGround && canMove && this.stamina >= PLAYER.jumpCost * 0.5) {
+      this.stamina = Math.max(0, this.stamina - PLAYER.jumpCost);
+      this.staminaWait = PLAYER.staminaDelay;
       this.vel.y = PLAYER.jump;
       this.onGround = false;
       this.char.jump();

@@ -1,4 +1,4 @@
-// The machines that run Lost Vegas. They attack anyone who isn't a machine.
+// The machines that run the casino towns. They attack anyone who isn't a machine.
 //   Slotbot   – a walking slot machine that fires short bursts
 //   Dicer     – a flying die that circles you and plinks away
 //   Card Shark – a playing card that sprints at you and slices
@@ -173,7 +173,7 @@ export class Machine {
     this.name = this.def.name;
     this.team = 'machine';
     this.isBoss = type === 'boss';
-    this.maxHp = this.def.hp;
+    this.maxHp = Math.round(this.def.hp * (raid.map.toughness || 1));
     this.hp = this.maxHp;
     this.armor = 0;
     this.alive = true;
