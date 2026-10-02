@@ -56,6 +56,13 @@ export class Hud {
       if (act === 'use') this.onUse(b.dataset.id);
       if (act === 'reload') this.onReload();
       if (act === 'pickthrow') this.onPickThrow(b.dataset.id);
+      if (act === 'topack') { this.onMove({ where: 'pocket', i }, { where: 'pack', i: 999 }); this.selected = null; }
+      if (act === 'topocket') {
+        const p = this.raid && this.raid.player;
+        const free = p && p.pocket ? p.pocket.indexOf(null) : -1;
+        this.onMove({ where, i }, { where: 'pocket', i: free >= 0 ? free : 0 });
+        this.selected = null;
+      }
       if (act === 'equip') { this.onEquip(i); this.selected = null; }
       if (act === 'unequip') { this.onUnequip(i); this.selected = null; }
       this.last.bagList = null;
@@ -483,42 +490,54 @@ export class Hud {
     const slotCard = (item, where, i, big = false) => {
       const sel = this.selected && this.selected.where === where && this.selected.i === i;
       if (!item) {
-        return `<div class="islot empty ${big ? 'big' : ''}" data-drop="slot" data-where="${where}" data-i="${i}">${big ? `<span class="hint">Weapon ${i + 1}<br><small>drag a gun here</small></span>` : ''}</div>`;
+        const label = where === 'pocket' ? '🔒 Empty pocket<br><small>drag your best find here</small>' : `Weapon ${i + 1}<br><small>drag a gun here</small>`;
+        return `<div class="islot empty ${big ? 'big' : ''} ${where}" data-drop="slot" data-where="${where}" data-i="${i}">${big ? `<span class="hint">${label}</span>` : ''}</div>`;
       }
+      const tag = where === 'weapon' ? `<span class="wkey">${keyName(i ? 'weapon2' : 'weapon1')}</span>` : '';
       const info = itemInfo(item);
       const qty = !isGun(item) && item.qty > 1 ? `<span class="qty">×${item.qty}</span>` : '';
       const ammo = isGun(item) ? `<span class="qty">${item.ammo}</span>` : '';
-      return `<button class="islot r${info.rarity} ${big ? 'big' : ''} ${sel ? 'sel' : ''} ${where === 'weapon' && i === p.active ? 'active' : ''}" draggable="true" data-drop="slot" data-act="select" data-where="${where}" data-i="${i}" style="--rc:${info.css}" title="Drag to move · double-click or right-click to ${isGun(item) ? (where === 'weapon' ? 'stash' : 'equip') : 'use'}">
-        <span class="ic">${iconHtml(item)}</span>${big ? `<span class="nm">${escapeHtml(info.name)}</span>` : ''}${qty}${ammo}<i class="rbar"></i></button>`;
+      return `<button class="islot r${info.rarity} ${big ? 'big' : ''} ${sel ? 'sel' : ''} ${where === 'weapon' && i === p.active ? 'active' : ''} ${where}" draggable="true" data-drop="slot" data-act="select" data-where="${where}" data-i="${i}" style="--rc:${info.css}" title="Drag to move · double-click or right-click to ${isGun(item) ? (where === 'weapon' ? 'stash' : 'equip') : 'use'}">
+        <span class="ic">${iconHtml(item)}</span>${big ? `<span class="nm" style="color:${info.css}">${escapeHtml(info.name)}${where === 'weapon' && i === p.active ? '<small>IN HAND</small>' : ''}</span>` : ''}${tag}${qty}${ammo}<i class="rbar"></i></button>`;
     };
 
-    // Left: weapons and vitals.
-    const left = `<section class="invcol"><h3>Loadout</h3>
+    // Left: weapons, Safe Pocket, throwable and vitals.
+    const bar = (cls, icon, label, v, max) => `<div class="vit ${cls}"><span>${icon} ${label}</span><b>${Math.ceil(v)}</b><div class="bar ${cls}"><div style="width:${Math.max(0, Math.min(1, v / max)) * 100}%"></div></div></div>`;
+    const pocket = p.pocket || [];
+    const throwSlot = (() => {
+      const t = p.currentThrowable();
+      if (!t) return '<div class="tslot empty" data-drop="throw">Drag a throwable here</div>';
+      const others = p.throwables().filter((x) => x !== t).map((x) => `<span title="${escapeHtml(ITEMS[x].name)}">${ITEMS[x].icon}${p.count(x)}</span>`).join('');
+      return `<div class="tslot" data-drop="throw"><span class="ic">${ITEMS[t].icon}</span><b>${escapeHtml(ITEMS[t].name)}</b><small>×${p.count(t)}</small>${others ? `<div class="others">${others}</div>` : ''}</div>`;
+    })();
+    const left = `<section class="invcol gear">
+      <h4 class="ilabel">Weapons</h4>
       ${p.weapons.map((g, i) => slotCard(g, 'weapon', i, true)).join('')}
-      <div class="vit"><span>❤️ Health</span><b>${Math.ceil(p.hp)}/${p.maxHp}</b><div class="bar hp"><div style="width:${(p.hp / p.maxHp) * 100}%"></div></div></div>
-      <div class="vit"><span>🛡️ Armor</span><b>${Math.ceil(p.armor)}/${PLAYER.maxArmor}</b><div class="bar armor"><div style="width:${(p.armor / PLAYER.maxArmor) * 100}%"></div></div></div>
-      <div class="vit"><span>🏃 Stamina</span><b>${Math.ceil(p.stamina)}</b><div class="bar stamina"><div style="width:${(p.stamina / PLAYER.maxStamina) * 100}%"></div></div></div>
-      <div class="vit chipsline"><span>🪙 Raid chips</span><b>${p.chips}</b></div>
-      <h3>Throwable <small>${keyName('throw')} throw · hold ${keyName('cycleThrow')} to pick</small></h3>
-      ${(() => {
-    const t = p.currentThrowable();
-    if (!t) return '<div class="tslot empty" data-drop="throw">Drag a throwable here</div>';
-    const others = p.throwables().filter((x) => x !== t).map((x) => `<span title="${escapeHtml(ITEMS[x].name)}">${ITEMS[x].icon}${p.count(x)}</span>`).join('');
-    return `<div class="tslot" data-drop="throw"><span class="ic">${ITEMS[t].icon}</span><b>${escapeHtml(ITEMS[t].name)}</b><small>×${p.count(t)}</small>${others ? `<div class="others">${others}</div>` : ''}</div>`;
-  })()}
-      <div class="dropzone" data-drop="ground">🗑️ Drag here to drop on the ground</div>
+      ${pocket.length ? `<h4 class="ilabel gold">🔒 Safe Pocket <em>kept if you die</em></h4>${pocket.map((it, i) => slotCard(it, 'pocket', i, true)).join('')}` : ''}
+      <h4 class="ilabel">Throwable <em>${keyName('throw')} throw · hold ${keyName('cycleThrow')} to pick</em></h4>
+      ${throwSlot}
+      <div class="vits">
+        ${bar('hp', '❤️', 'Health', p.hp, p.maxHp)}
+        ${bar('armor', '🛡️', 'Armor', p.armor, PLAYER.maxArmor)}
+        ${bar('stamina', '🏃', 'Stamina', p.stamina, PLAYER.maxStamina)}
+        <div class="vit chipsline"><span>🪙 Chips</span><b>${p.chips.toLocaleString("en-US")}</b></div>
+      </div>
+      <div class="dropzone" data-drop="ground">🗑️ Drop on the ground</div>
     </section>`;
 
     // Middle: the backpack grid.
     const cells = [];
     for (let i = 0; i < p.capacity; i++) cells.push(slotCard(p.backpack[i], 'pack', i));
-    const mid = `<section class="invcol"><h3>Backpack <small>${p.backpack.length}/${p.capacity}</small></h3><div class="igrid">${cells.join('')}</div>
-      <p class="hint">Drag items to move them, drag a gun onto a weapon slot to swap it in. Double-click or right-click for a quick equip / use. Everything here is lost if you die.</p></section>`;
+    const full = p.backpack.length / p.capacity;
+    const mid = `<section class="invcol pack"><div class="packhead"><h3>Backpack</h3><span class="cap ${full >= 1 ? 'full' : full >= 0.75 ? 'near' : ''}">${p.backpack.length}/${p.capacity}</span></div>
+      <div class="capbar"><div style="width:${Math.min(1, full) * 100}%"></div></div>
+      <div class="igrid">${cells.join('')}</div>
+      <p class="hint small">Drag to move · right-click to equip / use · lost if you die${pocket.length ? ' (except your Safe Pocket)' : ''}</p></section>`;
 
     // Right: details for the selected item.
     let detail = '<div class="idetail empty"><span class="ic">🎒</span><p>Select an item to see what it does.</p></div>';
     const sel = this.selected;
-    const item = sel ? (sel.where === 'weapon' ? p.weapons[sel.i] : p.backpack[sel.i]) : null;
+    const item = sel ? (sel.where === 'weapon' ? p.weapons[sel.i] : sel.where === 'pocket' ? (p.pocket || [])[sel.i] : p.backpack[sel.i]) : null;
     if (item) {
       const info = itemInfo(item);
       const rarityName = ['Common', 'Rare', 'Epic', 'Legendary'][info.rarity];
@@ -531,7 +550,7 @@ export class Hud {
           <div class="stat"><span>Fire rate</span><b>${(1 / w.rate).toFixed(1)}/s</b></div>
           <div class="stat"><span>Range</span><b>${w.range || 'Splash'}${w.range ? 'm' : ''}</b></div>
           <div class="stat"><span>Ammo</span><b>${item.ammo}</b></div>`;
-        actions = sel.where === 'pack'
+        actions = sel.where === 'pocket' ? '' : sel.where === 'pack'
           ? `<button class="btn" data-act="equip" data-i="${sel.i}">Equip</button>`
           : `<button class="btn" data-act="unequip" data-i="${sel.i}">To backpack</button>`;
       } else {
@@ -547,6 +566,9 @@ export class Hud {
         }
         if (key) stats += `<p class="keyhint">Shortcut in a raid: <kbd>${key}</kbd>${kind === 'throw' ? ` (hold, then let go · <kbd>${keyName('cycleThrow')}</kbd> switches)` : ''}</p>`;
       }
+      const pocket = p.pocket || [];
+      if (sel.where === 'pocket') actions = `<button class="btn" data-act="topack" data-i="${sel.i}">To backpack</button>`;
+      else if (pocket.length) actions += `<button class="btn ghost" data-act="topocket" data-where="${sel.where}" data-i="${sel.i}">🔒 Safe Pocket</button>`;
       actions += `<button class="btn ghost" data-act="drop" data-where="${sel.where}" data-i="${sel.i}">Drop</button>`;
       detail = `<div class="idetail" style="--rc:${info.css}">
         <div class="bigicon r${info.rarity}">${iconHtml(item, 'gicon big')}</div>
@@ -556,9 +578,9 @@ export class Hud {
         <div class="stat value"><span>Sells for</span><b>🪙 ${info.value}</b></div>
         <div class="acts">${actions}</div></div>`;
     }
-    const right = `<section class="invcol"><h3>Details</h3>${detail}</section>`;
+    const right = `<section class="invcol details">${detail}</section>`;
 
-    const total = [...p.weapons.filter(Boolean), ...p.backpack].reduce((n, it) => n + itemInfo(it).value, 0) + p.chips;
+    const total = [...p.weapons.filter(Boolean), ...p.backpack, ...(p.pocket || []).filter(Boolean)].reduce((n, it) => n + itemInfo(it).value, 0) + p.chips;
     this.set('invHaul', `Haul worth <b>🪙 ${total}</b> if you get out alive`);
     this.set('bagList', left + mid + right);
   }
@@ -658,7 +680,7 @@ export class Hud {
     $('downed').hidden = true;
     document.body.classList.remove('isdowned');
     const el = $('results');
-    const insuredNote = r.insured && r.insured.length ? ` 🛡️ Insurance sent your ${r.insured.join(' and ')} back to the stash.` : '';
+    const insuredNote = r.kept && r.kept.length ? ` 🔒 Your Safe Pocket kept your ${r.kept.map(escapeHtml).join(' and ')}.` : '';
     let title;
     let line;
     if (r.success) {

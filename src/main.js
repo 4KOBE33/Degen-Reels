@@ -166,6 +166,7 @@ hud.onPickThrowFrom = (from) => {
 hud.onQuick = (slot) => {
   const p = raid.player;
   if (slot.where === 'weapon') { const r = raid.unequipToPack(p, slot.i); if (r) hud.toast(r); return; }
+  if (slot.where === 'pocket') { const r = raid.moveItem(p, slot, { where: 'pack', i: p.backpack.length }); if (r) hud.toast(r); return; }
   const it = p.backpack[slot.i];
   if (!it) return;
   if (it.id === 'gun') { const r = raid.equipFromPack(p, slot.i); if (r) hud.toast(r); return; }
@@ -254,7 +255,7 @@ function backupRaid(force = false) {
   const p = raid.player;
   if (!p || !p.alive) return;
   try {
-    localStorage.setItem(BACKUP_KEY, JSON.stringify({ code: net.room.code, seed: raid.seed, at: Date.now(), weapons: p.weapons, backpack: p.backpack, chips: p.chips, hp: p.hp, armor: p.armor }));
+    localStorage.setItem(BACKUP_KEY, JSON.stringify({ code: net.room.code, seed: raid.seed, at: Date.now(), weapons: p.weapons, backpack: p.backpack, pocket: p.pocket, chips: p.chips, hp: p.hp, armor: p.armor }));
   } catch (e) { /* storage full or blocked */ }
 }
 window.addEventListener('pagehide', () => backupRaid(true));

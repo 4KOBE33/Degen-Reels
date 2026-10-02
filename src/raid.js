@@ -380,19 +380,15 @@ export class Raid {
       p.equip(g);
     }
     for (const it of loadout.items) addToList(p.backpack, { ...it }, p.capacity);
-    // Insured guns (bought in the Shop) come back if this raid goes wrong.
-    const cover = Array.isArray(loadout.insured) ? [...loadout.insured] : [];
-    this.insured = loadout.weapons.filter((g) => {
-      const at = g && !g.free ? cover.indexOf(`${g.kind}:${g.rarity}`) : -1;
-      if (at >= 0) cover.splice(at, 1);
-      return at >= 0;
-    }).map((g) => ({ ...g, ammo: fullAmmo(g.kind, g.rarity) }));
+    // The Safe Pocket (comes with a bought backpack): whatever's in it survives your death.
+    p.pocket = Array(loadout.pocket || 0).fill(null);
     // Back from a refresh or crash: what you were carrying.
     const back = opts.restore;
     if (back) {
       back.weapons.forEach((g, i) => { p.weapons[i] = g ? { ...g } : null; });
       p.refreshWeapon();
       p.backpack = back.backpack.map((it) => ({ ...it }));
+      if (back.pocket) back.pocket.forEach((it, i) => { if (i < p.pocket.length) p.pocket[i] = it ? { ...it } : null; });
       p.chips = back.chips || 0;
       if (back.hp > 0) p.hp = Math.min(p.maxHp, back.hp);
       p.armor = back.armor || 0;
@@ -521,7 +517,7 @@ export class Raid {
   extract(where, riders = []) {
     if (!this.active) return;
     const p = this.player;
-    const items = [...p.weapons.filter(Boolean), ...p.backpack];
+    const items = [...p.weapons.filter(Boolean), ...p.backpack, ...(p.pocket || []).filter(Boolean)];
     const value = items.reduce((n, it) => n + itemInfo(it).value, 0) + p.chips;
     sfx.extract();
     save.update((d) => {
@@ -552,11 +548,11 @@ export class Raid {
     const p = this.player;
     const items = [...p.weapons.filter(Boolean), ...p.backpack];
     const value = items.reduce((n, it) => n + itemInfo(it).value, 0) + p.chips;
-    // Gear Insurance: the guns you insured come back to the stash.
-    const insured = this.insured || [];
-    if (insured.length) save.update((d) => { for (const g of insured) addToStash(d.stash.items, { ...g }); });
-    this.insured = [];
-    this.finish({ success: false, reason, by, items, chips: p.chips, value, insured: insured.map((g) => itemInfo(g).name) });
+    // The Safe Pocket: what's in it makes it home no matter what.
+    const kept = (p.pocket || []).filter(Boolean).map((it) => { const x = { ...it }; delete x.free; return x; });
+    if (kept.length) save.update((d) => { for (const it of kept) addToStash(d.stash.items, it); });
+    p.pocket = (p.pocket || []).map(() => null);
+    this.finish({ success: false, reason, by, items, chips: p.chips, value, kept: kept.map((it) => itemInfo(it).name) });
   }
 
   // ---------- kill cam ----------
@@ -860,29 +856,23 @@ export class Raid {
   // Guns swap into weapon slots, anything swaps places in the backpack.
   moveItem(c, from, to) {
     if (from.where === to.where && from.i === to.i) return null;
-    const get = (s) => (s.where === 'weapon' ? c.weapons[s.i] : c.backpack[s.i]);
-    const a = get(from);
-    const b = get(to);
+    const list = (w) => (w === 'weapon' ? c.weapons : w === 'pocket' ? c.pocket || [] : c.backpack);
+    const a = list(from.where)[from.i];
+    const b = list(to.where)[to.i];
     if (!a) return null;
     if (to.where === 'weapon' && !isGun(a)) return 'Only guns go in weapon slots';
     if (from.where === 'weapon' && b && !isGun(b)) return 'Only guns go in weapon slots';
-    if (from.where === 'pack' && to.where === 'pack') {
-      if (b) { c.backpack[from.i] = b; c.backpack[to.i] = a; } else { c.backpack.splice(from.i, 1); c.backpack.push(a); }
-    } else if (from.where === 'weapon' && to.where === 'weapon') {
-      c.weapons[from.i] = b || null;
-      c.weapons[to.i] = a;
-    } else if (from.where === 'pack' && to.where === 'weapon') {
-      c.weapons[to.i] = a;
-      if (b) c.backpack[from.i] = b; else c.backpack.splice(from.i, 1);
-      c.active = to.i;
+    if (to.where === 'pocket' && to.i >= (c.pocket || []).length) return 'No Safe Pocket this raid';
+    if (b) {
+      // Swap places.
+      list(from.where)[from.i] = b;
+      list(to.where)[to.i] = a;
     } else {
-      // Weapon slot into the backpack.
-      if (b) { c.backpack[to.i] = a; c.weapons[from.i] = b; } else {
-        if (c.backpack.length >= c.capacity) return 'Backpack is full';
-        c.backpack.push(a);
-        c.weapons[from.i] = null;
-      }
+      if (to.where === 'pack' && from.where !== 'pack' && c.backpack.length >= c.capacity) return 'Backpack is full';
+      if (from.where === 'pack') c.backpack.splice(from.i, 1); else list(from.where)[from.i] = null;
+      if (to.where === 'pack') c.backpack.push(a); else list(to.where)[to.i] = a;
     }
+    if (to.where === 'weapon' && from.where !== 'weapon') c.active = to.i;
     c.refreshWeapon();
     return null;
   }
@@ -890,9 +880,9 @@ export class Raid {
   // Drop something from your inventory onto the floor in front of you.
   dropFromInventory(c, where, index) {
     if (this.isClient && c.isPlayer) {
-      const item = where === 'weapon' ? c.weapons[index] : c.backpack[index];
+      const item = where === 'weapon' ? c.weapons[index] : where === 'pocket' ? c.pocket[index] : c.backpack[index];
       if (!item) return;
-      if (where === 'weapon') { c.weapons[index] = null; c.refreshWeapon(); } else c.backpack.splice(index, 1);
+      if (where === 'weapon') { c.weapons[index] = null; c.refreshWeapon(); } else if (where === 'pocket') c.pocket[index] = null; else c.backpack.splice(index, 1);
       const at = c.pos.clone().addScaledVector(c.forward, 1.5);
       this.net.send({ k: 'drop', item, at: [at.x, 0, at.z], from: [c.pos.x, 1, c.pos.z] });
       return;
@@ -903,6 +893,10 @@ export class Raid {
       if (!item) return;
       c.weapons[index] = null;
       c.refreshWeapon();
+    } else if (where === 'pocket') {
+      item = c.pocket && c.pocket[index];
+      if (!item) return;
+      c.pocket[index] = null;
     } else {
       item = c.backpack.splice(index, 1)[0];
       if (!item) return;

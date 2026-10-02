@@ -69,7 +69,18 @@ const GAMES = [
   ['crash', '🚀', 'Crash', 'Cash out before it blows'],
   ['mines', '💎', 'Mines', 'Find gems, dodge the bombs'],
   ['plinko', '🔴', 'Plinko', 'Drop a ball, pray for the edges'],
+  ['gunwheel', '🔫', 'Gun Wheel', 'Feed it a gun, spin for a better one'],
 ];
+// The Gun Wheel: 20 slices. Odds are on the wheel for everyone to see.
+const GW_OUT = {
+  bust: { label: 'BUST', icon: '💀', color: '#3a2a4f', text: 'The wheel ate it.' },
+  down: { label: 'DOWN', icon: '⬇️', color: '#64748b', text: 'One rarity worse.' },
+  same: { label: 'SWAP', icon: '🔁', color: '#22a06b', text: 'A different gun, same rarity.' },
+  up: { label: 'UP', icon: '⬆️', color: '#3b82f6', text: 'One rarity better!' },
+  jackpot: { label: 'JACKPOT', icon: '💎', color: '#ffc83d', text: 'Two rarities better!!' },
+};
+const GW_SLICES = ['bust', 'same', 'bust', 'up', 'bust', 'down', 'bust', 'same', 'bust', 'up', 'bust', 'jackpot', 'bust', 'same', 'down', 'bust', 'same', 'up', 'down', 'bust'];
+const GW_SPIN = 4200;
 // Plinko: 12 rows of pegs, 13 buckets. Riskier boards pay more at the edges and less in the middle.
 const PLINKO_ROWS = 12;
 const PLINKO = {
@@ -93,11 +104,28 @@ function minesMult(bombs, picks) {
 }
 
 // The Shop's supplies: [item, price]. Pricier than the Fence pays, so selling and rebuying loses.
+// [item, price, level it unlocks at]
 const SUPPLIES = [
-  ['bandage', 150], ['soda', 350], ['plate', 300], ['ammo', 120], ['cocoa', 160], ['fuel', 220],
-  ['grenade', 250], ['dice', 300], ['flash', 260], ['sauce', 280], ['sticky', 350], ['smoke', 200], ['emp', 380], ['cluster', 500],
-  ['token', 2500], ['keycard', 4500],
+  ['bandage', 150, 1], ['ammo', 120, 1], ['plate', 300, 2], ['soda', 350, 3], ['cocoa', 160, 3], ['grenade', 250, 4], ['smoke', 200, 4],
+  ['dice', 300, 5], ['flash', 260, 5], ['fuel', 220, 6], ['sauce', 280, 7], ['sticky', 350, 8], ['emp', 380, 10], ['cluster', 500, 12],
+  ['token', 2500, 14], ['keycard', 4500, 18],
 ];
+// The Armory opens at level 4. More guns, and better ones, as you level up.
+const ARMORY_LEVEL = 4;
+const ARMORY_STOCK = [[4, 2], [7, 3], [10, 4], [14, 5], [18, 6]]; // [level, guns on offer]
+const ARMORY_RARITY = [[8, 1], [12, 2], [18, 3]]; // [level, best rarity it can stock]
+const armoryStock = (lv) => ARMORY_STOCK.filter(([l]) => lv >= l).reduce((n, [, c]) => c, 0);
+const armoryRarity = (lv) => ARMORY_RARITY.filter(([l]) => lv >= l).reduce((n, [, r]) => r, 0);
+// Safe Pocket slots: one with any bought backpack, two with the best one. Never with the free loadout.
+const pocketSlots = (bag) => (bag >= BAG_UPGRADES.length ? 2 : bag >= 1 ? 1 : 0);
+
+// Why a Shop look is still locked ('' once you can buy it).
+function shopLookLock(o, d) {
+  const u = o.unlock;
+  if (u.lvl && levelInfo(d.xp).level < u.lvl) return `Level ${u.lvl}`;
+  if (u.boss && !(d.stats.bossKills > 0)) return `Level ${u.lvl} + beat the Pit Boss`;
+  return '';
+}
 
 const FREE_LOCKED = 'The free loadout is locked in. Raid with it as is.';
 const hasFreeKit = (lo) => lo.weapons.some((g) => g && g.free) || lo.items.some((it) => it.free);
@@ -343,6 +371,13 @@ export class Hub {
         <div class="wslots">${lo.weapons.map((g, i) => (g ? this.itemCard(g, 'unequip', i) : `<div class="item empty">Weapon ${i + 1}<br><small>empty</small></div>`)).join('')}</div>
         <div class="grid">${lo.items.map((it, i) => this.itemCard(it, 'unpack', i)).join('')}${Array(Math.max(0, LOADOUT_SLOTS - lo.items.length)).fill('<div class="item empty"></div>').join('')}</div>
         <p class="hint">Click anything to send it back to your stash.</p>
+        ${(() => {
+    const n = pocketSlots(d.bag || 0);
+    if (!n) return '<p class="hint pocketnote">🔒 Buy any backpack in the Shop to get a <b>Safe Pocket</b>: what you put in it during a raid comes home even if you die.</p>';
+    if (freeKit) return '<p class="hint pocketnote off">🔒 No Safe Pocket with the free loadout. Bring your own gun to get it.</p>';
+    if (noGuns) return '<p class="hint pocketnote off">🔒 Pack a gun of your own to bring your Safe Pocket.</p>';
+    return `<p class="hint pocketnote on">🔒 Safe Pocket: ${n} slot${n > 1 ? 's' : ''} this raid. Drag your best find into it in your backpack screen.</p>`;
+  })()}
       </section>
       </div>
       <section class="stashsec"><h3>📦 Stash <small>${d.stash.items.length} items · click to pack it for the raid</small></h3>
@@ -351,7 +386,8 @@ export class Hub {
   }
 
   // Today's guns: six offers that change every day (the same for everyone on that day).
-  armory() {
+  armory(lv = levelInfo(this.data.xp).level) {
+    const cap = armoryRarity(lv);
     const day = new Date().toISOString().slice(0, 10);
     let seed = Number(day.replace(/-/g, ''));
     const rnd = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; };
@@ -360,9 +396,11 @@ export class Hub {
     for (let i = 0; i < 6; i++) {
       const kind = kinds[Math.floor(rnd() * kinds.length)];
       const r = rnd();
-      const rarity = i === 5 ? (r < 0.35 ? 3 : 2) : r < 0.5 ? 0 : r < 0.82 ? 1 : 2;
+      const rolled = i === 5 ? (r < 0.35 ? 3 : 2) : r < 0.5 ? 0 : r < 0.82 ? 1 : 2;
+      const rarity = Math.min(rolled, cap);
       const gun = makeGun(kind, rarity);
-      const price = Math.max(150, Math.round((itemInfo(gun).value * (2.2 + rarity * 0.3)) / 50) * 50);
+      // Way more than the Fence pays: the Armory is for when you really want a gun, not a deal.
+      const price = Math.max(250, Math.round((itemInfo(gun).value * (3.5 + rarity * 0.5)) / 50) * 50);
       offers.push({ gun, price });
     }
     return { day, offers };
@@ -371,51 +409,52 @@ export class Hub {
   // The Shop: guns, supplies, insurance, looks and backpacks. Somewhere to put all those chips.
   renderShop() {
     const d = this.data;
-    const lv = d.bag || 0;
+    const lv = levelInfo(d.xp).level;
     const chips = d.stash.chips;
-    const sec = this.shopSec || 'armory';
-    const tabs = [['armory', '🔫 Armory'], ['supplies', '🎒 Supplies'], ['insurance', '🛡️ Insurance'], ['looks', '✨ Looks'], ['bags', '👜 Backpacks']]
+    const sec = ['armory', 'supplies', 'looks', 'bags'].includes(this.shopSec) ? this.shopSec : 'armory';
+    const tabs = [['armory', `🔫 Armory${lv < ARMORY_LEVEL ? ' 🔒' : ''}`], ['supplies', '🎒 Supplies'], ['looks', '✨ Looks'], ['bags', '👜 Backpacks']]
       .map(([k, l]) => `<button class="subtab ${sec === k ? 'on' : ''}" data-act="shopsec" data-s="${k}">${l}</button>`).join('');
+    const lockCard = (icon, name, why) => `<div class="shopcard locked"><span class="sicon">${icon}</span><b>${name}</b><span class="lockd">🔒 ${why}</span></div>`;
     let body = '';
     if (sec === 'armory') {
-      const { day, offers } = this.armory();
-      const bought = d.shopDay && d.shopDay.day === day ? d.shopDay.bought : [];
-      body = `<p class="hint">Six guns, new every day. One of each. The last one's always something special.</p><div class="shopgrid">${offers.map((o, i) => {
-        const info = itemInfo(o.gun);
-        const gone = bought.includes(i);
-        return `<div class="shopcard r${info.rarity} ${gone ? 'locked' : ''}"><span class="sicon">${iconHtml(o.gun)}</span><b style="color:${info.css}">${escapeHtml(info.name)}</b><small>Fence value 🪙 ${fmt(info.value)}</small>
-          ${gone ? '<span class="own">SOLD OUT</span>' : `<button class="btn" data-act="buygun" data-i="${i}" ${chips < o.price ? 'disabled' : ''}>BUY · 🪙 ${fmt(o.price)}</button>`}</div>`;
-      }).join('')}</div>`;
+      const ladder = `<div class="ladder">${ARMORY_STOCK.map(([l, n]) => `<span class="${lv >= l ? 'done' : ''}">Lv ${l}: ${n} guns</span>`).join('')}${ARMORY_RARITY.map(([l, r]) => `<span class="${lv >= l ? 'done' : ''}">Lv ${l}: ${['', 'Rares', 'Epics', 'Legendaries'][r]}</span>`).join('')}</div>`;
+      if (lv < ARMORY_LEVEL) {
+        body = `<div class="shoplock"><span>🔒</span><div><b>The Armory opens at level ${ARMORY_LEVEL}</b><small>You're level ${lv}. Raid, extract and bust machines to level up. Once it's open, it stocks more guns and better rarities as you climb.</small></div></div>${ladder}`;
+      } else {
+        const { day, offers } = this.armory(lv);
+        const stock = armoryStock(lv);
+        const bought = d.shopDay && d.shopDay.day === day ? d.shopDay.bought : [];
+        const next = ARMORY_STOCK.find(([l]) => l > lv);
+        body = `<p class="hint">New guns every day, one of each, and they don't come cheap. Level up to stock more of them and better rarities.</p>${ladder}<div class="shopgrid">${offers.map((o, i) => {
+          if (i >= stock) return lockCard('🔫', 'More stock', `Level ${(ARMORY_STOCK.find(([, n]) => n > i) || [99])[0]}`);
+          const info = itemInfo(o.gun);
+          const gone = bought.includes(i);
+          return `<div class="shopcard r${info.rarity} ${gone ? 'locked' : ''}"><span class="sicon">${iconHtml(o.gun)}</span><b style="color:${info.css}">${escapeHtml(info.name)}</b><small>Fence value 🪙 ${fmt(info.value)}</small>
+            ${gone ? '<span class="own">SOLD OUT</span>' : `<button class="btn" data-act="buygun" data-i="${i}" ${chips < o.price ? 'disabled' : ''}>BUY · 🪙 ${fmt(o.price)}</button>`}</div>`;
+        }).join('')}</div>${next ? '' : '<p class="hint">Fully stocked. Nice.</p>'}`;
+      }
     } else if (sec === 'supplies') {
-      body = `<p class="hint">Stock up before a raid. It all goes to your stash.</p><div class="shopgrid">${SUPPLIES.map(([id, price]) => {
+      body = `<p class="hint">Stock up before a raid. It all goes to your stash. More supplies unlock as you level up.</p><div class="shopgrid">${SUPPLIES.map(([id, price, need]) => {
         const it = ITEMS[id];
+        if (lv < need) return lockCard(it.icon, it.name, `Level ${need}`);
         return `<div class="shopcard"><span class="sicon">${it.icon}</span><b>${it.name}</b><small>${escapeHtml(it.desc).slice(0, 70)}${it.desc.length > 70 ? '…' : ''}</small>
-          <button class="btn" data-act="buyitem" data-id="${id}" data-p="${price}" ${chips < price ? 'disabled' : ''}>BUY · 🪙 ${fmt(price)}</button></div>`;
+          <button class="btn" data-act="buyitem" data-id="${id}" ${chips < price ? 'disabled' : ''}>BUY · 🪙 ${fmt(price)}</button></div>`;
       }).join('')}</div>`;
-    } else if (sec === 'insurance') {
-      const guns = d.loadout.weapons.filter((g) => g && !g.free);
-      // Insurance covers the guns that were packed when you bought it, not whatever you swap in later.
-      const covered = Array.isArray(d.insured) ? d.insured : null;
-      const worth = guns.reduce((n, g) => n + itemInfo(g).value, 0);
-      const price = Math.max(100, Math.round((worth * 0.3) / 10) * 10);
-      body = `<p class="hint">Insure the guns in your raid loadout. If you die (or time runs out) on your next raid, they come back to your stash. One raid only, and only the guns packed when you buy it.</p>
-        <div class="insure ${covered ? 'on' : ''}">
-          <div><b>🛡️ Gear Insurance</b><small>${guns.length ? guns.map((g) => `${covered && covered.includes(`${g.kind}:${g.rarity}`) ? '✓ ' : ''}${escapeHtml(itemInfo(g).name)}`).join(' + ') : 'No guns packed yet. Pack your guns on the Loadout tab first.'}</small></div>
-          ${covered ? '<span class="own">✓ INSURED FOR THE NEXT RAID</span>' : guns.length ? `<button class="btn" data-act="insure" data-p="${price}" ${chips < price ? 'disabled' : ''}>INSURE · 🪙 ${fmt(price)}</button>` : ''}
-        </div><p class="hint">Costs 30% of what the guns are worth. Free loadout guns can't be insured.</p>`;
     } else if (sec === 'looks') {
       const items = [];
       for (const [part, label] of LOOK_PARTS) for (const o of LOOKS[part]) if (o.unlock && o.unlock.buy) items.push({ part, label, o });
-      body = `<p class="hint">Looks you can only get here. Buy once, wear forever (Look tab).</p><div class="shopgrid">${items.map(({ part, label, o }) => {
+      body = `<p class="hint">Looks you can only get here, once you've earned the right. Buy once, wear forever (Look tab).</p><div class="shopgrid">${items.map(({ part, label, o }) => {
         const owned = !!(d.owned && d.owned[String(o.id)]);
-        const icon = part === 'color' ? `<span class="swatchbig" style="background:#${Number(o.id).toString(16).padStart(6, '0')}"></span>` : o.icon;
+        const icon = part === 'color' ? `<span class="swatchbig" style="background:${hex(o.id)}"></span>` : o.icon;
+        const why = shopLookLock(o, d);
+        if (!owned && why) return lockCard(icon, o.name, why);
         return `<div class="shopcard ${owned ? 'owned' : ''}"><span class="sicon">${icon}</span><b>${o.name}</b><small>${label}</small>
-          ${owned ? '<span class="own">✓ OWNED</span>' : `<button class="btn" data-act="buylook" data-id="${o.id}" data-p="${o.unlock.buy}" ${chips < o.unlock.buy ? 'disabled' : ''}>BUY · 🪙 ${fmt(o.unlock.buy)}</button>`}</div>`;
+          ${owned ? '<span class="own">✓ OWNED</span>' : `<button class="btn" data-act="buylook" data-id="${o.id}" ${chips < o.unlock.buy ? 'disabled' : ''}>BUY · 🪙 ${fmt(o.unlock.buy)}</button>`}</div>`;
       }).join('')}</div>`;
     } else {
-      body = this.renderBags(lv);
+      body = this.renderBags(d.bag || 0);
     }
-    return `<h3>🛒 Shop <small class="bank">Bank: 🪙 ${fmt(chips)}</small></h3><div class="subtabs shoptabs">${tabs}</div>${body}`;
+    return `<h3>🛒 Shop <small class="bank">Bank: 🪙 ${fmt(chips)} · Level ${lv}</small></h3><div class="subtabs shoptabs">${tabs}</div>${body}`;
   }
 
   renderBags(lv) {
@@ -426,12 +465,12 @@ export class Hub {
       const next = i === lv + 1;
       const slots = BACKPACK_SLOTS + bagBonus(i);
       return `<div class="shopcard ${owned ? 'owned' : next ? 'next' : 'locked'}">
-        <span class="sicon">${u.icon}</span><b>${u.name}</b><small>${slots} backpack slots</small>
+        <span class="sicon">${u.icon}</span><b>${u.name}</b><small>${slots} backpack slots${pocketSlots(i) ? ` · 🔒 ${pocketSlots(i)} Safe Pocket${pocketSlots(i) > 1 ? 's' : ''}` : ''}</small>
         ${owned ? `<span class="own">${i === lv ? '✓ WEARING' : '✓ OWNED'}</span>`
           : next ? `<button class="btn" data-act="bagup" ${d.stash.chips < u.cost ? 'disabled' : ''}>BUY · 🪙 ${fmt(u.cost)}</button>`
             : `<span class="lockd">🔒 🪙 ${fmt(u.cost)}</span>`}</div>`;
     }).join('');
-    return `<p class="hint">Backpack upgrades are yours for good, even if you die: more room for loot in every raid.</p><div class="shopgrid">${cards}</div>`;
+    return `<p class="hint">Backpack upgrades are yours for good, even if you die: more room for loot in every raid. Any bought backpack also gets a <b>🔒 Safe Pocket</b>: whatever you put in it comes home even if you die. (Not with the free loadout. Bring your own gun.)</p><div class="shopgrid">${cards}</div>`;
   }
 
   renderFence() {
@@ -645,7 +684,7 @@ export class Hub {
     const net = this.session;
     const recent = this.history.slice(-8).reverse().map((h) => `<span class="${h.net > 0 ? 'win' : h.net < 0 ? 'loss' : ''}">${h.icon} ${h.net > 0 ? '+' : ''}${fmt(h.net)}</span>`).join('');
     const stage = {
-      slots: () => this.renderReels(), blackjack: () => this.renderBlackjack(), roulette: () => this.renderRoulette(), crash: () => this.renderCrash(), mines: () => this.renderMines(), plinko: () => this.renderPlinko(),
+      slots: () => this.renderReels(), blackjack: () => this.renderBlackjack(), roulette: () => this.renderRoulette(), crash: () => this.renderCrash(), mines: () => this.renderMines(), plinko: () => this.renderPlinko(), gunwheel: () => this.renderGunWheel(),
     }[this.game]();
     return `<div class="backroom">
       <aside class="gamerail">${rail}
@@ -1084,7 +1123,9 @@ export class Hub {
       case 'tutorial': save.update((x) => { x.settings.tutorial = b.dataset.t; }); break;
       case 'shopsec': this.shopSec = b.dataset.s; break;
       case 'buygun': {
-        const { day, offers } = this.armory();
+        const lv = levelInfo(d.xp).level;
+        if (lv < ARMORY_LEVEL || i >= armoryStock(lv)) break;
+        const { day, offers } = this.armory(lv);
         const o = offers[i];
         const bought = d.shopDay && d.shopDay.day === day ? d.shopDay.bought : [];
         if (!o || bought.includes(i) || d.stash.chips < o.price) break;
@@ -1098,23 +1139,19 @@ export class Hub {
         break;
       }
       case 'buyitem': {
-        const price = Number(b.dataset.p);
-        if (d.stash.chips < price) break;
+        const sup = SUPPLIES.find(([id]) => id === b.dataset.id);
+        if (!sup || levelInfo(d.xp).level < sup[2]) break;
+        const price = sup[1];
+        if (d.stash.chips < price) { this.toast(`You need 🪙 ${fmt(price)}.`); break; }
         save.update((x) => { x.stash.chips -= price; addToStash(x.stash.items, makeItem(b.dataset.id, 1)); });
         sfx.pickup();
         this.toast(`${ITEMS[b.dataset.id].icon} ${ITEMS[b.dataset.id].name} added to your stash.`);
         break;
       }
-      case 'insure': {
-        const price = Number(b.dataset.p);
-        if (d.stash.chips < price || d.insured) break;
-        save.update((x) => { x.stash.chips -= price; x.insured = x.loadout.weapons.filter((g) => g && !g.free).map((g) => `${g.kind}:${g.rarity}`); });
-        sfx.pickup();
-        this.toast('🛡️ Insured. If you die next raid, your guns come back.');
-        break;
-      }
       case 'buylook': {
-        const price = Number(b.dataset.p);
+        const o = LOOK_PARTS.map(([part]) => LOOKS[part].find((x) => String(x.id) === b.dataset.id)).find(Boolean);
+        if (!o || !o.unlock || !o.unlock.buy || shopLookLock(o, d)) break;
+        const price = o.unlock.buy;
         if (d.stash.chips < price) break;
         save.update((x) => { x.stash.chips -= price; x.owned = { ...(x.owned || {}), [b.dataset.id]: true }; });
         sfx.jackpot();
@@ -1190,10 +1227,103 @@ export class Hub {
       case 'minecash': this.cashMines(); break;
       case 'plinkorisk': if (!this.plinko.balls.length) this.plinko.risk = b.dataset.r; break;
       case 'plinkodrop': this.dropPlinko(); return;
+      case 'gwpick': if (!(this.gw && this.gw.spinning)) this.gw = { pick: i, angle: this.gw ? this.gw.angle : 0 }; break;
+      case 'gwspin': this.spinGunWheel(); return;
       case 'cashout': this.cashOutCrash(); return;
       default: return;
     }
     this.render();
+  }
+
+  // ---------- Gun Wheel ----------
+  // Put a gun on the line and spin: lose it, swap it, or trade up.
+
+  gunWheelGuns() {
+    return this.data.stash.items.map((it, i) => ({ it, i })).filter(({ it }) => isGun(it) && !it.free);
+  }
+
+  renderGunWheel() {
+    const g = this.gw || { angle: 0 };
+    const guns = this.gunWheelGuns();
+    const picked = g.pick !== undefined && g.pick !== null ? this.data.stash.items[g.pick] : null;
+    const valid = picked && isGun(picked) && !picked.free;
+    const n = GW_SLICES.length;
+    const cone = GW_SLICES.map((k, i) => `${GW_OUT[k].color} ${(i * 360) / n}deg ${((i + 1) * 360) / n}deg`).join(',');
+    const labels = GW_SLICES.map((k, i) => `<span style="transform:rotate(${(i + 0.5) * (360 / n)}deg)"><i>${GW_OUT[k].icon}</i></span>`).join('');
+    const odds = Object.keys(GW_OUT).map((k) => `<span><i style="background:${GW_OUT[k].color}"></i>${GW_OUT[k].icon} ${GW_OUT[k].label} ${Math.round((GW_SLICES.filter((x) => x === k).length / n) * 100)}%<small>${GW_OUT[k].text}</small></span>`).join('');
+    let res = '<div class="prize empty">Pick a gun from your stash, then spin. Whatever it lands on, the new gun goes straight to your stash. Legendaries that go UP pay out chips on top.</div>';
+    if (g.result && !g.spinning) {
+      const r = g.result;
+      res = r.gun
+        ? `<div class="prize r${itemInfo(r.gun).rarity}"><span class="pi">${iconHtml(r.gun, 'gicon big')}</span><div><small>${GW_OUT[r.out].icon} ${GW_OUT[r.out].label}${r.chips ? ` · +🪙 ${fmt(r.chips)}` : ''}</small><b style="color:${itemInfo(r.gun).css}">${escapeHtml(itemInfo(r.gun).name)}</b><small>Was: ${escapeHtml(r.was)} · sent to your stash</small></div></div>`
+        : `<div class="prize r0"><span class="pi">💀</span><div><small>BUST</small><b>The wheel ate your ${escapeHtml(r.was)}</b><small>Better luck next spin.</small></div></div>`;
+    }
+    return `<div class="gunwheel">
+      <div class="gwpick"><h4>Your guns</h4><div class="grid">${guns.map(({ it, i }) => `<button class="item r${itemInfo(it).rarity} ${g.pick === i ? 'on' : ''}" data-act="gwpick" data-i="${i}" ${g.spinning ? 'disabled' : ''} title="${escapeHtml(itemInfo(it).name)}"><span class="icon">${iconHtml(it)}</span><span class="nm" style="color:${itemInfo(it).css}">${escapeHtml(itemInfo(it).name)}</span><span class="meta">🪙 ${fmt(itemInfo(it).value)}</span></button>`).join('') || '<p class="hint">No guns in your stash. (Free loadout guns don\'t count.)</p>'}</div></div>
+      <div class="gwstage">
+        <div class="gwheel"><div class="gwdisc" id="gwDisc" style="background:conic-gradient(${cone});transform:rotate(${g.angle || 0}deg)">${labels}</div><div class="gwhub">${valid ? iconHtml(picked) : '🔫'}</div><div class="gwpointer">▼</div></div>
+        <button class="btn big spinbtn" data-act="gwspin" ${!valid || g.spinning ? 'disabled' : ''}>${g.spinning ? 'SPINNING…' : valid ? `SPIN · BET YOUR ${escapeHtml(itemInfo(picked).name).toUpperCase()}` : 'PICK A GUN'}</button>
+        <div class="gwodds">${odds}</div>
+      </div></div>${res}`;
+  }
+
+  spinGunWheel() {
+    const g = this.gw;
+    if (!g || g.spinning) return;
+    const d = this.data;
+    const gun = d.stash.items[g.pick];
+    if (!gun || !isGun(gun) || gun.free) return;
+    const n = GW_SLICES.length;
+    const slice = Math.floor(Math.random() * n);
+    const out = GW_SLICES[slice];
+    const was = itemInfo(gun);
+    const kinds = GUN_KINDS.filter((k) => WEAPONS[k] && k !== 'fists');
+    let prize = null;
+    let chips = 0;
+    if (out !== 'bust') {
+      const step = { down: -1, same: 0, up: 1, jackpot: 2 }[out];
+      const want = gun.rarity + step;
+      if (want >= 0) {
+        const rarity = Math.min(3, want);
+        const others = kinds.filter((k) => k !== gun.kind);
+        prize = makeGun(others[Math.floor(Math.random() * others.length)], rarity);
+        // Already Legendary and still going up: chips on top.
+        if (want > 3) chips = Math.round(was.value * (want - 3));
+      }
+    }
+    // The gun goes on the wheel right away.
+    save.update((x) => { x.stash.items.splice(g.pick, 1); x.stats.wagered += was.value; });
+    // Land the pointer (top) in the middle of the winning slice, after a few full turns.
+    const sliceDeg = 360 / n;
+    const land = 360 - (slice + 0.3 + Math.random() * 0.4) * sliceDeg;
+    const from = g.angle || 0;
+    const to = from - (from % 360) + 360 * 6 + land;
+    this.gw = { pick: null, angle: from, spinning: true, result: null };
+    this.render();
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      const el = document.getElementById('gwDisc');
+      if (el) { el.style.transition = `transform ${GW_SPIN}ms cubic-bezier(0.15, 0.85, 0.2, 1)`; el.style.transform = `rotate(${to}deg)`; }
+      if (this.gw && this.gw.spinning) this.gw.angle = to;
+    }));
+    sfx.lever();
+    let ticks = 0;
+    const tick = setInterval(() => { if (++ticks < 30) sfx.tick(); else clearInterval(tick); }, 120);
+    setTimeout(() => {
+      let ann = null;
+      if (prize) {
+        const key = itemKey(prize);
+        save.update((x) => { addToStash(x.stash.items, prize); if (chips) x.stash.chips += chips; });
+        ann = progress((x) => { x.collection[key] = (x.collection[key] || 0) + 1; });
+        if (out === 'jackpot' || itemInfo(prize).rarity >= 3) sfx.jackpot(); else if (out === 'down') sfx.deny(); else sfx.win();
+      } else sfx.deny();
+      const payout = (prize ? itemInfo(prize).value : 0) + chips;
+      if (payout) save.update((x) => { x.stats.gambleWon += payout; x.stats.biggestWin = Math.max(x.stats.biggestWin, payout); });
+      this.gw = { pick: null, angle: to, spinning: false, result: { out, gun: prize, chips, was: was.name } };
+      this.settleBet('🔫', was.value, payout);
+      if (ann) this.announce(ann);
+      if (this.tab === 'backroom' && this.game === 'gunwheel') this.render();
+      else this.renderHeader();
+    }, GW_SPIN + 150);
   }
 
   // ---------- Loot Reels ----------
@@ -1514,8 +1644,10 @@ export class Hub {
     const restoring = party && party.join && party.join.restore;
     // Whatever you bring leaves the stash for good unless you extract with it.
     const loadout = restoring ? { weapons: [], items: [] } : JSON.parse(JSON.stringify(lo));
-    if (!restoring && Array.isArray(d.insured)) loadout.insured = d.insured;
-    if (!restoring) save.update((x) => { x.loadout = { weapons: [null, null], items: [] }; x.insured = false; });
+    // The Safe Pocket only comes along with real gear, not the free loadout.
+    if (!restoring) loadout.pocket = !hasFreeKit(lo) && lo.weapons.some(Boolean) ? pocketSlots(d.bag || 0) : 0;
+    else loadout.pocket = pocketSlots(d.bag || 0);
+    if (!restoring) save.update((x) => { x.loadout = { weapons: [null, null], items: [] }; delete x.insured; });
     this.onDeploy({
       party,
       mapId: party ? party.mapId : d.selectedMap,
