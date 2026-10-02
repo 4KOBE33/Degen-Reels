@@ -1,6 +1,5 @@
-// Cloud saves and the leaderboard. Accounts are a name + PIN; saves are stored as JSON on disk
-// (DATA_DIR, or ./data). On Render, attach a persistent disk and point DATA_DIR at it, or saves
-// are wiped whenever the server restarts.
+// Cloud saves and the leaderboard. Accounts are a name + PIN. They're stored in Postgres when
+// DATABASE_URL is set, otherwise as JSON on disk (DATA_DIR, or ./data), which free hosts wipe.
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
@@ -13,22 +12,61 @@ const PIN_RE = /^\d{4,8}$/;
 const MAX_SAVE = 400 * 1024;
 
 let accounts = {}; // lower-case name -> { name, salt, hash, tokens: [], save, updatedAt, chips, worth, level }
-try {
-  accounts = JSON.parse(fs.readFileSync(FILE, 'utf8'));
-} catch (e) { /* first run */ }
 
-// Write to disk at most every couple of seconds.
-let dirty = false;
-function persist() { dirty = true; }
-setInterval(() => {
-  if (!dirty) return;
-  dirty = false;
+// Where accounts live. With DATABASE_URL set (a free Postgres from Neon, Supabase, Render…) they
+// survive restarts and redeploys. Without it they go in a JSON file, which free hosts wipe.
+const DB_URL = process.env.DATABASE_URL;
+let pool = null;
+const changed = new Set(); // account keys waiting to be written
+
+async function loadAccounts() {
+  if (DB_URL) {
+    const { Pool } = require('pg');
+    const local = /@(localhost|127\.0\.0\.1)|host=\/|^postgres(ql)?:\/\/\/|\?host=/.test(DB_URL);
+    pool = new Pool({ connectionString: DB_URL, ssl: local ? false : { rejectUnauthorized: false }, max: 3 });
+    await pool.query('CREATE TABLE IF NOT EXISTS bth_accounts (k TEXT PRIMARY KEY, data JSONB NOT NULL, updated TIMESTAMPTZ DEFAULT now())');
+    const { rows } = await pool.query('SELECT k, data FROM bth_accounts');
+    for (const r of rows) accounts[r.k] = r.data;
+    // Moving over from the file: bring those accounts along once.
+    try {
+      const old = JSON.parse(fs.readFileSync(FILE, 'utf8'));
+      for (const [k, a] of Object.entries(old)) if (!accounts[k]) { accounts[k] = a; changed.add(k); }
+    } catch (e) { /* no file */ }
+    console.log(`Accounts: ${rows.length} loaded from the database.`);
+  } else {
+    try { accounts = JSON.parse(fs.readFileSync(FILE, 'utf8')); } catch (e) { /* first run */ }
+    console.log(`Accounts: ${Object.keys(accounts).length} loaded from ${FILE}. Set DATABASE_URL so they survive restarts.`);
+  }
+}
+const ready = loadAccounts().catch((e) => { console.error('Could not load accounts:', e.message); });
+
+// Write changes out every couple of seconds.
+function persist(k) { changed.add(k); }
+let writing = false;
+async function flush() {
+  if (writing || !changed.size) return;
+  writing = true;
+  const keys = [...changed];
+  changed.clear();
   try {
-    fs.mkdirSync(DATA_DIR, { recursive: true });
-    fs.writeFileSync(`${FILE}.tmp`, JSON.stringify(accounts));
-    fs.renameSync(`${FILE}.tmp`, FILE);
-  } catch (e) { console.error('Could not write accounts:', e.message); dirty = true; }
-}, 2000).unref();
+    if (pool) {
+      for (const k of keys) {
+        if (accounts[k]) await pool.query('INSERT INTO bth_accounts (k, data, updated) VALUES ($1, $2, now()) ON CONFLICT (k) DO UPDATE SET data = EXCLUDED.data, updated = now()', [k, accounts[k]]);
+      }
+    } else {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+      fs.writeFileSync(`${FILE}.tmp`, JSON.stringify(accounts));
+      fs.renameSync(`${FILE}.tmp`, FILE);
+    }
+  } catch (e) {
+    console.error('Could not write accounts:', e.message);
+    for (const k of keys) changed.add(k);
+  }
+  writing = false;
+}
+setInterval(flush, 2000).unref();
+// Don't lose the last few seconds when the host shuts us down.
+for (const sig of ['SIGTERM', 'SIGINT']) process.once(sig, () => { flush().finally(() => process.exit(0)); });
 
 const hashPin = (pin, salt) => crypto.scryptSync(String(pin), salt, 32).toString('hex');
 const key = (name) => String(name || '').trim().toLowerCase();
@@ -82,6 +120,8 @@ router.use((req, res, next) => {
   next();
 });
 router.use(express.json({ limit: MAX_SAVE + 1024 }));
+router.use((req, res, next) => { ready.then(() => next()); });
+router.get('/status', (req, res) => res.json({ ok: true, storage: pool ? 'database' : 'file', players: Object.keys(accounts).length }));
 
 // Create an account, or log in to one. Returns a token and the cloud save.
 router.post('/account', (req, res) => {
@@ -92,9 +132,12 @@ router.post('/account', (req, res) => {
   if (tooMany(`n:${k}`) || tooMany(`ip:${req.ip}`)) { res.status(429).json({ error: 'Too many tries. Wait a minute.' }); return; }
   let a = accounts[k];
   if (mode === 'register') {
-    if (a) { res.status(409).json({ error: 'That name is taken. Log in instead, or pick another.' }); return; }
-    const salt = crypto.randomBytes(16).toString('hex');
-    a = accounts[k] = { name: String(name).trim(), salt, hash: hashPin(pin, salt), tokens: [], save: null, updatedAt: 0, chips: 0, worth: 0, level: 1 };
+    // Same name and PIN again (say the first try timed out): that's fine, it's yours.
+    if (a && a.hash !== hashPin(pin, a.salt)) { res.status(409).json({ error: 'That name is taken. Log in instead, or pick another.' }); return; }
+    if (!a) {
+      const salt = crypto.randomBytes(16).toString('hex');
+      a = accounts[k] = { name: String(name).trim(), salt, hash: hashPin(pin, salt), tokens: [], save: null, updatedAt: 0, chips: 0, worth: 0, level: 1 };
+    }
     if (save && JSON.stringify(save).length <= MAX_SAVE) {
       a.save = save;
       a.updatedAt = Date.now();
@@ -105,7 +148,7 @@ router.post('/account', (req, res) => {
   }
   const token = crypto.randomBytes(18).toString('hex');
   a.tokens = [...(a.tokens || []).slice(-4), token];
-  persist();
+  persist(k);
   res.json({ name: a.name, token, save: a.save, updatedAt: a.updatedAt });
 });
 
@@ -119,7 +162,7 @@ router.post('/save', (req, res) => {
   a.save = save;
   a.updatedAt = Date.now();
   Object.assign(a, summarize(save));
-  persist();
+  persist(key(a.name));
   res.json({ ok: true, updatedAt: a.updatedAt });
 });
 
@@ -132,7 +175,7 @@ router.post('/load', (req, res) => {
 
 router.post('/logout', (req, res) => {
   const a = account(req.body && req.body.token);
-  if (a) { a.tokens = a.tokens.filter((t) => t !== req.body.token); persist(); }
+  if (a) { a.tokens = a.tokens.filter((t) => t !== req.body.token); persist(key(a.name)); }
   res.json({ ok: true });
 });
 

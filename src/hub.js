@@ -6,7 +6,7 @@ import {
   itemInfo, isGun, rollLoot, addToList, addToStash, makeGun, makeItem, fullAmmo,
 } from './items.js';
 import { save } from './save.js';
-import { cloud } from './cloud.js';
+import { cloud, net as cloudNet } from './cloud.js';
 import { iconHtml, gunIcon } from './icons.js';
 import { keyName, renderBinds, wireBinds } from './keys.js';
 import { MAPS } from './map.js';
@@ -617,8 +617,10 @@ export class Hub {
     return `<section class="account"><b>☁️ Cloud save</b>
       <small>Make an account to keep your progress if you clear your browser or switch computers, and to show up on the 👑 leaderboard.</small>
       <div class="prow"><input id="cloudName" maxlength="16" placeholder="Name" autocomplete="username" value="${escapeHtml(this.cloudName || '')}">
-      <input id="cloudPin" maxlength="8" placeholder="PIN (4-8 digits)" inputmode="numeric" type="password" autocomplete="current-password">
-      <button class="btn" data-act="cloudreg">Create account</button><button class="btn ghost" data-act="cloudin">Log in</button></div>
+      <input id="cloudPin" maxlength="8" placeholder="PIN (4-8 numbers)" inputmode="numeric" pattern="[0-9]*" type="password" autocomplete="current-password" value="${escapeHtml(this.cloudPin || '')}">
+      <button class="btn" data-act="cloudreg" ${this.cloudBusy ? 'disabled' : ''}>${this.cloudBusy === 'reg' ? 'Creating…' : 'Create account'}</button><button class="btn ghost" data-act="cloudin" ${this.cloudBusy ? 'disabled' : ''}>${this.cloudBusy === 'in' ? 'Logging in…' : 'Log in'}</button></div>
+      ${this.cloudBusy && cloudNet.waking ? '<small class="warn">⏳ Waking up the server. Free servers nap when nobody\'s playing, so this can take up to a minute…</small>' : ''}
+      ${this.cloudError ? `<small class="warn">⚠️ ${escapeHtml(this.cloudError)}</small>` : ''}
       <small class="dim">Logging in replaces the progress on this device with your cloud save.</small></section>`;
   }
 
@@ -633,7 +635,7 @@ export class Hub {
       <div class="subtabs"><button class="subtab ${this.boardBy === 'worth' ? 'on' : ''}" data-act="boardby" data-by="worth">Net worth</button><button class="subtab ${this.boardBy === 'chips' ? 'on' : ''}" data-act="boardby" data-by="chips">Chips</button><button class="subtab" data-act="boardrefresh">↻ Refresh</button></div>
       <p class="hint">Net worth is your chips plus everything in your stash at Fence prices.${cloud.user ? '' : ' <b>Make a cloud save account in ⚙️ Settings to get on the board.</b>'}</p>
       ${b && b.error ? `<p class="hint">⚠️ Couldn't reach the leaderboard: ${escapeHtml(b.error)}</p>` : ''}
-      ${!b ? '<p class="hint">Loading…</p>' : rows ? `<table class="board"><tr><th></th><th>Player</th><th>Level</th><th class="num">Chips</th><th class="num">Net worth</th></tr>${rows}</table>` : (b.error ? '' : '<p class="hint">Nobody on the board yet. Be the first!</p>')}`;
+      ${!b ? `<p class="hint">${cloudNet.waking ? '⏳ Waking up the server. Free servers nap when nobody\'s playing, so this can take up to a minute…' : 'Loading…'}</p>` : rows ? `<table class="board"><tr><th></th><th>Player</th><th>Level</th><th class="num">Chips</th><th class="num">Net worth</th></tr>${rows}</table>` : (b.error ? '' : '<p class="hint">Nobody on the board yet. Be the first!</p>')}`;
   }
 
   async loadBoard() {
@@ -646,15 +648,24 @@ export class Hub {
   }
 
   async cloudAction(kind) {
-    const name = ($('cloudName') || {}).value || '';
-    const pin = ($('cloudPin') || {}).value || '';
+    if (this.cloudBusy) return;
+    const name = (($('cloudName') || {}).value || '').trim();
+    const pin = (($('cloudPin') || {}).value || '').trim();
     this.cloudName = name;
+    this.cloudPin = pin;
+    this.cloudError = '';
+    if (!/^[A-Za-z0-9 _-]{3,16}$/.test(name)) { this.cloudError = 'Pick a name that\'s 3-16 letters or numbers (spaces, - and _ are fine).'; this.render(); return; }
+    if (!/^\d{4,8}$/.test(pin)) { this.cloudError = 'Your PIN has to be 4-8 numbers (no letters).'; this.render(); return; }
+    this.cloudBusy = kind;
+    this.render();
     try {
       if (kind === 'reg') { await cloud.register(name, pin); this.toast(`☁️ Account made. Your progress is saved as ${name}.`); }
       else { await cloud.login(name, pin); this.toast(`☁️ Welcome back, ${cloud.user.name}! Cloud save loaded.`); }
       this.board = null;
       if (this.onSettings) this.onSettings();
-    } catch (e) { this.toast(`⚠️ ${e.message}`); }
+      this.cloudPin = '';
+    } catch (e) { this.cloudError = e.message; this.toast(`⚠️ ${e.message}`); }
+    this.cloudBusy = null;
     this.render();
   }
 

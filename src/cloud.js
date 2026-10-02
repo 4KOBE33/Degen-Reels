@@ -10,10 +10,27 @@ function base() {
   return PUBLIC_SERVER;
 }
 
+export const SITE = PUBLIC_SERVER.replace(/^https?:\/\//, '');
+// Set while a request is slow, which almost always means the free server is waking up.
+export const net = { waking: false, onWaking: () => {} };
+
 async function call(path, body) {
-  const res = await fetch(`${base()}/api${path}`, body
-    ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }
-    : undefined);
+  const ctrl = new AbortController();
+  const giveUp = setTimeout(() => ctrl.abort(), 75000);
+  const slow = setTimeout(() => { net.waking = true; net.onWaking(); }, 3500);
+  let res;
+  try {
+    res = await fetch(`${base()}/api${path}`, body
+      ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: ctrl.signal }
+      : { signal: ctrl.signal });
+  } catch (e) {
+    if (e.name === 'AbortError') throw new Error('The server took too long to wake up. Give it a few seconds and try again.');
+    throw new Error(base() ? `Can't reach the game server from here. Play at ${SITE} to use accounts and the leaderboard.` : 'Can\'t reach the game server. Check your connection and try again.');
+  } finally {
+    clearTimeout(giveUp);
+    clearTimeout(slow);
+    if (net.waking) { net.waking = false; net.onWaking(); }
+  }
   let out = {};
   try { out = await res.json(); } catch (e) { /* no body */ }
   if (!res.ok) throw new Error(out.error || `Server said ${res.status}`);
@@ -28,6 +45,7 @@ class Cloud {
     this.timer = null;
     this.handlers = [];
     try { this.user = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) { /* blocked */ }
+    net.onWaking = () => this.changed();
     // Upload a few seconds after anything changes.
     save.onChange(() => { if (this.user && !this.applying) this.queue(); });
     if (this.user) this.queue(500);

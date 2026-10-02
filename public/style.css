@@ -952,3 +952,34 @@ h3 small.bank { color: var(--gold); opacity: 1; font-weight: 900; }
 .details { position: sticky; top: 0; }
 .details .idetail.empty { padding: 50px 0; }
 @media (max-width: 900px) { .invbody { grid-template-columns: 1fr; } .details { position: static; } }
+
+/* ---------- Hub: clean, solid panels over a soft, dimmed backdrop ---------- */
+#hub { z-index: 1; }
+#hub::before {
+  content: ''; position: fixed; inset: 0; z-index: -1; pointer-events: none;
+  background:
+    radial-gradient(ellipse at 50% 40%, rgba(20, 10, 38, 0.15) 0%, rgba(20, 10, 38, 0.5) 60%, rgba(12, 6, 24, 0.82) 100%),
+    linear-gradient(180deg, rgba(12, 6, 24, 0.55) 0%, rgba(12, 6, 24, 0.15) 30%, rgba(12, 6, 24, 0.5) 100%);
+  backdrop-filter: blur(4px) saturate(0.85);
+  -webkit-backdrop-filter: blur(4px) saturate(0.85);
+}
+.hubbody {
+  background: linear-gradient(180deg, #2d1850 0%, #22123f 100%);
+  border: 4px solid var(--ink); border-radius: 20px;
+  box-shadow: 0 0 0 2px rgba(255, 210, 63, 0.85) inset, 0 18px 50px rgba(0, 0, 0, 0.45);
+}
+.tabs button { background: #1f1137; box-shadow: 0 4px 0 rgba(0, 0, 0, 0.35); transition: transform 0.12s, background 0.12s; }
+.tabs button:hover:not(.on) { background: #2d1850; transform: translateY(-1px); }
+.tabs button.on { box-shadow: 0 4px 0 #b8860b; }
+.subtab { background: #1f1137; }
+.raidpick, .kit, .stashsec { background: rgba(10, 4, 22, 0.35); border: 1px solid rgba(255, 255, 255, 0.07); }
+.party { background: linear-gradient(135deg, rgba(46, 230, 214, 0.14), rgba(10, 4, 22, 0.4)); border-width: 2px; border-color: rgba(46, 230, 214, 0.25); }
+.party.in { background: linear-gradient(135deg, rgba(94, 226, 122, 0.18), rgba(10, 4, 22, 0.4)); border-color: rgba(94, 226, 122, 0.3); }
+.mapcard { background: #1f1137; }
+.mapcard:hover { background: #2a1748; }
+.mapcard.on { background: #321b56; }
+.walletbar > * { background: #1f1137 !important; box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35); }
+.hubfoot #deploy { box-shadow: 0 6px 0 #b8860b, 0 14px 30px rgba(0, 0, 0, 0.45); }
+#buildTag { opacity: 0.6; }
+.kit .item.empty, .stashsec .item.empty { background: rgba(255, 255, 255, 0.035); border: 2px dashed rgba(255, 255, 255, 0.12); }
+.account .warn { color: #ffb347; font-weight: 800; }

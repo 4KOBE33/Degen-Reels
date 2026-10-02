@@ -5,3 +5,7 @@ services:
     plan: free
     buildCommand: npm install && npm run build
     startCommand: node server/index.js
+    envVars:
+      # A free Postgres (Neon, Supabase…) so accounts survive restarts. Paste its connection string.
+      - key: DATABASE_URL
+        sync: false
