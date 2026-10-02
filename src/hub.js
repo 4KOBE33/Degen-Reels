@@ -553,6 +553,7 @@ export class Hub {
       <label class="slider">Mouse sensitivity <b id="sensVal">${s.sensitivity.toFixed(2)}x</b><input type="range" id="sens" min="0.1" max="3" step="0.05" value="${s.sensitivity}"></label>
       <label class="slider">Field of view <b id="fovVal">${s.fov}°</b><input type="range" id="fov" min="60" max="100" step="1" value="${s.fov}"></label>
       <label class="slider">Volume <b id="volVal">${Math.round(s.volume * 100)}%</b><input type="range" id="vol" min="0" max="1" step="0.05" value="${s.volume}"></label>
+      <label class="slider">Music <b id="musVal">${Math.round((s.music ?? 0.45) * 100)}%</b><input type="range" id="mus" min="0" max="1" step="0.05" value="${s.music ?? 0.45}"></label>
       <div class="qrow"><span>Voice chat</span>${['off', 'ptt', 'open'].map((v) => `<button class="subtab ${(s.voice || 'off') === v ? 'on' : ''}" data-act="voice" data-v="${v}">${{ off: 'Off', ptt: `Push to talk (${keyName('talk')})`, open: 'Open mic' }[v]}</button>`).join('')}</div>
       <p class="hint">Talk to your party. In a raid, voices get quieter with distance (and anyone close enough can hear you, enemies too). Your browser will ask for the microphone.</p>
       <div class="qrow"><span>Tutorial tips</span>${['auto', 'on', 'off'].map((t) => `<button class="subtab ${(s.tutorial || 'auto') === t ? 'on' : ''}" data-act="tutorial" data-t="${t}">${{ auto: 'First 3 raids', on: 'Always', off: 'Off' }[t]}</button>`).join('')}</div>
@@ -895,6 +896,7 @@ export class Hub {
     const s = this.data.settings;
     if (e.target.id === 'sens') { save.update((d) => { d.settings.sensitivity = Number(e.target.value); }); $('sensVal').textContent = `${s.sensitivity.toFixed(2)}x`; }
     if (e.target.id === 'fov') { save.update((d) => { d.settings.fov = Number(e.target.value); }); $('fovVal').textContent = `${s.fov}°`; }
+    if (e.target.id === 'mus') { save.update((d) => { d.settings.music = Number(e.target.value); }); if (this.onSettings) this.onSettings(); $('musVal').textContent = `${Math.round(Number(e.target.value) * 100)}%`; }
     if (e.target.id === 'vol') { save.update((d) => { d.settings.volume = Number(e.target.value); }); setVolume(s.volume); $('volVal').textContent = `${Math.round(s.volume * 100)}%`; }
     if (e.target.id === 'lookName') { save.update((d) => { d.look.name = e.target.value.slice(0, 14); }); this.renderHeader(); if (this.net) this.net.profile(this.profileName(), wornLook(this.data.look)); }
     if (e.target.id === 'partyCode') this.partyCode = e.target.value.toUpperCase();

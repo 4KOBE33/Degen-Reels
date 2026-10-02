@@ -931,6 +931,7 @@ export class Raid {
       return true;
     }
     c.cooldown = w.rate;
+    if (c.isPlayer) c.firedAt = performance.now();
     const damage = w.damage * RARITIES[c.rarity].damage;
     const muzzle = c.char.muzzle.getWorldPosition(new THREE.Vector3());
 
@@ -1165,6 +1166,7 @@ export class Raid {
       if (crit) sfx.crit(); else sfx.hit();
     }
     if (target.isPlayer) {
+      target.hurtAt = performance.now();
       // Remember who's been hurting you, for the kill cam.
       if (attacker && attacker !== target) {
         const k = attacker.name;

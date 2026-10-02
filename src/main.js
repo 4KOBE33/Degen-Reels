@@ -14,6 +14,7 @@ import { BUILD } from './version.js';
 import { wornLook } from './looks.js';
 import { Tutorial } from './tutorial.js';
 import { Voice } from './voice.js';
+import { music } from './music.js';
 
 const tutorial = new Tutorial();
 
@@ -90,6 +91,7 @@ function autoQuality(dt, rawDt) {
 function applySettings() {
   applyQuality();
   const s = save.get().settings;
+  music.setVolume(s.music ?? 0.45);
   controller.sensitivity = s.sensitivity;
   controller.fov = s.fov;
   controller.firstPerson = !!s.firstPerson;
@@ -217,6 +219,7 @@ voice.onChange = (msg) => {
   if (!$('hub').hidden && hub.tab === 'loadout') hub.renderDeploy();
 };
 window.voice = voice;
+window.music = music;
 // The leader's start: everyone (leader included) launches from the server's echo.
 net.on('start', (info) => {
   if (raid.active) return;
@@ -484,6 +487,22 @@ function spectateView(dt) {
 // When a raid ends, let go of the mouse so you can click through the results.
 let wasActive = false;
 
+// ---------- music ----------
+// Lounge jazz in the hub and the Lounge, a tense groove in raids (drums when things get hot),
+// the boss theme near the Pit Boss, silence on the results screen.
+function pickMusic() {
+  const tableMode = document.body.classList.contains('tablemode');
+  if (!$('hub').hidden && !tableMode) { music.set('lounge'); return; }
+  if (!raid.active) { music.set(null); return; }
+  if (raid.map.safe) { music.set('lounge'); return; }
+  const p = raid.player;
+  const b = raid.boss;
+  if (p && b && b.alive && b.pos.distanceTo(p.pos) < 70 && (b.target || (raid.bossLock && raid.bossLock.on))) { music.set('boss', 1); return; }
+  const now = performance.now();
+  const hot = p && (raid.machines.some((m) => m.alive && m.target === p) || now - (p.hurtAt || 0) < 6000 || now - (p.firedAt || 0) < 4000);
+  music.set('raid', hot ? 1 : 0);
+}
+
 // ---------- loop ----------
 
 let last = performance.now();
@@ -539,7 +558,11 @@ function step(now, draw = true) {
     $('bag').hidden = true;
     $('bigmap').hidden = true;
   }
-  if (wasActive && !raid.active) clearBackup();
+  if (wasActive && !raid.active) {
+    clearBackup();
+    if (raid.result && !raid.map.safe) music.sting(raid.result.success ? 'extract' : 'busted');
+  }
+  pickMusic();
   tutorial.update(raid);
   voice.update();
   wasActive = raid.active;

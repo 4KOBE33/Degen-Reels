@@ -149,7 +149,7 @@ export const ENEMIES = {
 // Raider bots: other players looting the same map. Neutral unless provoked.
 export const RAIDERS = { count: 6, hostileChance: 0.25, accuracy: 0.1, reaction: 0.9 };
 
-export const SETTINGS_DEFAULT = { sensitivity: 1, fov: 72, volume: 0.6, firstPerson: false, quality: 'auto' };
+export const SETTINGS_DEFAULT = { sensitivity: 1, fov: 72, volume: 0.6, music: 0.45, firstPerson: false, quality: 'auto' };
 
 // Graphics levels. 'auto' starts on high and steps down if the game can't keep up.
 export const QUALITY = {

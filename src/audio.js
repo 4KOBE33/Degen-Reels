@@ -23,6 +23,9 @@ export function initAudio() {
   }
 }
 
+// For the music player: the shared audio context and master volume (null until audio starts).
+export function audioOut() { return ctx ? { ctx, master } : null; }
+
 // Volume falloff for sounds that happen somewhere in the world.
 function falloff(pos, listener) {
   if (!pos || !listener) return 1;
