@@ -567,9 +567,17 @@ export function buildMap(scene, mapId = 'vegas') {
   function casino({ x: CX, z: CZ, name, sign, signColor = '#ff3fa4', color = 0x6a2c91, trim = 0x2b1640, mapColor = '#6a2c91', felt = 0x1f8a4c, plaza = null }) {
     const CW = 100;
     const CD = 70;
-    building({
-      name, x: CX, z: CZ, w: CW, d: CD, h: 10, color, trim, floorMap: carpetTexture(), tier: 3, mapColor,
-      doors: [{ side: 's', at: 0, width: 12 }, { side: 'w', at: 10, width: 5 }, { side: 'e', at: 10, width: 5 }, { side: 'n', at: 30, width: 4 }],
+    const doorways = [{ side: 's', at: 0, width: 12 }, { side: 'w', at: 10, width: 5 }, { side: 'e', at: 10, width: 5 }, { side: 'n', at: 30, width: 4 }];
+    building({ name, x: CX, z: CZ, w: CW, d: CD, h: 10, color, trim, floorMap: carpetTexture(), tier: 3, mapColor, doors: doorways });
+    // Where the doorways are in the world (the Pit Boss fight seals them).
+    const doors = doorways.map((dr) => {
+      const horiz = dr.side === 's' || dr.side === 'n';
+      return {
+        horiz,
+        width: dr.width,
+        x: horiz ? CX + dr.at : CX + (dr.side === 'e' ? CW / 2 : -CW / 2),
+        z: horiz ? CZ + (dr.side === 's' ? CD / 2 : -CD / 2) : CZ + dr.at,
+      };
     });
     const signMesh = neonSign(sign, signColor, 40);
     signMesh.position.set(CX, 13.5, CZ + CD / 2 + 0.6);
@@ -670,7 +678,7 @@ export function buildMap(scene, mapId = 'vegas') {
     enemies('dicer', CX, CZ + 5, 2, 20);
     if (plaza) plaza(CX, CZ + CD / 2 + 15);
     return {
-      casino: { x: CX, z: CZ, w: CW, d: CD },
+      casino: { x: CX, z: CZ, w: CW, d: CD, doors },
       vault: { x: CX, z: vz, doorZ: vz + 9 },
     };
   }

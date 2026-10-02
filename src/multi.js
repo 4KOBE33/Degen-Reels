@@ -196,6 +196,7 @@ export class Session {
         rel: reliable,
         ex: raid.extracts.map((e) => (e.active ? [e.call ? r2(e.call.t) : -1, r2(e.cooldown || 0), e.call ? e.call.by.name : ''] : null)),
         storm: raid.hazards.storm > 0 ? 1 : 0,
+        bl: raid.bossLock && raid.bossLock.on ? 1 : 0,
       });
     }
     this.events = [];
@@ -465,6 +466,7 @@ export class Session {
       e.beam.material.color.setHex(e.call ? 0xffd23f : 0x5ee27a);
       e.ring.material.color.setHex(e.call ? 0xffd23f : 0x5ee27a);
     });
+    raid.setBossLock(!!s.bl);
     if (raid.hazards.dust) raid.hazards.storm = s.storm ? Math.max(raid.hazards.storm, 1) : 0;
   }
 

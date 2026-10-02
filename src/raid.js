@@ -83,6 +83,7 @@ export class Raid {
     this.slots = this.map.slotSpots.map((s) => new SlotMachine(this, s));
     this.containers = this.map.containers.map((c) => new Container(this, c));
     this.buildVaultDoor();
+    this.buildBossLock();
     this.buildExtracts();
     this.hazards = new Hazards(this);
     this.map.bake();
@@ -123,6 +124,88 @@ export class Raid {
         return null;
       },
     };
+  }
+
+  // ---------- Pit Boss lockdown ----------
+  // Once the Pit Boss is out, walking into the casino seals every door behind you: nobody gets in
+  // or out (and no shots go through) until he's busted. Everyone inside dies: the doors open and
+  // he patches himself back up. He can only be hurt from inside, so no sniping him through a door.
+
+  buildBossLock() {
+    const cas = this.map.casino;
+    const barMat = new THREE.MeshBasicMaterial({ color: 0xff2d55 });
+    const glowMat = new THREE.MeshBasicMaterial({ color: 0xff2d55, transparent: true, opacity: 0.22, side: THREE.DoubleSide, depthWrite: false });
+    this.bossLock = { on: false, doors: [], glowMat };
+    for (const d of cas.doors || []) {
+      const g = new THREE.Group();
+      g.position.set(d.x, 0, d.z);
+      if (!d.horiz) g.rotation.y = Math.PI / 2;
+      const glow = new THREE.Mesh(new THREE.PlaneGeometry(d.width, 3.4), glowMat);
+      glow.position.y = 1.7;
+      g.add(glow);
+      for (let i = 0; i < 6; i++) {
+        const bar = new THREE.Mesh(new THREE.BoxGeometry(d.width, 0.08, 0.08), barMat);
+        bar.position.y = 0.35 + i * 0.55;
+        g.add(bar);
+      }
+      g.visible = false;
+      this.scene.add(g);
+      const half = d.width / 2;
+      const collider = d.horiz
+        ? { type: 'box', minX: d.x - half, maxX: d.x + half, minZ: d.z - 0.45, maxZ: d.z + 0.45, top: 10 }
+        : { type: 'box', minX: d.x - 0.45, maxX: d.x + 0.45, minZ: d.z - half, maxZ: d.z + half, top: 10 };
+      this.bossLock.doors.push({ group: g, collider, added: false });
+    }
+  }
+
+  // Is this spot inside the casino hall? margin > 0 means well inside.
+  inCasino(pos, margin = 0) {
+    const c = this.map.casino;
+    return Math.abs(pos.x - c.x) < c.w / 2 - margin && Math.abs(pos.z - c.z) < c.d / 2 - margin;
+  }
+
+  setBossLock(on) {
+    const lock = this.bossLock;
+    if (!lock || lock.on === on) return;
+    lock.on = on;
+    for (const d of lock.doors) {
+      d.group.visible = on;
+      if (on && !d.added) { this.map.addCollider(d.collider); d.added = true; }
+      if (!on && d.added) { this.map.removeCollider(d.collider); d.added = false; }
+    }
+    this.nav.cache.clear();
+    const p = this.player;
+    const inside = p && p.alive && this.inCasino(p.pos);
+    if (on) {
+      sfx.alert(this.focus, this.listener);
+      this.feed('🔒 The casino doors slammed shut. Nobody leaves until the Pit Boss is busted.');
+      if (inside) this.hud.toast('🔒 LOCKED IN WITH THE PIT BOSS. Bust him to get out!', 'big');
+      else if (p && p.alive && Math.hypot(p.pos.x - this.map.casino.x, p.pos.z - this.map.casino.z) < 120) this.hud.toast('🔒 The casino just locked down. Someone\'s fighting the Pit Boss in there.');
+    } else {
+      this.feed('🔓 The casino doors are open again.');
+      if (inside) this.hud.toast('🔓 The doors are open. Get out of here!', 'big');
+    }
+  }
+
+  // Host/solo: seal or open the doors, keep the boss on his floor.
+  updateBossLock(dt) {
+    const lock = this.bossLock;
+    if (!lock) return;
+    lock.glowMat.opacity = 0.18 + Math.sin(this.elapsed * 6) * 0.08;
+    const boss = this.boss && this.boss.alive ? this.boss : null;
+    if (!boss) { if (lock.on) this.setBossLock(false); return; }
+    // Keep him inside his casino.
+    const c = this.map.casino;
+    boss.pos.x = Math.max(c.x - c.w / 2 + 4, Math.min(c.x + c.w / 2 - 4, boss.pos.x));
+    boss.pos.z = Math.max(c.z - c.d / 2 + 4, Math.min(c.z + c.d / 2 - 4, boss.pos.z));
+    const inside = this.combatants.some((a) => (a.isPlayer || a.human) && a.alive && this.inCasino(a.pos, 2.5));
+    if (!lock.on && inside) this.setBossLock(true);
+    else if (lock.on && !this.combatants.some((a) => (a.isPlayer || a.human) && a.alive && this.inCasino(a.pos))) {
+      // Everyone who went in is dead: he resets.
+      boss.hp = boss.maxHp;
+      this.setBossLock(false);
+      this.feed('💼 The Pit Boss straightens his tie. Fully healed.');
+    }
   }
 
   openVault(c, fromNet = false) {
@@ -280,6 +363,7 @@ export class Raid {
     for (const e of this.extracts) { e.call = null; e.cooldown = 0; }
     this.bossSpawned = false;
     this.boss = null;
+    this.setBossLock(false);
     this.warned = {};
     this.hurtBy = {};
     this.killcam = null;
@@ -936,6 +1020,14 @@ export class Raid {
     if (attacker && attacker !== target && attacker.team === 'machine' && target.team === 'machine') return;
     amount = Math.round(amount);
     if (amount <= 0) return;
+    // The Pit Boss only takes hits from people in the casino with him.
+    if (target.isBoss && attacker && attacker.pos && !this.inCasino(attacker.pos)) {
+      if (attacker.isPlayer) {
+        this.fx.number(at || target.center(new THREE.Vector3()), 'IMMUNE', '#9ca3af', 1.1);
+        if (!this.bossHint || this.elapsed - this.bossHint > 6) { this.bossHint = this.elapsed; this.hud.toast('🛡️ The Pit Boss can\'t be hurt from outside. Go in and fight him!'); }
+      }
+      return;
+    }
     if (this.net && !fromNet) {
       if (this.net.blocked(attacker, target)) return;
       // Client: we only decide our own hits. Send them to the host, show them right away.
@@ -1184,7 +1276,10 @@ export class Raid {
     if (this.isClient) {
       // The host runs the rides; we just need to know if we're standing in one.
       this.extractAt = p && p.alive ? this.extracts.find((e) => e.active && this.inCircle(e, p)) || null : null;
-    } else this.updateExtracts(dt);
+    } else {
+      this.updateExtracts(dt);
+      this.updateBossLock(dt);
+    }
   }
 }
 
