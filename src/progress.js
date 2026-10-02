@@ -85,7 +85,7 @@ export const ACHIEVEMENTS = [
   { id: 'extract1', group: 'Survival', icon: '🚪', tier: 0, name: 'Made It Out', desc: 'Extract from a raid', prog: (d) => [S(d).extracts, 1] },
   { id: 'extract10', group: 'Survival', icon: '🧳', tier: 1, name: 'Regular', desc: 'Extract 10 times', prog: (d) => [S(d).extracts, 10] },
   { id: 'extract50', group: 'Survival', icon: '🏃', tier: 2, name: 'Ghost of the Strip', desc: 'Extract 50 times', prog: (d) => [S(d).extracts, 50] },
-  { id: 'worldtour', group: 'Survival', icon: '🗺️', tier: 1, name: 'World Tour', desc: 'Extract from every map', prog: (d) => [['vegas', 'frost', 'bayou', 'tequila', 'bunker'].filter((m) => (S(d).extractsByMap[m] || 0) > 0).length, 5] },
+  { id: 'worldtour', group: 'Survival', icon: '🗺️', tier: 1, name: 'World Tour', desc: 'Extract from every map', prog: (d) => [['vegas', 'wine', 'frost', 'bayou', 'tequila', 'bunker'].filter((m) => (S(d).extractsByMap[m] || 0) > 0).length, 6] },
   { id: 'haul5k', group: 'Survival', icon: '💰', tier: 1, name: 'Nice Haul', desc: 'Extract with 🪙 5,000 worth in one raid', prog: (d) => [Math.min(S(d).bestHaul, 5000), 5000] },
   { id: 'haul25k', group: 'Survival', icon: '🤑', tier: 3, name: 'Robbed the House', desc: 'Extract with 🪙 25,000 worth in one raid', prog: (d) => [Math.min(S(d).bestHaul, 25000), 25000] },
   // Fighting

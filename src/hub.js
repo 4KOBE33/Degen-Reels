@@ -328,7 +328,7 @@ export class Hub {
     const noGuns = !lo.weapons.some(Boolean);
     const freeKit = hasFreeKit(lo);
     // Easiest to deadliest.
-    const order = ['lounge', 'vegas', 'bayou', 'frost', 'tequila', 'bunker'].filter((id) => MAPS[id]);
+    const order = ['lounge', 'vegas', 'wine', 'bayou', 'frost', 'tequila', 'bunker'].filter((id) => MAPS[id]);
     const maps = order.map((id) => {
       const m = MAPS[id];
       return `<button class="mapcard m-${id} ${d.selectedMap === id ? 'on' : ''}" data-act="map" data-m="${id}">
