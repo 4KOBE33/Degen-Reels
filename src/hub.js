@@ -289,7 +289,14 @@ export class Hub {
     const freeKit = hasFreeKit(lo);
     const maps = Object.entries(MAPS).map(([id, m]) => `<button class="mapcard ${d.selectedMap === id ? 'on' : ''}" data-act="map" data-m="${id}">
         <span class="icon">${m.icon}</span><b>${m.name}</b><small>${m.size} · ${m.danger}</small><span class="blurb">${m.blurb}</span></button>`).join('');
-    return `${this.renderParty()}<p class="howto">Pick a map, drop in, loot what you can, fight off the machines, and reach an open exit before time runs out. <b>Die and you lose everything you brought.</b> The best loot only drops in deadly zones.</p>
+    const newbie = (d.stats.raids || 0) === 0;
+    const guide = newbie ? `<section class="newbie"><b>👋 New to Beat the House? Here's the deal:</b>
+      <ol><li><b>Pack a gun.</b> No gear? Grab the 🎁 FREE LOADOUT below.</li>
+      <li><b>Pick a map and DEPLOY.</b> Search crates, bust machines, grab everything shiny.</li>
+      <li><b>Get to a green exit</b> and survive while your ride comes. Die, and you lose what you brought.</li>
+      <li><b>Sell your loot</b> at the 💰 Fence, then gamble it in the 🎰 Back Room, or gear up for a bigger raid.</li></ol>
+      <small>Tips will walk you through your first raids. Play with friends using the party panel below.</small></section>` : '';
+    return `${guide}${this.renderParty()}<p class="howto">Pick a map, drop in, loot what you can, fight off the machines, and reach an open exit before time runs out. <b>Die and you lose everything you brought.</b> The best loot only drops in deadly zones.</p>
       <h3>Choose a map</h3><div class="maps">${maps}</div>
       <div class="cols">
       <section><h3>Raid loadout</h3><p class="hint">Whatever you bring is lost if you die. Click to send it back to the stash.</p>
@@ -493,6 +500,7 @@ export class Hub {
       <label class="slider">Mouse sensitivity <b id="sensVal">${s.sensitivity.toFixed(2)}x</b><input type="range" id="sens" min="0.1" max="3" step="0.05" value="${s.sensitivity}"></label>
       <label class="slider">Field of view <b id="fovVal">${s.fov}°</b><input type="range" id="fov" min="60" max="100" step="1" value="${s.fov}"></label>
       <label class="slider">Volume <b id="volVal">${Math.round(s.volume * 100)}%</b><input type="range" id="vol" min="0" max="1" step="0.05" value="${s.volume}"></label>
+      <div class="qrow"><span>Tutorial tips</span>${['auto', 'on', 'off'].map((t) => `<button class="subtab ${(s.tutorial || 'auto') === t ? 'on' : ''}" data-act="tutorial" data-t="${t}">${{ auto: 'First 3 raids', on: 'Always', off: 'Off' }[t]}</button>`).join('')}</div>
       <div class="qrow"><span>Graphics</span>${['auto', 'low', 'medium', 'high'].map((q) => `<button class="subtab ${(s.quality || 'auto') === q ? 'on' : ''}" data-act="quality" data-q="${q}">${q === 'auto' ? 'Auto' : QUALITY[q].label}</button>`).join('')}</div>
       <p class="hint">Lower graphics if the game stutters, especially if you lead a party (your computer runs the world for everyone). Auto lowers it for you when frames get slow.</p>
       <h3>Controls</h3>
@@ -940,6 +948,7 @@ export class Hub {
       case 'cloudsync': cloud.push(); this.toast('☁️ Saving…'); return;
       case 'boardby': this.boardBy = b.dataset.by; this.board = null; break;
       case 'boardrefresh': this.board = null; break;
+      case 'tutorial': save.update((x) => { x.settings.tutorial = b.dataset.t; }); break;
       case 'quality':
         save.update((x) => { x.settings.quality = b.dataset.q; });
         if (this.onSettings) this.onSettings();

@@ -12,6 +12,9 @@ import { keyName, renderBinds, wireBinds } from './keys.js';
 import { ITEMS, QUALITY } from './config.js';
 import { BUILD } from './version.js';
 import { wornLook } from './looks.js';
+import { Tutorial } from './tutorial.js';
+
+const tutorial = new Tutorial();
 
 const $ = (id) => document.getElementById(id);
 
@@ -98,6 +101,7 @@ let overlay = null; // 'bag' | 'map' | null
 
 function setOverlay(name) {
   overlay = name;
+  if (name) tutorial.note(name);
   $('bag').hidden = name !== 'bag';
   $('bigmap').hidden = name !== 'map';
   if (name === 'map') hud.drawBigMap(raid);
@@ -309,6 +313,7 @@ const hub = new Hub({
       raid.deploy(opts);
     }
     controller.c = raid.player;
+    tutorial.start(raid);
     hub.hide();
     $('hud').hidden = false;
     $('results').hidden = true;
@@ -339,6 +344,7 @@ $('openBag').addEventListener('click', () => {
   if (!raid.active) return;
   $('paused').hidden = true;
   overlay = 'bag';
+  tutorial.note('bag');
   $('bag').hidden = false;
 });
 $('abandon').addEventListener('click', () => {
@@ -508,6 +514,7 @@ function step(now, draw = true) {
     $('bigmap').hidden = true;
   }
   if (wasActive && !raid.active) clearBackup();
+  tutorial.update(raid);
   wasActive = raid.active;
   backupRaid();
   // Never keep the mouse captured once you're out of the raid.
