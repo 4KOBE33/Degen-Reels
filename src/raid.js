@@ -1114,6 +1114,7 @@ export class Raid {
       }
     }
     if (p && p.alive) this.focus.copy(p.pos);
+    else if (this.spectating && this.spectating.alive) this.focus.copy(this.spectating.pos);
     this.listener.copy(this.focus).setY(1.5);
 
     if (!this.isClient) for (const b of this.bots) b.update(dt);

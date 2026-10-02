@@ -185,6 +185,7 @@ const hub = new Hub({
     setTimeout(() => { switchMap(id); $('loading').hidden = true; }, 30);
   },
   onDeploy(opts) {
+    spectate(null);
     applySettings();
     pauseKeys();
     if (opts.party) {
@@ -212,8 +213,9 @@ const hub = new Hub({
 window.hub = hub;
 
 hud.onLeave = () => {
+  spectate(null);
   // Friends' games stop listening once they're out; the leader keeps the world going for the rest.
-  if (session && session.client) { session.dispose(); session = null; }
+  if (session && session.client) { session.bye(); session.dispose(); session = null; }
   $('results').hidden = true;
   $('hud').hidden = true;
   hub.show();
@@ -275,6 +277,69 @@ for (const [id, key] of [['psens', 'sensitivity'], ['pfov', 'fov'], ['pvol', 'vo
   });
 }
 syncPauseSliders();
+
+// ---------- spectating ----------
+// Out of a party raid (dead or extracted) while friends are still in it: watch them.
+let spectating = null;
+const squad = () => (session ? session.squad() : []);
+
+function spectate(target) {
+  spectating = target;
+  raid.spectating = target;
+  if (session) session.watch(target);
+  document.body.classList.toggle('spectating', !!target);
+  $('spectate').hidden = !target;
+  if (target) {
+    $('results').hidden = true;
+    camInit = false;
+  }
+}
+
+function stopSpectating(note) {
+  if (!spectating) return;
+  spectate(null);
+  $('results').hidden = false;
+  if (note) hud.toast(note);
+}
+
+function nextSpectate(dir = 1) {
+  const list = squad();
+  if (!list.length) { stopSpectating('Nobody left to watch.'); return; }
+  const i = list.indexOf(spectating);
+  spectate(list[(i + dir + list.length) % list.length]);
+}
+
+$('resultsSpectate').addEventListener('click', (e) => { e.stopPropagation(); nextSpectate(1); });
+window.addEventListener('keydown', (e) => {
+  if (!spectating) return;
+  if (e.code === 'Escape') { e.preventDefault(); stopSpectating(); return; }
+  if (['Space', 'ArrowRight', 'KeyD', 'Enter'].includes(e.code)) { e.preventDefault(); nextSpectate(1); }
+  if (['ArrowLeft', 'KeyA'].includes(e.code)) { e.preventDefault(); nextSpectate(-1); }
+});
+window.addEventListener('mousedown', (e) => { if (spectating && e.button === 0) nextSpectate(1); });
+
+// Over the shoulder of whoever you're watching, looking where they look.
+const SPEC_OFFSET = new THREE.Vector3(1.15, 0.7, 4.6);
+let camInit = false;
+function spectateView(dt) {
+  const t = spectating;
+  const head = t.head(new THREE.Vector3());
+  const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(t.pitch || 0, t.yaw || 0, 0, 'YXZ'));
+  const off = SPEC_OFFSET.clone().applyQuaternion(q);
+  const hit = raid.raycast(head, off.clone().normalize(), off.length() + 0.3, t, { solidsOnly: true });
+  const dist = hit.hit ? Math.max(0.6, hit.distance - 0.3) : off.length();
+  const want = head.clone().addScaledVector(off.normalize(), dist);
+  if (!camInit) { camera.position.copy(want); camInit = true; } else camera.position.lerp(want, Math.min(1, dt * 12));
+  camera.quaternion.slerp(q, Math.min(1, dt * 14));
+  const fov = save.get().settings.fov || 75;
+  if (Math.abs(camera.fov - fov) > 0.1) { camera.fov = fov; camera.updateProjectionMatrix(); }
+  $('spName').textContent = t.name;
+  const hp = Math.max(0, t.hp / (t.maxHp || 100));
+  $('spHp').style.width = `${(hp * 100).toFixed(0)}%`;
+  $('spHp').style.background = t.downed ? '#ff5d5d' : hp < 0.35 ? '#ffd23f' : '#5ee27a';
+  const n = squad().length;
+  $('spInfo').textContent = `${t.downed ? '🩸 DOWNED · ' : ''}${t.weaponName || ''}${n > 1 ? ` · ${n} squadmates left` : ''}`;
+}
 
 // When a raid ends, let go of the mouse so you can click through the results.
 let wasActive = false;
@@ -338,7 +403,17 @@ function step(now) {
 
   const kc = raid.killcam && !raid.killcam.over ? raid.killcam : null;
   document.body.classList.toggle('killcam', !!kc);
-  if (kc && $('hub').hidden) {
+  // Spectating: follow your squadmate until they're out too.
+  if (spectating && (!spectating.alive || !raid.combatants.includes(spectating) || !session || session.ended)) {
+    const left = squad();
+    if (left.length) spectate(left[0]);
+    else stopSpectating('Your squad is out. Raid over.');
+  }
+  // Offer it on the results screen while someone's still in there.
+  if (!$('results').hidden) $('resultsSpectate').hidden = !squad().length;
+  if (spectating && $('hub').hidden) {
+    spectateView(dt);
+  } else if (kc && $('hub').hidden) {
     raid.killcamView(dt, camera);
     if (raid.player) raid.player.char.firstPerson(false);
   } else if (raid.player && $('hub').hidden) {

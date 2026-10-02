@@ -692,3 +692,17 @@ body.isdowned #vignette { opacity: 0.6 !important; }
 .freetag { position: absolute; top: 4px; left: 4px; font: 900 9px var(--body); background: #5ee27a; color: var(--ink); border-radius: 5px; padding: 1px 4px; }
 .hint.freelock { background: rgba(94, 226, 122, 0.12); border: 1px solid rgba(94, 226, 122, 0.4); border-radius: 10px; padding: 8px 10px; color: #c9f7d3; }
 .linkbtn { background: none; border: 0; padding: 0; color: #ffd23f; font: inherit; font-weight: 800; text-decoration: underline; cursor: pointer; }
+
+/* Spectating a squadmate after you're out */
+.resbtns { display: flex; gap: 10px; }
+.resbtns .btn.big { flex: 1; }
+.btn.spec { background: linear-gradient(135deg, #8e7dff, #2ee6d6); }
+#spectate { position: fixed; left: 50%; bottom: 7%; transform: translateX(-50%); z-index: 45; text-align: center; pointer-events: none;
+  background: rgba(10, 8, 20, 0.55); padding: 10px 22px 12px; border-radius: 16px; min-width: 260px; }
+#spectate .sptag { font: 400 15px var(--display); letter-spacing: 2px; color: #b9b0ff; }
+#spectate .spname { font: 400 34px var(--display); color: var(--cream); line-height: 1.1; }
+#spectate .sphp { height: 8px; border-radius: 4px; background: rgba(255, 255, 255, 0.15); overflow: hidden; margin: 6px auto 4px; width: 220px; }
+#spectate .sphp i { display: block; height: 100%; background: #5ee27a; transition: width 0.2s; }
+#spectate .spinfo { font-weight: 900; font-size: 14px; }
+#spectate .spkeys { font-size: 12px; opacity: 0.6; margin-top: 6px; }
+body.spectating #hud, body.spectating #intro, body.spectating #paused { display: none !important; }

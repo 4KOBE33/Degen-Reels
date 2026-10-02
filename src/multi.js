@@ -35,6 +35,8 @@ export class Session {
     this.events = []; // host: positional effects for this tick
     this.reliable = []; // host: things everyone must hear about
     this.gone = new Set(); // host: players who extracted, died or left
+    this.left = new Set(); // host: players who went back to the hub or disconnected (stop sending to them)
+    this.watching = new Map(); // host: dead/extracted player -> net id of the squadmate they spectate
     this.ended = false;
     this.lastSnap = 0;
     this.pickupsById = new Map();
@@ -115,6 +117,7 @@ export class Session {
   // Host: the raid is over for everyone.
   endWorld() {
     if (this.ended) return;
+    if (this.host) this.net.to('all', { k: 'over' });
     this.ended = true;
     if (this.host) this.net.end();
   }
@@ -160,18 +163,31 @@ export class Session {
     return s;
   }
 
+  // Who a player's snapshot is centered on: themselves while they're alive, otherwise the
+  // squadmate they're spectating (or anyone still out there, so their world doesn't empty out).
+  viewOf(id) {
+    const pup = this.puppetOf(id);
+    if (pup && pup.alive && !this.gone.has(id)) return pup;
+    const w = this.byId.get(this.watching.get(id));
+    if (w && w.alive) return w;
+    return this.raid.combatants.find((c) => this.human(c) && c.alive) || null;
+  }
+
   sendSnapshots() {
     const raid = this.raid;
     const reliable = this.reliable;
     this.reliable = [];
-    for (const c of raid.combatants) {
-      if (!c.human || this.gone.has(c.owner)) continue;
+    for (const m of this.members) {
+      if (m.id === this.me || this.left.has(m.id)) continue;
+      const c = this.viewOf(m.id);
+      if (!c) continue;
+      const own = this.puppetOf(m.id);
       const near = (v) => Math.abs(v.x - c.pos.x) < VIEW && Math.abs(v.z - c.pos.z) < VIEW;
       const actors = [];
-      for (const a of raid.combatants) if (a !== c && (a.alive || a.removeIn > 6) && (near(a.pos) || this.human(a))) actors.push(this.actorState(a));
-      for (const m of raid.machines) if (near(m.pos) && (m.alive || m.dead < 1)) actors.push(this.actorState(m));
+      for (const a of raid.combatants) if (a !== own && (a.alive || a.removeIn > 6) && (near(a.pos) || this.human(a))) actors.push(this.actorState(a));
+      for (const mm of raid.machines) if (near(mm.pos) && (mm.alive || mm.dead < 1)) actors.push(this.actorState(mm));
       const ev = this.events.filter((e) => !e.at || (Math.abs(e.at[0] - c.pos.x) < VIEW && Math.abs(e.at[2] - c.pos.z) < VIEW));
-      this.net.to(c.owner, {
+      this.net.to(m.id, {
         k: 'snap',
         time: r2(raid.timeLeft),
         el: r2(raid.elapsed),
@@ -183,6 +199,24 @@ export class Session {
       });
     }
     this.events = [];
+  }
+
+  // Client: tell the host who we're spectating (null to stop), so our snapshots follow them.
+  watch(target) {
+    if (this.client && !this.ended) this.send({ k: 'watch', i: target ? target.netId : null });
+  }
+
+  // Client: we're back at the hub, stop sending us the world.
+  bye() {
+    if (this.client && !this.ended) this.send({ k: 'bye' });
+  }
+
+  // Squadmates still out in the raid (for spectating).
+  squad() {
+    if (this.ended) return [];
+    // No word from the leader for a while: their world is gone.
+    if (this.client && performance.now() - this.lastSnap > 5000) return [];
+    return this.raid.combatants.filter((c) => c.human && !c.isPlayer && c.alive && !(this.host && this.gone.has(c.owner)));
   }
 
   // ---------- client → host ----------
@@ -212,6 +246,8 @@ export class Session {
   // Host handling a message from a friend.
   hostReceive(from, d) {
     const raid = this.raid;
+    if (d.k === 'watch') { if (d.i) this.watching.set(from, d.i); else this.watching.delete(from); return; }
+    if (d.k === 'bye') { this.left.add(from); this.gone.add(from); return; }
     const pup = this.puppetOf(from);
     if (!pup) return;
     switch (d.k) {
@@ -303,6 +339,8 @@ export class Session {
     if (!this.host) return;
     const pup = this.puppetOf(id);
     this.gone.add(id);
+    this.left.add(id);
+    this.watching.delete(id);
     if (pup) {
       this.raid.feed(`🔌 ${pup.name} disconnected`);
       this.raid.removeCombatant(pup);
@@ -361,6 +399,7 @@ export class Session {
       case 'toast':
         raid.hud.toast(d.text, d.big ? 'big' : '');
         break;
+      case 'over': this.ended = true; break;
       default:
     }
   }

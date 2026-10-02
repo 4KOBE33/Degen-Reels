@@ -89,7 +89,7 @@ function minesMult(bombs, picks) {
   return m;
 }
 
-const FREE_LOCKED = 'The free loadout is locked. Raid with it as is, or put it back to pack your own gear.';
+const FREE_LOCKED = 'The free loadout is locked in. Raid with it as is.';
 const hasFreeKit = (lo) => lo.weapons.some((g) => g && g.free) || lo.items.some((it) => it.free);
 
 export class Hub {
@@ -274,7 +274,7 @@ export class Hub {
       <h3>Choose a map</h3><div class="maps">${maps}</div>
       <div class="cols">
       <section><h3>Raid loadout</h3><p class="hint">Whatever you bring is lost if you die. Click to send it back to the stash.</p>
-        ${freeKit ? '<p class="hint freelock">🔒 Free loadout is locked in: nothing goes in or out. Take it into a raid as is, or <button class="linkbtn" data-act="freeclear">put it back</button> to pack your own gear.</p>' : noGuns ? '<button class="btn freekit" data-act="freekit">🎁 FREE LOADOUT<small>A random gun, bandages, an Ammo Box and a throwable. Lose it and grab another.</small></button>' : ''}
+        ${freeKit ? '<p class="hint freelock">🔒 Free loadout is locked in: nothing goes in or out until you raid with it.</p>' : noGuns ? '<button class="btn freekit" data-act="freekit">🎁 FREE LOADOUT<small>A random gun, bandages, an Ammo Box and a throwable. Lose it and grab another.</small></button>' : ''}
         <div class="wslots">${lo.weapons.map((g, i) => (g ? this.itemCard(g, 'unequip', i) : `<div class="item empty">Weapon ${i + 1}<br><small>empty</small></div>`)).join('')}</div>
         <div class="grid">${lo.items.map((it, i) => this.itemCard(it, 'unpack', i)).join('')}${Array(Math.max(0, LOADOUT_SLOTS - lo.items.length)).fill('<div class="item empty"></div>').join('')}</div>
       </section>
@@ -800,15 +800,6 @@ export class Hub {
         save.update((x) => { addToStash(x.stash.items, x.loadout.items[i]); x.loadout.items.splice(i, 1); });
         break;
       }
-      case 'freeclear':
-        // Hand the whole free kit back. Anything you'd packed yourself goes back to the stash.
-        save.update((x) => {
-          for (const g of x.loadout.weapons) if (g && !g.free) addToStash(x.stash.items, g);
-          for (const it of x.loadout.items) if (!it.free) addToStash(x.stash.items, it);
-          x.loadout.weapons = x.loadout.weapons.map(() => null);
-          x.loadout.items = [];
-        });
-        break;
       case 'freekit': {
         // Free loadout: only when you've got no gun packed. It replaces the whole loadout (anything you'd
         // packed goes back to the stash) and is then locked until you raid with it or put it back.

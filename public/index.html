@@ -115,13 +115,22 @@
     </div>
   </div>
 
+  <div id="spectate" hidden>
+    <div class="sptag">👁 SPECTATING</div>
+    <div class="spname" id="spName"></div>
+    <div class="sphp"><i id="spHp"></i></div>
+    <div class="spinfo" id="spInfo"></div>
+    <div class="spkeys">Click / Space / → next squadmate · ← previous · Esc back to results</div>
+  </div>
+
   <div id="results" class="screen dim" hidden>
     <div class="card wide">
       <h2 id="resultsTitle"></h2>
       <p id="resultsLine"></p>
       <div id="resultsItems" class="chips"></div>
       <p id="resultsUnlocks" class="unlocks"></p>
-      <button id="resultsBack" class="btn big">BACK TO THE HUB</button>
+      <div class="resbtns"><button id="resultsSpectate" class="btn big spec" hidden>👁 SPECTATE SQUAD</button>
+      <button id="resultsBack" class="btn big">BACK TO THE HUB</button></div>
     </div>
   </div>
 
