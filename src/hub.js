@@ -21,7 +21,7 @@ import { LookPreview } from './preview.js';
 
 const $ = (id) => document.getElementById(id);
 const LOADOUT_SLOTS = 8;
-const BETS = [25, 100, 250, 1000];
+const BETS = [25, 100, 250, 500, 1000, 2500, 5000, 10000, 25000, 50000, 100000];
 const fmt = (n) => Math.round(n).toLocaleString('en-US');
 const hex = (c) => `#${Number(c).toString(16).padStart(6, '0')}`;
 
@@ -400,7 +400,7 @@ export class Hub {
   }
 
   betChips(disabled = false) {
-    return `<div class="betchips"><small>BET</small>${BETS.map((b) => `<button class="cchip c${b} ${b === this.bet ? 'on' : ''}" data-act="bet" data-b="${b}" ${disabled ? 'disabled' : ''}>${b >= 1000 ? '1K' : b}</button>`).join('')}</div>`;
+    return `<div class="betchips"><small>BET</small>${BETS.map((b) => `<button class="cchip c${b} ${b === this.bet ? 'on' : ''}" data-act="bet" data-b="${b}" ${disabled ? 'disabled' : ''}>${b >= 1000 ? `${b / 1000}K` : b}</button>`).join('')}</div>`;
   }
 
   renderReels() {
