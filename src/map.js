@@ -929,6 +929,7 @@ export function buildMap(scene, mapId = 'vegas') {
     enemySpots,
     extracts,
     casino: layout.casino,
+    sun,
     // Map-specific dangers: traffic lanes, cold and fires, gator ponds.
     hazards: { ...(layout.hazards || {}), fires, ponds },
     vault: layout.vault,

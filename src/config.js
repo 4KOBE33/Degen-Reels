@@ -133,13 +133,20 @@ export const ENEMIES = {
 // Raider bots: other players looting the same map. Neutral unless provoked.
 export const RAIDERS = { count: 6, hostileChance: 0.25, accuracy: 0.1, reaction: 0.9 };
 
-export const SETTINGS_DEFAULT = { sensitivity: 1, fov: 72, volume: 0.6, firstPerson: false };
+export const SETTINGS_DEFAULT = { sensitivity: 1, fov: 72, volume: 0.6, firstPerson: false, quality: 'auto' };
+
+// Graphics levels. 'auto' starts on high and steps down if the game can't keep up.
+export const QUALITY = {
+  low: { label: 'Low', pixelRatio: 0.75, shadows: 0, drawDist: 70 },
+  medium: { label: 'Medium', pixelRatio: 1, shadows: 1024, drawDist: 95 },
+  high: { label: 'High', pixelRatio: 2, shadows: 2048, drawDist: 115 },
+};
 
 // Back Room slot machines in the hub: pay chips, roll a prize.
 export const HUB_SLOTS = [
   { name: 'Bronze Reels', cost: 150, tier: 1, boost: 0 },
-  { name: 'Silver Reels', cost: 450, tier: 2, boost: 1 },
-  { name: 'Gold Reels', cost: 1200, tier: 3, boost: 2.5 },
+  { name: 'Silver Reels', cost: 300, tier: 2, boost: 1 },
+  { name: 'Gold Reels', cost: 700, tier: 3, boost: 2.5 },
 ];
 
 // In-raid loot slots: pay with chips you found, the prize pops out of the machine.

@@ -82,6 +82,7 @@ export class Raid {
 
     this.slots = this.map.slotSpots.map((s) => new SlotMachine(this, s));
     this.containers = this.map.containers.map((c) => new Container(this, c));
+    this.drawDist = 115;
     this.buildVaultDoor();
     this.buildBossLock();
     this.buildExtracts();
@@ -1222,10 +1223,10 @@ export class Raid {
       const keep = m.update(dt);
       if (!keep) this.scene.remove(m.group);
       // Don't draw machines lost in the haze.
-      m.group.visible = m.pos.distanceToSquared(this.focus) < 115 * 115;
+      m.group.visible = m.pos.distanceToSquared(this.focus) < this.drawDist * this.drawDist;
       return keep;
     });
-    for (const c of this.combatants) if (!c.isPlayer) c.char.root.visible = c.pos.distanceToSquared(this.focus) < 115 * 115;
+    for (const c of this.combatants) if (!c.isPlayer) c.char.root.visible = c.pos.distanceToSquared(this.focus) < this.drawDist * this.drawDist;
     for (const s of this.slots) s.update(dt);
     for (const k of this.containers) k.cull(this.focus);
     for (const pk of this.pickups) pk.update(dt);

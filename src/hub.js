@@ -1,7 +1,7 @@
 // The Hub between raids: stash and loadout, the Back Room (gambling), the Fence (selling),
 // your look, your records (stats, achievements, collection log) and settings.
 // Everything here is plain HTML on top of the 3D backdrop.
-import { HUB_SLOTS, ITEMS, LOOT, RARITY_BY_TIER } from './config.js';
+import { HUB_SLOTS, ITEMS, LOOT, QUALITY, RARITY_BY_TIER } from './config.js';
 import {
   itemInfo, isGun, rollLoot, addToList, addToStash, makeGun, makeItem, fullAmmo,
 } from './items.js';
@@ -22,6 +22,8 @@ import { LookPreview } from './preview.js';
 const $ = (id) => document.getElementById(id);
 const LOADOUT_SLOTS = 8;
 const BETS = [25, 100, 250, 500, 1000, 2500, 5000, 10000, 25000, 50000, 100000];
+// High-roller tables open up as you level up from raiding.
+const BET_LEVEL = { 25000: 5, 50000: 10, 100000: 15 };
 const fmt = (n) => Math.round(n).toLocaleString('en-US');
 const hex = (c) => `#${Number(c).toString(16).padStart(6, '0')}`;
 
@@ -70,9 +72,9 @@ const GAMES = [
 // Plinko: 12 rows of pegs, 13 buckets. Riskier boards pay more at the edges and less in the middle.
 const PLINKO_ROWS = 12;
 const PLINKO = {
-  low: [10, 3, 1.6, 1.4, 1.1, 1, 0.5, 1, 1.1, 1.4, 1.6, 3, 10],
-  medium: [33, 11, 4, 2, 1.1, 0.6, 0.3, 0.6, 1.1, 2, 4, 11, 33],
-  high: [170, 24, 8.1, 2, 0.7, 0.2, 0.2, 0.2, 0.7, 2, 8.1, 24, 170],
+  low: [9, 3, 1.5, 1.3, 1.1, 0.95, 0.5, 0.95, 1.1, 1.3, 1.5, 3, 9],
+  medium: [29, 9, 4, 2, 1, 0.6, 0.3, 0.6, 1, 2, 4, 9, 29],
+  high: [140, 22, 8, 2, 0.7, 0.2, 0.2, 0.2, 0.7, 2, 8, 22, 140],
 };
 const PW = 560;
 const PH = 430;
@@ -84,7 +86,7 @@ const bucketColor = (m) => (m >= 10 ? '#e63946' : m >= 3 ? '#ff6b3d' : m >= 1.5 
 const MINE_COUNTS = [1, 3, 5, 10];
 // Payout multiplier after `picks` safe tiles with `bombs` hidden in 25 (with a small house edge).
 function minesMult(bombs, picks) {
-  let m = 0.97;
+  let m = 0.95;
   for (let i = 0; i < picks; i++) m *= (25 - i) / (25 - bombs - i);
   return m;
 }
@@ -93,12 +95,13 @@ const FREE_LOCKED = 'The free loadout is locked in. Raid with it as is.';
 const hasFreeKit = (lo) => lo.weapons.some((g) => g && g.free) || lo.items.some((it) => it.free);
 
 export class Hub {
-  constructor({ onDeploy, onMapChange, onPartyStart = null, net = null }) {
+  constructor({ onDeploy, onMapChange, onPartyStart = null, onSettings = null, net = null }) {
     this.onDeploy = onDeploy;
     this.onPartyStart = onPartyStart;
     this.net = net;
     this.partyCode = '';
     this.onMapChange = onMapChange || (() => {});
+    this.onSettings = onSettings;
     this.tab = 'loadout';
     this.game = 'slots';
     this.bet = 100;
@@ -421,6 +424,8 @@ export class Hub {
       <label class="slider">Mouse sensitivity <b id="sensVal">${s.sensitivity.toFixed(2)}x</b><input type="range" id="sens" min="0.1" max="3" step="0.05" value="${s.sensitivity}"></label>
       <label class="slider">Field of view <b id="fovVal">${s.fov}°</b><input type="range" id="fov" min="60" max="100" step="1" value="${s.fov}"></label>
       <label class="slider">Volume <b id="volVal">${Math.round(s.volume * 100)}%</b><input type="range" id="vol" min="0" max="1" step="0.05" value="${s.volume}"></label>
+      <div class="qrow"><span>Graphics</span>${['auto', 'low', 'medium', 'high'].map((q) => `<button class="subtab ${(s.quality || 'auto') === q ? 'on' : ''}" data-act="quality" data-q="${q}">${q === 'auto' ? 'Auto' : QUALITY[q].label}</button>`).join('')}</div>
+      <p class="hint">Lower graphics if the game stutters, especially if you lead a party (your computer runs the world for everyone). Auto lowers it for you when frames get slow.</p>
       <h3>Controls</h3>
       <div id="hubBinds">${renderBinds()}</div>
       <button class="btn ghost" data-act="reset">${this.armedReset ? 'Click again to wipe ALL progress' : 'Reset progress'}</button>`;
@@ -446,7 +451,12 @@ export class Hub {
   }
 
   betChips(disabled = false) {
-    return `<div class="betchips"><small>BET</small>${BETS.map((b) => `<button class="cchip c${b} ${b === this.bet ? 'on' : ''}" data-act="bet" data-b="${b}" ${disabled ? 'disabled' : ''}>${b >= 1000 ? `${b / 1000}K` : b}</button>`).join('')}</div>`;
+    const lv = levelInfo(this.data.xp).level;
+    return `<div class="betchips"><small>BET</small>${BETS.map((b) => {
+      const need = BET_LEVEL[b] || 0;
+      const locked = lv < need;
+      return `<button class="cchip c${b} ${b === this.bet ? 'on' : ''} ${locked ? 'locked' : ''}" data-act="bet" data-b="${b}" ${disabled ? 'disabled' : ''} title="${locked ? `Unlocks at level ${need}` : ''}">${b >= 1000 ? `${b / 1000}K` : b}${locked ? `<i>LV${need}</i>` : ''}</button>`;
+    }).join('')}</div>`;
   }
 
   renderReels() {
@@ -850,6 +860,10 @@ export class Hub {
       case 'pcopy':
         try { navigator.clipboard.writeText(this.net.room.code); this.toast(`Copied ${this.net.room.code}. Send it to your friends!`); } catch (err) { this.toast(`Party code: ${this.net.room.code}`); }
         return;
+      case 'quality':
+        save.update((x) => { x.settings.quality = b.dataset.q; });
+        if (this.onSettings) this.onSettings();
+        break;
       case 'lookpart': this.lookPart = b.dataset.p; break;
       case 'lookopt': {
         const part = b.dataset.p;
@@ -884,7 +898,12 @@ export class Hub {
         }
         break;
       case 'game': this.game = b.dataset.g; break;
-      case 'bet': this.bet = Number(b.dataset.b); break;
+      case 'bet': {
+        const need = BET_LEVEL[b.dataset.b] || 0;
+        if (levelInfo(d.xp).level < need) { this.toast(`🔒 The ${fmt(Number(b.dataset.b))} table opens at level ${need}. Raid to level up!`); break; }
+        this.bet = Number(b.dataset.b);
+        break;
+      }
       case 'machine': if (!(this.reels && this.reels.running)) { this.machine = i; this.reels = null; } break;
       case 'pull': this.pullReels(); return;
       case 'deal': this.deal(); break;
@@ -1094,7 +1113,7 @@ export class Hub {
     if (!this.spend(this.bet)) return;
     const u = Math.random();
     // Most rockets pop early, a few fly for ages. Never crashes the instant it launches.
-    const crashAt = Math.min(50, Math.max(1.05, Math.floor((0.96 / (1 - u)) * 100) / 100));
+    const crashAt = Math.min(50, Math.max(1.05, Math.floor((0.95 / (1 - u)) * 100) / 100));
     const c = { bet: this.bet, mult: 1, running: true, crashed: false, crashAt, start: performance.now(), msg: '', points: [] };
     this.crash = c;
     sfx.lever();

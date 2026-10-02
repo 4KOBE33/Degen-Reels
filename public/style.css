@@ -706,3 +706,8 @@ body.isdowned #vignette { opacity: 0.6 !important; }
 #spectate .spinfo { font-weight: 900; font-size: 14px; }
 #spectate .spkeys { font-size: 12px; opacity: 0.6; margin-top: 6px; }
 body.spectating #hud, body.spectating #intro, body.spectating #paused { display: none !important; }
+#buildTag { position: fixed; left: 10px; bottom: 6px; font: 800 11px var(--body); opacity: 0.45; pointer-events: none; z-index: 5; }
+.qrow { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 12px; font-weight: 900; }
+.qrow span { margin-right: 6px; }
+.cchip.locked { filter: grayscale(0.9); opacity: 0.55; position: relative; }
+.cchip.locked i { position: absolute; bottom: -4px; left: 50%; transform: translateX(-50%); font: 900 8px var(--body); font-style: normal; background: #1b0f2b; color: #ffd23f; padding: 0 3px; border-radius: 4px; }

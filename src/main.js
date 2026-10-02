@@ -9,7 +9,8 @@ import { PlayerController } from './player.js';
 import { initAudio, setVolume } from './audio.js';
 import { save } from './save.js';
 import { keyName, renderBinds, wireBinds } from './keys.js';
-import { ITEMS } from './config.js';
+import { ITEMS, QUALITY } from './config.js';
+import { BUILD } from './version.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -48,7 +49,39 @@ function povLabel() {
   if (b) b.textContent = controller.firstPerson ? `🎥 Switch to third person (${keyName('pov')})` : `👁️ Switch to first person (${keyName('pov')})`;
 }
 
+// Graphics: sharpness, shadows and how far away things get drawn.
+let autoLevel = 'high'; // where 'auto' has settled
+function applyQuality() {
+  const want = save.get().settings.quality || 'auto';
+  const q = QUALITY[want === 'auto' ? autoLevel : want] || QUALITY.high;
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  renderer.setPixelRatio(q.pixelRatio >= 2 ? dpr : Math.min(dpr, 1) * q.pixelRatio);
+  raid.drawDist = q.drawDist;
+  const sun = raid.map.sun;
+  if (sun) {
+    sun.castShadow = q.shadows > 0;
+    if (q.shadows && sun.shadow.mapSize.x !== q.shadows) {
+      sun.shadow.mapSize.set(q.shadows, q.shadows);
+      if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; }
+    }
+  }
+}
+
+// Auto: if frames are slow for a few seconds in a raid, drop a level.
+let slowFor = 0;
+function autoQuality(dt, rawDt) {
+  if ((save.get().settings.quality || 'auto') !== 'auto' || !raid.active || document.hidden) { slowFor = 0; return; }
+  slowFor = rawDt > 1 / 38 ? slowFor + dt : Math.max(0, slowFor - dt * 2);
+  if (slowFor > 4 && autoLevel !== 'low') {
+    autoLevel = autoLevel === 'high' ? 'medium' : 'low';
+    slowFor = 0;
+    applyQuality();
+    hud.toast(`🖥️ Graphics lowered to ${QUALITY[autoLevel].label} to keep things smooth (Settings → Graphics).`);
+  }
+}
+
 function applySettings() {
+  applyQuality();
   const s = save.get().settings;
   controller.sensitivity = s.sensitivity;
   controller.fov = s.fov;
@@ -153,6 +186,7 @@ function switchMap(id, seed = null) {
   raid.renderer = renderer;
   raid.camera = camera;
   controller.raid = raid;
+  applyQuality();
   window.degen = raid;
 }
 
@@ -183,6 +217,7 @@ const hub = new Hub({
     const spawn = spawns ? spawns[Math.floor(Math.random() * spawns.length)] : null;
     net.start({ mapId, seed, exits, spawn });
   },
+  onSettings() { applySettings(); },
   onMapChange(id) {
     $('loading').hidden = false;
     // Let the "Loading" note paint before the heavy build.
@@ -215,6 +250,7 @@ const hub = new Hub({
 });
 
 window.hub = hub;
+$('buildTag').textContent = `Build ${BUILD}`;
 
 hud.onLeave = () => {
   spectate(null);
@@ -385,7 +421,9 @@ function frame(now) {
 }
 
 function step(now, draw = true) {
-  const dt = Math.min(0.05, (now - last) / 1000);
+  const rawDt = (now - last) / 1000;
+  const dt = Math.min(0.05, rawDt);
+  if (draw) autoQuality(dt, rawDt);
   last = now;
   const inRaid = raid.active;
   const paused = inRaid && (!controller.locked || !!overlay);
