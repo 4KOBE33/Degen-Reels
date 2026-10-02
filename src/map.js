@@ -361,11 +361,15 @@ export function buildMap(scene, mapId = 'vegas') {
   // ---------- buildings ----------
 
   const winFrameMat = toon(0xfff6e0);
+  const artMats = [0xe63946, 0x2ee6d6, 0xffd23f, 0xc77dff, 0x5ee27a, 0xff9f43].map((c) => new THREE.MeshBasicMaterial({ color: c }));
+  const rugMats = [0x9b2226, 0x1d3557, 0x6a4c93, 0x2d6a4f, 0x7f5539].map((c) => toon(c));
+  const lampMat = new THREE.MeshBasicMaterial({ color: 0xfff1b8 });
   const winPaneMat = new THREE.MeshBasicMaterial({ color: 0x35507a });
 
   // Walls with door gaps, a floor and a roof. doors: [{ side: 'n'|'s'|'e'|'w', at, width }]
-  function building({ name, x, z, w, d, h = 5, color = 0xe9d8a6, trim = 0x2b2140, floor = 0x9c6b4a, floorMap = null, doors = [], tier = 2, sign = null, signColor = '#ff3fa4', roof = true, mapColor = '#6b4f3a', windows = !def.indoor }) {
+  function building({ name, x, z, w, d, h = 5, color = 0xe9d8a6, trim = 0x2b2140, floor = 0x9c6b4a, floorMap = null, doors = [], tier = 2, sign = null, signColor = '#ff3fa4', roof = true, mapColor = '#6b4f3a', windows = !def.indoor, furnish = true }) {
     const T = 0.5;
+    const innerMat = toon(new THREE.Color(color).multiplyScalar(0.72).getHex());
     const wallMat = toon(color);
     const trimMat = toon(trim);
     const fl = new THREE.Mesh(new THREE.PlaneGeometry(w, d), floorMap ? toon(0xffffff, { map: floorMap }) : toon(floor));
@@ -373,6 +377,15 @@ export function buildMap(scene, mapId = 'vegas') {
     fl.position.set(x, 0.05, z);
     fl.receiveShadow = true;
     statics.add(fl);
+    if (roof && furnish && w >= 6 && d >= 6 && w * d < 2500) {
+      const rug = new THREE.Mesh(new THREE.PlaneGeometry(w * 0.45, d * 0.45), rugMats[Math.abs(Math.round(x * 3 + z * 5)) % rugMats.length]);
+      rug.rotation.x = -Math.PI / 2;
+      rug.position.set(x, 0.07, z);
+      statics.add(rug);
+      const lamp = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.5, 0.12, 12), lampMat);
+      lamp.position.set(x, h - 0.12, z);
+      statics.add(lamp);
+    }
 
     const sides = {
       n: { len: w, cx: x, cz: z - d / 2, horiz: true },
@@ -403,6 +416,22 @@ export function buildMap(scene, mapId = 'vegas') {
         base.position.set(wx, 0.45, wz);
         statics.add(base);
         box(wx, wz, ww, wd, h);
+        // Inside: a painted band along the bottom of the wall, and the odd picture.
+        if (roof && furnish) {
+          const inn = key === 'n' || key === 'w' ? 1 : -1;
+          const bx = s.horiz ? wx : s.cx + inn * (T / 2 + 0.02);
+          const bz = s.horiz ? s.cz + inn * (T / 2 + 0.02) : wz;
+          const band = new THREE.Mesh(new THREE.BoxGeometry(s.horiz ? len : 0.04, 1.1, s.horiz ? 0.04 : len), innerMat);
+          band.position.set(bx, 0.55, bz);
+          statics.add(band);
+          if (len >= 5 && h >= 3.6) {
+            const pic = new THREE.Mesh(new THREE.BoxGeometry(s.horiz ? 1.4 : 0.05, 1.0, s.horiz ? 0.05 : 1.4), trimMat);
+            pic.position.set(bx, Math.min(2.4, h - 1.2), bz);
+            const art = new THREE.Mesh(new THREE.BoxGeometry(s.horiz ? 1.1 : 0.06, 0.7, s.horiz ? 0.06 : 1.1), artMats[(Math.abs(Math.round(wx * 7 + wz * 3))) % artMats.length]);
+            art.position.set(bx + (s.horiz ? 0 : inn * 0.01), pic.position.y, bz + (s.horiz ? inn * 0.01 : 0));
+            statics.add(pic, art);
+          }
+        }
         // Windows along the outside, so buildings aren't blank boxes.
         if (windows && roof && h >= 3.6 && len >= 3.4) {
           const out = key === 'n' || key === 'w' ? -1 : 1;
@@ -618,7 +647,7 @@ export function buildMap(scene, mapId = 'vegas') {
     const CW = 100;
     const CD = 70;
     const doorways = [{ side: 's', at: 0, width: 12 }, { side: 'w', at: 10, width: 5 }, { side: 'e', at: 10, width: 5 }, { side: 'n', at: 30, width: 4 }];
-    building({ name, x: CX, z: CZ, w: CW, d: CD, h: 10, color, trim, floorMap: carpetTexture(), tier: 3, mapColor, doors: doorways, windows: false });
+    building({ name, x: CX, z: CZ, w: CW, d: CD, h: 10, color, trim, floorMap: carpetTexture(), tier: 3, mapColor, doors: doorways, windows: false, furnish: false });
     // Where the doorways are in the world (the Pit Boss fight seals them).
     const doors = doorways.map((dr) => {
       const horiz = dr.side === 's' || dr.side === 'n';
@@ -807,7 +836,7 @@ export function buildMap(scene, mapId = 'vegas') {
 
   const fencePanel = new THREE.MeshBasicMaterial({ color: 0x9ca3af, transparent: true, opacity: 0.28, side: THREE.DoubleSide, depthWrite: false });
   // A straight chain-link fence between two points on the same row or column.
-  function fence(x1, z1, x2, z2, h = 2.6) {
+  function fenceLine(x1, z1, x2, z2, h = 2.6) {
     const horiz = Math.abs(z2 - z1) < Math.abs(x2 - x1);
     const len = horiz ? Math.abs(x2 - x1) : Math.abs(z2 - z1);
     if (len < 0.5) return;
@@ -827,10 +856,31 @@ export function buildMap(scene, mapId = 'vegas') {
     }
     box(cx, cz, horiz ? len : 0.2, horiz ? 0.2 : len, h);
   }
+  // A stone wall with a capstone (the fancy version of a fence).
+  function stoneWall(x1, z1, x2, z2, h = 2.4, color = 0xd6c7a1) {
+    const horiz = Math.abs(z2 - z1) < Math.abs(x2 - x1);
+    const len = horiz ? Math.abs(x2 - x1) : Math.abs(z2 - z1);
+    if (len < 0.5) return;
+    const cx = (x1 + x2) / 2;
+    const cz = (z1 + z2) / 2;
+    const wall = part(new THREE.BoxGeometry(horiz ? len : 0.8, h, horiz ? 0.8 : len), color, { ink: 0.03 });
+    wall.position.set(cx, h / 2, cz);
+    const cap = part(new THREE.BoxGeometry(horiz ? len + 0.2 : 1.1, 0.3, horiz ? 1.1 : len + 0.2), 0x8b5a2b, { ink: 0.02 });
+    cap.position.set(cx, h + 0.15, cz);
+    statics.add(wall, cap);
+    for (let t = 0; t <= len + 0.01; t += 8) {
+      const pillar = part(new THREE.BoxGeometry(1.2, h + 0.8, 1.2), color, { ink: 0.03 });
+      pillar.position.set(horiz ? Math.min(x1, x2) + t : cx, (h + 0.8) / 2, horiz ? cz : Math.min(z1, z2) + t);
+      statics.add(pillar);
+    }
+    box(cx, cz, horiz ? len : 0.8, horiz ? 0.8 : len, h);
+  }
+  const fence = fenceLine;
   // A fenced yard with a gate in the middle of each listed side. Counts as an outdoor zone.
-  function yard({ name, x, z, w, d, gates = ['s'], gate = 8, tier = 2, mapColor = '#8a8a8a' }) {
+  function yard({ name, x, z, w, d, gates = ['s'], gate = 8, tier = 2, mapColor = '#8a8a8a', wall = null }) {
     const hw = w / 2;
     const hd = d / 2;
+    const fence = wall ? (ax, az, bx, bz) => stoneWall(ax, az, bx, bz, 2.4, wall) : fenceLine;
     const side = (key, ax, az, bx, bz) => {
       if (!gates.includes(key)) { fence(ax, az, bx, bz); return; }
       const mx = (ax + bx) / 2;
@@ -1016,6 +1066,18 @@ export function buildMap(scene, mapId = 'vegas') {
     }
     return null;
   };
+  // Loot nobody can get to (boxed in by scenery) moves to the nearest open ground.
+  for (const k of containers) {
+    if (k.y > 0.5) continue;
+    let open = false;
+    for (let i = 0; i < 8 && !open; i++) {
+      const ang = (i / 8) * Math.PI * 2;
+      open = !solidAt(k.x + Math.cos(ang) * 1.4, k.z + Math.sin(ang) * 1.4, 0.45, 0.4);
+    }
+    if (open) continue;
+    const to = clearSpot(k.x, k.z, 1.6, 0.4);
+    if (to) [k.x, k.z] = to;
+  }
   for (const e of extracts) {
     const to = clearSpot(e.x, e.z, 8, 2.5);
     if (to) [e.x, e.z] = to;
@@ -3424,7 +3486,7 @@ function wineCountry(k) {
   {
     const cx = -200;
     const cz = 150;
-    yard({ name: 'Château Jackpot', x: cx, z: cz, w: 64, d: 70, gates: ['e', 's'], tier: 3, mapColor: '#7f1d3a' });
+    yard({ name: 'Château Jackpot', x: cx, z: cz, w: 64, d: 70, gates: ['e', 's'], tier: 3, mapColor: '#7f1d3a', wall: 0xe9d8a6 });
     winery({ name: 'Château Jackpot', sign: 'CHATEAU JACKPOT', x: cx, z: cz + 6, color: 0xfff6e0, tier: 3, deadly: true });
     for (const [wx, wz] of [[-28, -31], [28, -31], [-28, 31], [28, 31]]) watchtower(cx + wx, cz + wz, 0x7f1d3a);
     enemies('dicer', cx, cz + 24, 3, 14);
