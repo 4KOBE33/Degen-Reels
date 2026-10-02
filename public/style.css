@@ -810,3 +810,52 @@ table.board tr.me td { background: rgba(255, 210, 63, 0.14); }
 #tableClose { display: none; }
 body.tablemode #tableClose { display: block; position: fixed; right: 20px; bottom: 16px; z-index: 30; width: auto; margin: 0; }
 body.tablemode #hubTabs, body.tablemode .hubfoot, body.tablemode #buildTag { display: none !important; }
+
+/* ---------- Loadout tab, redesigned ---------- */
+.lotop { display: grid; grid-template-columns: 1.1fr 1fr; gap: 16px; margin-bottom: 16px; }
+@media (max-width: 980px) { .lotop { grid-template-columns: 1fr; } }
+.raidpick, .kit, .stashsec { background: rgba(27, 15, 43, 0.55); border: 2px solid rgba(255, 255, 255, 0.08); border-radius: 18px; padding: 12px; min-width: 0; }
+.raidpick { display: grid; gap: 10px; align-content: start; }
+.kit h3, .stashsec h3 { margin: 0 0 10px; display: flex; align-items: baseline; gap: 10px; flex-wrap: wrap; }
+.kit h3 small, .stashsec h3 small { font: 800 12px var(--body); opacity: 0.65; letter-spacing: 0; }
+.kit .hint { margin: 8px 0 0; }
+.hero { display: flex; gap: 14px; align-items: center; padding: 16px; border-radius: 14px; border: 3px solid var(--ink); min-height: 150px; position: relative; overflow: hidden; }
+.hero::after { content: ''; position: absolute; inset: 0; background: radial-gradient(circle at 85% 20%, rgba(255, 255, 255, 0.18), transparent 55%); pointer-events: none; }
+.heroicon { font-size: 76px; line-height: 1; filter: drop-shadow(0 4px 0 rgba(0, 0, 0, 0.35)); }
+.herotxt { display: grid; gap: 4px; min-width: 0; }
+.herotxt h2 { margin: 0; font: 400 34px var(--display); color: var(--gold); text-shadow: 0 3px 0 var(--ink); letter-spacing: 1px; line-height: 1.05; }
+.herotxt p { margin: 0; font-weight: 700; font-size: 13px; opacity: 0.92; }
+.herotxt .tag { justify-self: start; }
+.facts { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 4px; }
+.facts span { font: 800 11px var(--body); background: rgba(0, 0, 0, 0.3); border-radius: 20px; padding: 3px 9px; }
+.hero.m-vegas, .mapcard.m-vegas.on { background: linear-gradient(135deg, #b5452c, #7a1f5c); }
+.hero.m-frost, .mapcard.m-frost.on { background: linear-gradient(135deg, #3b6d99, #1e3a5f); }
+.hero.m-bayou, .mapcard.m-bayou.on { background: linear-gradient(135deg, #3f6212, #1f3d2b); }
+.hero.m-tequila, .mapcard.m-tequila.on { background: linear-gradient(135deg, #c2410c, #7c2d12); }
+.hero.m-bunker, .mapcard.m-bunker.on { background: linear-gradient(135deg, #4c0519, #1b0f2b); }
+.hero.m-lounge, .mapcard.m-lounge.on { background: linear-gradient(135deg, #6a2c91, #3a1d5c); }
+.raidpick .maps { grid-template-columns: repeat(3, 1fr); margin: 0; }
+.raidpick .mapcard { padding: 6px 4px 7px; }
+.raidpick .mapcard .icon { font-size: 22px; }
+.raidpick .mapcard b { font-size: 14px; }
+.kit .grid { grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); }
+.kit .grid .item.empty { min-height: 58px; }
+.kit .wslots .item.empty { min-height: 64px; }
+.stashsec .grid { grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); max-height: 330px; overflow-y: auto; padding-right: 4px; }
+.mapinfo { display: none; }
+
+/* ---------- Shop ---------- */
+h3.sub { font-size: 18px; margin-top: 14px; display: flex; gap: 10px; align-items: baseline; }
+h3.sub small { font: 800 12px var(--body); opacity: 0.65; }
+.shopgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 10px; }
+.shopcard { display: grid; justify-items: center; gap: 4px; text-align: center; padding: 14px 10px; border-radius: 16px; border: 3px solid var(--ink); background: rgba(27, 15, 43, 0.75); }
+.shopcard .sicon { font-size: 40px; }
+.shopcard b { font: 400 18px var(--display); color: var(--gold); }
+.shopcard small { font-weight: 800; opacity: 0.75; }
+.shopcard .btn { margin: 6px 0 0; padding: 6px 12px; font-size: 14px; width: 100%; }
+.shopcard .btn[disabled] { opacity: 0.5; }
+.shopcard.owned { border-color: #5ee27a; }
+.shopcard.next { border-color: var(--gold); box-shadow: 0 0 0 3px rgba(255, 210, 63, 0.35); }
+.shopcard.locked { opacity: 0.55; }
+.shopcard .own { font: 900 12px var(--body); color: #5ee27a; margin-top: 6px; }
+.shopcard .lockd { font: 900 12px var(--body); opacity: 0.8; margin-top: 6px; }

@@ -217,6 +217,7 @@ export class Hub {
       records: () => this.renderRecords(),
       settings: () => this.renderSettings(),
       leaders: () => this.renderLeaders(),
+      shop: () => this.renderShop(),
     }[this.tab]();
     $('hubBody').innerHTML = body;
     $('hubBody').dataset.tab = this.tab;
@@ -306,10 +307,12 @@ export class Hub {
     const order = ['lounge', 'vegas', 'bayou', 'frost', 'tequila', 'bunker'].filter((id) => MAPS[id]);
     const maps = order.map((id) => {
       const m = MAPS[id];
-      return `<button class="mapcard ${d.selectedMap === id ? 'on' : ''}" data-act="map" data-m="${id}">
+      return `<button class="mapcard m-${id} ${d.selectedMap === id ? 'on' : ''}" data-act="map" data-m="${id}">
         <span class="icon">${m.icon}</span><b>${m.name}</b><span class="tag d-${m.danger.toLowerCase()}">${m.danger}</span></button>`;
     }).join('');
-    const sel = MAPS[d.selectedMap] || MAPS.vegas;
+    const selId = MAPS[d.selectedMap] ? d.selectedMap : 'vegas';
+    const sel = MAPS[selId];
+    const facts = sel.safe ? ['🛡️ No machines, no raiders', '🥊 1v1s in The Pit', '🎲 Every casino game'] : [`⏱️ ${Math.round((sel.raidTime || 1080) / 60)} min raids`, `📏 ${sel.size} map`, sel.indoor ? '🏚️ All indoors' : '👑 Pit Boss at 4:00'];
     const newbie = (d.stats.raids || 0) === 0;
     const guide = newbie ? `<section class="newbie"><b>👋 New to Beat the House? Here's the deal:</b>
       <ol><li><b>Pack a gun.</b> No gear? Grab the 🎁 FREE LOADOUT below.</li>
@@ -317,28 +320,46 @@ export class Hub {
       <li><b>Get to a green exit</b> and survive while your ride comes. Die, and you lose what you brought.</li>
       <li><b>Sell your loot</b> at the 💰 Fence, then gamble it in the 🎰 Back Room, or gear up for a bigger raid.</li></ol>
       <small>Tips will walk you through your first raids. Play with friends using the party panel below.</small></section>` : '';
+    const packed = lo.weapons.filter(Boolean).length + lo.items.length;
     return `${guide}${this.renderParty()}
-      <div class="maps">${maps}</div>
-      <p class="mapinfo"><b>${sel.icon} ${sel.name}</b> <span class="tag d-${sel.danger.toLowerCase()}">${sel.size} · ${sel.danger}</span> ${sel.blurb}</p>
-      <div class="cols">
-      <section>${this.renderBag()}<h3>Raid loadout</h3><p class="hint">Whatever you bring is lost if you die. Click to send it back to the stash.</p>
+      <div class="lotop">
+      <section class="raidpick">
+        <div class="hero m-${selId}">
+          <span class="heroicon">${sel.icon}</span>
+          <div class="herotxt"><span class="tag d-${sel.danger.toLowerCase()}">${sel.danger}</span><h2>${sel.name}</h2><p>${sel.blurb}</p>
+          <div class="facts">${facts.map((f) => `<span>${f}</span>`).join('')}</div></div>
+        </div>
+        <div class="maps">${maps}</div>
+      </section>
+      <section class="kit"><h3>🎒 Raid Loadout <small>${packed} packed · lost if you die</small></h3>
         ${freeKit ? '<p class="hint freelock">🔒 Free loadout is locked in: nothing goes in or out until you raid with it.</p>' : noGuns ? '<button class="btn freekit" data-act="freekit">🎁 FREE LOADOUT<small>A random gun, bandages, an Ammo Box and a throwable. Lose it and grab another.</small></button>' : ''}
         <div class="wslots">${lo.weapons.map((g, i) => (g ? this.itemCard(g, 'unequip', i) : `<div class="item empty">Weapon ${i + 1}<br><small>empty</small></div>`)).join('')}</div>
         <div class="grid">${lo.items.map((it, i) => this.itemCard(it, 'unpack', i)).join('')}${Array(Math.max(0, LOADOUT_SLOTS - lo.items.length)).fill('<div class="item empty"></div>').join('')}</div>
+        <p class="hint">Click anything to send it back to your stash.</p>
       </section>
-      <section><h3>Stash</h3><p class="hint">Click to pack it for the raid.</p>
+      </div>
+      <section class="stashsec"><h3>📦 Stash <small>${d.stash.items.length} items · click to pack it for the raid</small></h3>
         <div class="grid">${d.stash.items.map((it, i) => this.itemCard(it, 'pack', i)).join('') || '<p class="hint">Empty. Go raid!</p>'}</div>
-      </section></div>`;
+      </section>`;
   }
 
-  // Backpack upgrades: more room in the raid, for good.
-  renderBag() {
-    const lv = this.data.bag || 0;
-    const slots = BACKPACK_SLOTS + bagBonus(lv);
-    const next = BAG_UPGRADES[lv];
-    const cur = lv ? BAG_UPGRADES[lv - 1] : { name: 'Starter Backpack', icon: '🎒' };
-    return `<div class="bagup"><span class="bagicon">${cur.icon}</span><span><b>${cur.name}</b><small>${slots} backpack slots in raids</small></span>
-      ${next ? `<button class="btn" data-act="bagup" ${this.data.stash.chips < next.cost ? 'disabled' : ''}>Upgrade to ${next.icon} ${next.name} (+${next.slots}) · 🪙 ${fmt(next.cost)}</button>` : '<span class="maxed">MAXED OUT</span>'}</div>`;
+  // The Shop: permanent upgrades (for now, a bigger backpack).
+  renderShop() {
+    const d = this.data;
+    const lv = d.bag || 0;
+    const tiers = [{ name: 'Starter Backpack', icon: '🎒', slots: 0, cost: 0 }, ...BAG_UPGRADES];
+    const cards = tiers.map((u, i) => {
+      const owned = i <= lv;
+      const next = i === lv + 1;
+      const slots = BACKPACK_SLOTS + bagBonus(i);
+      return `<div class="shopcard ${owned ? 'owned' : next ? 'next' : 'locked'}">
+        <span class="sicon">${u.icon}</span><b>${u.name}</b><small>${slots} backpack slots</small>
+        ${owned ? `<span class="own">${i === lv ? '✓ WEARING' : '✓ OWNED'}</span>`
+          : next ? `<button class="btn" data-act="bagup" ${d.stash.chips < u.cost ? 'disabled' : ''}>BUY · 🪙 ${fmt(u.cost)}</button>`
+            : `<span class="lockd">🔒 🪙 ${fmt(u.cost)}</span>`}</div>`;
+    }).join('');
+    return `<h3>🛒 Shop</h3><p class="hint">Upgrades here are yours for good, even if you die.</p>
+      <h3 class="sub">🎒 Backpacks <small>more room for loot in every raid</small></h3><div class="shopgrid">${cards}</div>`;
   }
 
   renderFence() {
