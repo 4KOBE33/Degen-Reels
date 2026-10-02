@@ -214,6 +214,7 @@ export class Combatant {
   tryRoll() {
     if (!this.alive || this.downed || this.using || this.rolling || (this.rollCd || 0) > 0 || !this.onGround || this.raid.frozen) return 'Can\'t roll right now';
     if (this.stamina < PLAYER.rollCost) return 'Too tired to roll';
+    if (this.pin) return 'Wait for the bell';
     const dir = new THREE.Vector3(this.move.x, 0, this.move.y);
     if (dir.lengthSq() < 0.01) dir.set(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
     dir.normalize();
@@ -293,6 +294,13 @@ export class Combatant {
     this.pos.addScaledVector(this.vel, dt);
     const r = resolve(this.pos, this.vel, PLAYER.radius, this.raid.map);
     this.onGround = r.onGround;
+    // Waiting for the bell in The Pit: stay on your mark (you can still look around).
+    if (this.pin) {
+      this.pos.x = this.pin.x;
+      this.pos.z = this.pin.z;
+      this.vel.x = 0;
+      this.vel.z = 0;
+    }
     if (r.landed > 5) this.char.land(r.landed);
     this.cooldown -= dt;
     this.throwCooldown = Math.max(0, (this.throwCooldown || 0) - dt);

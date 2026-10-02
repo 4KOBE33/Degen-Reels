@@ -60,7 +60,12 @@ function compareHands(a, b) {
   for (let i = 0; i < Math.max(x.length, y.length); i++) if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) - (y[i] || 0);
   return 0;
 }
-const cardHtml = (c) => { const s = SUITS[c % 4]; return `<span class="pcard ${s === '♥' || s === '♦' ? 'red' : ''}">${RANKS[Math.floor(c / 4)].replace('T', '10')}${s}</span>`; };
+// Same card face as the blackjack table: rank in the corners, big suit in the middle.
+const cardHtml = (c) => {
+  const s = SUITS[c % 4];
+  const r = RANKS[Math.floor(c / 4)].replace('T', '10');
+  return `<span class="pcard ${s === '♥' || s === '♦' ? 'red' : ''}"><i>${r}</i><em>${s}</em><i class="flip">${r}</i></span>`;
+};
 const STAKES = [0, 500, 1000, 5000, 10000, 25000, 50000, 100000];
 const gunName = (g) => (g ? itemInfo({ id: 'gun', kind: g.kind, rarity: g.rarity }).name : 'nothing');
 
@@ -286,13 +291,14 @@ export class Duel {
   }
 
   // Put someone somewhere (and patch them up). Friends' games move their own character.
-  place(c, pos, yaw) {
+  place(c, pos, yaw, pin = false) {
     if (c.puppet) {
-      if (c.human && this.net) this.net.net.to(c.owner, { k: 'tp', p: [pos.x, 0, pos.z], yaw });
+      if (c.human && this.net) this.net.net.to(c.owner, { k: 'tp', p: [pos.x, 0, pos.z], yaw, pin: pin ? 1 : 0 });
       c.pos.copy(pos);
       c.netPos = pos.clone();
       return;
     }
+    c.pin = pin ? pos.clone() : null;
     c.pos.copy(pos);
     c.vel.set(0, 0, 0);
     c.yaw = yaw;
@@ -308,8 +314,9 @@ export class Duel {
     const guns = !!(stakes.guns && gunA && gunB);
     this.cur = { a, b, chips: stakes.chips || 0, guns, gunA, gunB, phase: 'bets', t: 0, exhibition, bets: [] };
     const ar = this.arena;
-    this.place(a, new THREE.Vector3(ar.x - this.r + 4, 0, ar.z), -Math.PI / 2);
-    this.place(b, new THREE.Vector3(ar.x + this.r - 4, 0, ar.z), Math.PI / 2);
+    // Both on their marks until the bell: no sneaking around during the bets and the countdown.
+    this.place(a, new THREE.Vector3(ar.x - this.r + 4, 0, ar.z), -Math.PI / 2, true);
+    this.place(b, new THREE.Vector3(ar.x + this.r - 4, 0, ar.z), Math.PI / 2, true);
     if (b.brain) b.brain.duelTarget = a;
     if (a.brain) a.brain.duelTarget = b;
     this.raid.feed(`🥊 ${a.name} vs ${b.name} in The Pit${this.cur.chips ? ` for 🪙 ${fmt(this.cur.chips * 2)}` : ''}${guns ? ' and their guns' : ''}! Bets are open at the 🎟️ Betting Window.`);
@@ -539,7 +546,13 @@ export class Duel {
       c.t += dt;
       const gone = (x) => !x.alive || !this.raid.combatants.includes(x);
       if (c.phase === 'bets' && c.t >= BET_TIME) { c.phase = 'count'; c.t = 0; this.sync(); }
-      else if (c.phase === 'count' && c.t >= COUNTDOWN) { c.phase = 'fight'; c.t = 0; this.sync(); }
+      else if (c.phase === 'count' && c.t >= COUNTDOWN) {
+        c.phase = 'fight';
+        c.t = 0;
+        c.a.pin = null;
+        c.b.pin = null;
+        this.sync();
+      }
       else if (c.phase === 'fight') {
         if (gone(c.a)) this.finish(c.b, c.a);
         else if (gone(c.b)) this.finish(c.a, c.b);
@@ -608,6 +621,8 @@ export class Duel {
   apply(v) {
     const before = this.view && this.view.ph;
     this.view = v || null;
+    const p = this.raid.player;
+    if (p && p.pin && (!v || v.ph === 'fight' || v.ph === 'over')) p.pin = null;
     if (before !== (v && v.ph)) {
       if (v && v.ph === 'count') this.lostSent = false;
       this.announce(before);

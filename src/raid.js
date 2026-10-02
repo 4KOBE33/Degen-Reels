@@ -587,6 +587,7 @@ export class Raid {
     p.hp = p.maxHp;
     p.downed = false;
     p.rolling = null;
+    p.pin = d.pin ? p.pos.clone() : null;
   }
 
   skipKillcam() {
