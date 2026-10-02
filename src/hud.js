@@ -323,6 +323,7 @@ export class Hud {
     // Squadmates: always shown, pinned to the edge when far away.
     for (const c of raid.combatants) {
       if (c.isPlayer || !c.alive || !(c.human || (c.puppet && c.netId && c.netId[0] === 'p'))) continue;
+      if (raid.net && raid.net.ally && !raid.net.ally(c)) continue; // enemy players aren't on your map
       const [x, y] = clampEdge(...toMini(c.pos.x, c.pos.z), 8);
       ctx.fillStyle = c.downed ? '#ff9f43' : '#2ee6d6';
       ctx.strokeStyle = '#1b0f2b';

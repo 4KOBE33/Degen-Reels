@@ -231,8 +231,14 @@ const hub = new Hub({
       const info = opts.party;
       switchMap(info.mapId, info.seed);
       session = new Session(raid, net, info);
-      const slot = Math.max(0, info.members.findIndex((m) => m.id === net.id));
-      const spawn = info.spawn || raid.map.spawns[0];
+      const red = info.spawn || raid.map.spawns[0];
+      // Teams: blue drops in at the spawn farthest from red's.
+      const blue = raid.map.spawns.reduce((best, s) => (Math.hypot(s[0] - red[0], s[1] - red[1]) > Math.hypot(best[0] - red[0], best[1] - red[1]) ? s : best), red);
+      const me = info.members.find((m) => m.id === net.id) || {};
+      const myTeam = session.mode === 'teams' ? me.team || 0 : 0;
+      const mates = info.members.filter((m) => session.mode !== 'teams' || (m.team || 0) === myTeam);
+      const slot = Math.max(0, mates.findIndex((m) => m.id === net.id));
+      const spawn = myTeam ? blue : red;
       raid.deploy({ ...opts, opts: { client: !session.host, exits: info.exits, spawn, slot, party: info.members.length } });
       if (session.host) session.addFriends(new THREE.Vector3(spawn[0], 0, spawn[1]));
       else session.register(raid.player, `p${net.id}`);

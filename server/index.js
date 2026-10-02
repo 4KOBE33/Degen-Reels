@@ -25,7 +25,8 @@ const server = http.createServer(app);
 const wss = new WebSocketServer({ server, path: '/ws', maxPayload: 512 * 1024, perMessageDeflate: false });
 
 // ---------- parties ----------
-// room: { code, host, members: Map(id -> { ws, token, name, look, dropTimer }), ffa, inRaid }
+// room: { code, host, members: Map(id -> { ws, token, name, look, team, dropTimer }), mode, inRaid }
+// mode: 'coop' (no friendly fire), 'ffa' (everyone for themselves) or 'teams' (red vs blue)
 const rooms = new Map();
 let nextId = 1;
 const CODE_CHARS = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
@@ -54,9 +55,10 @@ function roster(room) {
     t: 'room',
     code: room.code,
     host: room.host,
-    ffa: room.ffa,
+    mode: room.mode,
+    ffa: room.mode === 'ffa',
     inRaid: room.inRaid,
-    members: [...room.members].map(([id, m]) => ({ id, name: m.name, look: m.look, away: !open(m.ws) })),
+    members: [...room.members].map(([id, m]) => ({ id, name: m.name, look: m.look, team: m.team || 0, away: !open(m.ws) })),
   };
 }
 
@@ -66,7 +68,11 @@ function broadcast(room, msg, except = null) {
 }
 
 function addMember(room, ws, msg) {
-  room.members.set(ws.id, { ws, token: ws.token, name: String(msg.name || 'Raider').slice(0, 16), look: msg.look || null, dropTimer: null });
+  // In team games, newcomers join the smaller team.
+  let reds = 0;
+  for (const m of room.members.values()) if (!m.team) reds++;
+  const team = room.mode === 'teams' && reds > room.members.size - reds ? 1 : 0;
+  room.members.set(ws.id, { ws, token: ws.token, name: String(msg.name || 'Raider').slice(0, 16), look: msg.look || null, team, dropTimer: null });
   ws.room = room.code;
 }
 
@@ -146,7 +152,7 @@ wss.on('connection', (ws) => {
       case 'create': {
         leave(ws);
         const code = makeCode();
-        const r = { code, host: ws.id, members: new Map(), ffa: false, inRaid: false };
+        const r = { code, host: ws.id, members: new Map(), mode: 'coop', inRaid: false };
         rooms.set(code, r);
         addMember(r, ws, msg);
         send(ws, roster(r));
@@ -169,14 +175,25 @@ wss.on('connection', (ws) => {
           broadcast(room, roster(room));
         }
         break;
-      case 'ffa':
-        if (room && room.host === ws.id) { room.ffa = !!msg.on; broadcast(room, roster(room)); }
+      case 'mode':
+        if (room && room.host === ws.id && !room.inRaid && ['coop', 'ffa', 'teams'].includes(msg.mode)) {
+          room.mode = msg.mode;
+          // Starting team play: split the party evenly.
+          if (msg.mode === 'teams') [...room.members.values()].forEach((m, i) => { m.team = i % 2; });
+          broadcast(room, roster(room));
+        }
+        break;
+      case 'team':
+        if (room && !room.inRaid && room.members.has(ws.id)) {
+          room.members.get(ws.id).team = msg.team ? 1 : 0;
+          broadcast(room, roster(room));
+        }
         break;
       case 'start':
         // The leader starts a raid: everyone in the party drops in together.
         if (room && room.host === ws.id && !room.inRaid) {
           room.inRaid = true;
-          broadcast(room, { t: 'start', ...msg, host: room.host, ffa: room.ffa, members: roster(room).members });
+          broadcast(room, { t: 'start', ...msg, host: room.host, mode: room.mode, ffa: room.mode === 'ffa', members: roster(room).members });
         }
         break;
       case 'end':

@@ -31,7 +31,9 @@ export class Session {
     this.me = net.id;
     this.host = info.host === net.id;
     this.client = !this.host;
-    this.ffa = !!info.ffa;
+    this.mode = info.mode || (info.ffa ? 'ffa' : 'coop');
+    this.ffa = this.mode === 'ffa';
+    this.teamOf = new Map(info.members.map((m) => [m.id, m.team || 0]));
     this.members = info.members;
     this.byId = new Map();
     this.idOf = new WeakMap();
@@ -85,7 +87,27 @@ export class Session {
 
   // Friendly fire between people is off unless the leader turned on free-for-all.
   blocked(attacker, target) {
-    return !this.ffa && attacker !== target && this.human(attacker) && this.human(target);
+    if (!attacker || attacker === target || !this.human(attacker) || !this.human(target)) return false;
+    if (this.mode === 'ffa') return false;
+    if (this.mode === 'teams') return this.ally(attacker, target);
+    return true;
+  }
+
+  // Which party member a person-actor belongs to.
+  ownerOf(a) {
+    if (!a) return null;
+    if (a.isPlayer) return this.me;
+    if (a.owner) return a.owner;
+    return a.netId && a.netId[0] === 'p' ? a.netId.slice(1) : null;
+  }
+
+  // On the same side? (Everyone in co-op, nobody in free-for-all, your team in team games.)
+  ally(a, b = this.raid.player) {
+    if (this.mode === 'coop') return true;
+    if (this.mode === 'ffa') return false;
+    const x = this.ownerOf(a);
+    const y = this.ownerOf(b);
+    return x !== null && y !== null && this.teamOf.get(x) === this.teamOf.get(y);
   }
 
   // ---------- starting ----------
@@ -258,7 +280,7 @@ export class Session {
     if (this.ended) return [];
     // No word from the leader for a while: their world is gone.
     if (this.client && performance.now() - this.lastSnap > 5000) return [];
-    return this.raid.combatants.filter((c) => c.human && !c.isPlayer && c.alive && !(this.host && this.gone.has(c.owner)));
+    return this.raid.combatants.filter((c) => c.human && !c.isPlayer && c.alive && !(this.host && this.gone.has(c.owner)) && (this.mode !== 'teams' || this.ally(c)));
   }
 
   // ---------- client → host ----------
@@ -302,6 +324,7 @@ export class Session {
         pup.hp = d.hp;
         pup.maxHp = d.mh;
         pup.armor = d.ar;
+        if (d.w !== pup.netWeapon) (pup.recentGuns ||= new Map()).set(pup.netWeapon, performance.now());
         pup.netWeapon = d.w;
         pup.netRarity = d.r;
         pup.netWeaponName = d.wn;
@@ -315,6 +338,7 @@ export class Session {
       case 'hit': {
         const target = this.byId.get(d.i);
         if (!target || !target.alive) return;
+        if (!this.validHit(pup, target, d)) return;
         raid.damage(target, d.dmg, pup, v3(d.at), !!d.crit);
         break;
       }
@@ -374,6 +398,50 @@ export class Session {
         break;
       default:
     }
+  }
+
+  // Sanity-check a friend's hit before it counts: could that gun do that much, from there, that
+  // often, without a wall in the way? (Generous, since everyone sees the world a moment late.)
+  validHit(pup, target, d) {
+    const now = performance.now();
+    const guns = [pup.netWeapon || 'fists'];
+    for (const [g, at] of pup.recentGuns || []) if (now - at < 2500) guns.push(g);
+    const rar = RARITIES[pup.netRarity || 0] || RARITIES[0];
+    let maxDmg = 0;
+    let range = 0;
+    let perSec = 0;
+    for (const g of guns) {
+      const w = WEAPONS[g] || WEAPONS.fists;
+      maxDmg = Math.max(maxDmg, w.damage * Math.max(rar.damage, ...RARITIES.map((r) => r.damage)) * 3 + 1);
+      range = Math.max(range, w.range || 2);
+      perSec = Math.max(perSec, (w.pellets || 1) / Math.max(0.05, w.rate));
+    }
+    if (!(d.dmg > 0) || d.dmg > maxDmg) return this.reject(pup, 'damage');
+    const from = pup.netPos || pup.pos;
+    const to = target.center(new THREE.Vector3());
+    const dist = Math.hypot(to.x - from.x, to.z - from.z);
+    if (dist > range + (target.radius || 1) + 12) return this.reject(pup, 'range');
+    // Fire rate: a leaky bucket of hits.
+    const b = pup.hitBucket || (pup.hitBucket = { n: 0, at: now });
+    b.n = Math.max(0, b.n - ((now - b.at) / 1000) * perSec * 1.6);
+    b.at = now;
+    b.n++;
+    if (b.n > perSec * 1.6 + 12) return this.reject(pup, 'rate');
+    // A wall between them (well short of the target) means no.
+    const eye = new THREE.Vector3(from.x, from.y + 1.5, from.z);
+    const dir = to.clone().sub(eye);
+    const len = dir.length();
+    if (len > 3) {
+      const h = this.raid.raycast(eye, dir.normalize(), len, pup, { solidsOnly: true });
+      if (h.hit && len - h.distance > 3) return this.reject(pup, 'wall');
+    }
+    return true;
+  }
+
+  reject(pup, why) {
+    pup.rejected = (pup.rejected || 0) + 1;
+    if (pup.rejected % 25 === 1) console.warn(`Ignored a hit from ${pup.name}: ${why}`);
+    return false;
   }
 
   // A friend's connection dropped mid-raid.

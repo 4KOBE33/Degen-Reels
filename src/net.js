@@ -148,7 +148,8 @@ export class Net {
   join(code, name, look) { this.raw({ t: 'join', code, name, look }); }
   leave() { this.raw({ t: 'leave' }); this.room = null; this.emit('room', null); }
   profile(name, look) { if (this.inParty) this.raw({ t: 'profile', name, look }); }
-  setFfa(on) { this.raw({ t: 'ffa', on }); }
+  setMode(mode) { this.raw({ t: 'mode', mode }); }
+  setTeam(team) { this.raw({ t: 'team', team }); }
   start(info) { this.raw({ t: 'start', ...info }); }
   end() { this.raw({ t: 'end' }); }
 
