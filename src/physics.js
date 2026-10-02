@@ -2,10 +2,10 @@
 const STEP = 0.3;
 
 // Colliders are { type: 'box', minX, maxX, minZ, maxZ, top } or { type: 'circle', x, z, r, top }.
-export function resolve(pos, vel, radius, world) {
-  const colliders = world.colliders;
+export function resolve(pos, vel, radius, map) {
   let ground = 0;
-  for (const c of colliders) {
+  for (const c of map.near(pos.x, pos.z)) {
+    if (c.rayOnly || c.disabled) continue;
     if (c.type === 'box') {
       const inside = pos.x > c.minX && pos.x < c.maxX && pos.z > c.minZ && pos.z < c.maxZ;
       const nx = Math.max(c.minX, Math.min(pos.x, c.maxX));
@@ -50,8 +50,8 @@ export function resolve(pos, vel, radius, world) {
     }
   }
 
-  const maxX = world.halfW - 0.5 - radius;
-  const maxZ = world.halfD - 0.5 - radius;
+  const maxX = map.half - 1 - radius;
+  const maxZ = map.half - 1 - radius;
   pos.x = Math.max(-maxX, Math.min(maxX, pos.x));
   pos.z = Math.max(-maxZ, Math.min(maxZ, pos.z));
 

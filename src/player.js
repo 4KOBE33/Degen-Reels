@@ -1,46 +1,68 @@
 // Your keyboard/mouse controls and the over-the-shoulder camera.
+//   WASD move · Space jump · Shift sprint · Mouse aim · Left click shoot · Right click aim down sights
+//   1/2 or Q swap guns · R reload · E use (hold to search) · H heal · F armor plate · Tab bag · M map
 import * as THREE from 'three';
+import { WEAPONS } from './config.js';
 
-const SENSITIVITY = 0.0022;
-const TABLE_KEYS = { 1: '1', 2: '2', 3: '3', z: 'betDown', x: 'betUp' };
+const BASE_SENSITIVITY = 0.0016;
 const AUTO = new Set(['smg', 'fists', 'spoon']);
 const CAM_OFFSET = new THREE.Vector3(1.15, 0.6, 4.3);
+const AIM_OFFSET = new THREE.Vector3(0.9, 0.45, 2.4);
 
 export class PlayerController {
-  constructor(game, c, camera, canvas) {
-    this.game = game;
-    this.c = c;
+  constructor(raid, camera, canvas) {
+    this.raid = raid;
     this.camera = camera;
     this.canvas = canvas;
     this.keys = {};
     this.firing = false;
+    this.aimHeld = false;
     this.locked = false;
     this.camDist = CAM_OFFSET.length();
+    this.zoom = 0;
+    this.sensitivity = 1;
+    this.fov = 72;
+    this.search = null;
     this.onLockChange = () => {};
+    this.onToggle = () => {};
 
     window.addEventListener('keydown', (e) => {
       if (e.target.tagName === 'INPUT') return;
       const k = e.key.toLowerCase();
-      this.keys[k] = true;
-      if (k === 'e' && !e.repeat) this.interactPressed = true;
-      if (TABLE_KEYS[k] && !e.repeat) this.tableKey = TABLE_KEYS[k];
+      if (k === 'tab') e.preventDefault();
       if (k === ' ') e.preventDefault();
+      if (e.repeat) { this.keys[k] = true; return; }
+      this.keys[k] = true;
+      const c = this.c;
+      if (!c || !c.alive || !this.raid.active) return;
+      if (k === 'e') this.pressE = true;
+      if (k === '1') c.switchTo(0);
+      if (k === '2') c.switchTo(1);
+      if (k === 'q') c.switchTo(c.active ? 0 : 1);
+      if (k === 'r') this.say(c.reload(), 'Reloading…');
+      if (k === 'h') this.say(c.startUsing(c.count('bandage') ? 'bandage' : 'soda'), null);
+      if (k === 'f') this.say(c.startUsing('plate'), null);
+      if (k === 'tab') this.onToggle('bag');
+      if (k === 'm') this.onToggle('map');
     });
     window.addEventListener('keyup', (e) => { this.keys[e.key.toLowerCase()] = false; });
-    window.addEventListener('blur', () => { this.keys = {}; this.firing = false; });
+    window.addEventListener('blur', () => { this.keys = {}; this.firing = false; this.aimHeld = false; });
     canvas.addEventListener('mousedown', (e) => {
       if (!this.locked) { this.lock(); return; }
       if (e.button === 0) this.firing = true;
+      if (e.button === 2) this.aimHeld = true;
     });
-    window.addEventListener('mouseup', (e) => { if (e.button === 0) this.firing = false; });
-    // Scroll changes your bet while you're at a table.
-    window.addEventListener('wheel', (e) => {
-      if (this.c && this.c.busy && this.c.busy.onKey) this.tableKey = e.deltaY > 0 ? 'betDown' : 'betUp';
-    }, { passive: true });
+    window.addEventListener('mouseup', (e) => {
+      if (e.button === 0) this.firing = false;
+      if (e.button === 2) this.aimHeld = false;
+    });
+    canvas.addEventListener('contextmenu', (e) => e.preventDefault());
     window.addEventListener('mousemove', (e) => {
-      if (!this.locked) return;
-      this.c.yaw -= e.movementX * SENSITIVITY;
-      this.c.pitch = Math.max(-1.0, Math.min(0.9, this.c.pitch - e.movementY * SENSITIVITY));
+      if (!this.locked || !this.c) return;
+      // Slower turning while aiming down sights.
+      const s = BASE_SENSITIVITY * this.sensitivity * (this.aimHeld ? 0.55 : 1);
+      this.c.yaw -= e.movementX * s;
+      this.c.pitch = Math.max(-1.0, Math.min(0.9, this.c.pitch - e.movementY * s));
     });
     // If the browser refuses pointer lock, play without it.
     document.addEventListener('pointerlockerror', () => {
@@ -49,9 +71,14 @@ export class PlayerController {
     });
     document.addEventListener('pointerlockchange', () => {
       this.locked = document.pointerLockElement === canvas;
-      if (!this.locked) { this.firing = false; this.keys = {}; }
+      if (!this.locked) { this.firing = false; this.aimHeld = false; this.keys = {}; }
       this.onLockChange(this.locked);
     });
+  }
+
+  say(refusal, ok) {
+    if (refusal) this.raid.hud.toast(refusal);
+    else if (ok) this.raid.hud.toast(ok);
   }
 
   lock() {
@@ -61,8 +88,11 @@ export class PlayerController {
     } catch (e) { /* pointer lock unavailable */ }
   }
 
-  update() {
+  update(dt) {
     const c = this.c;
+    const raid = this.raid;
+    const hud = raid.hud;
+    if (!c) return;
     const k = this.keys;
     const f = (k.w || k.arrowup ? 1 : 0) - (k.s || k.arrowdown ? 1 : 0);
     const r = (k.d || k.arrowright ? 1 : 0) - (k.a || k.arrowleft ? 1 : 0);
@@ -74,29 +104,37 @@ export class PlayerController {
     if (len > 0) { mx /= len; mz /= len; }
     c.move.set(mx, mz);
     c.sprint = !!k.shift;
+    c.aiming = this.aimHeld && c.alive;
     if (k[' ']) c.wantJump = true;
 
-    if (this.interactPressed) {
-      this.interactPressed = false;
-      this.game.interact(c);
+    // E: tap to use, hold to search containers.
+    const it = c.alive && raid.active ? raid.nearbyInteractable(c) : null;
+    if (this.search) {
+      const still = this.search.target === it && k.e && c.alive;
+      if (!still) this.search = null;
+      else {
+        this.search.t += dt;
+        if (this.search.t >= this.search.target.searchTime) {
+          this.search.target.open(c);
+          this.search = null;
+        }
+      }
     }
+    if (this.pressE) {
+      this.pressE = false;
+      if (it && it.searchTime) this.search = { target: it, t: 0 };
+      else if (it) this.say(it.use(c), null);
+    }
+    hud.prompt(it && !this.search ? it.prompt(c) : null);
+    hud.progress(this.search ? this.search.t / this.search.target.searchTime : c.using ? c.using.t / c.using.total : null,
+      this.search ? 'Searching…' : c.using ? 'Using…' : '');
 
-    if (this.firing && c.alive) {
+    if (this.firing && c.alive && raid.active) {
       const weapon = c.weapon;
       const { origin, dir } = this.aimRay();
       // Hold to keep firing the SMG or swinging; other guns fire once per click.
-      if (this.game.fire(c, origin, dir) && !AUTO.has(weapon)) this.firing = false;
+      if (raid.fire(c, origin, dir) && !AUTO.has(weapon)) this.firing = false;
     }
-
-    // Number keys and scrolling go to whatever table you're playing.
-    if (this.tableKey) {
-      if (c.busy && c.busy.onKey && c.alive) c.busy.onKey(c, this.tableKey);
-      this.tableKey = null;
-    }
-
-    const it = c.alive && !c.busy && !this.game.intermission ? this.game.nearbyInteractable(c) : null;
-    this.game.hud.prompt(it ? it.prompt(c) : null);
-    this.game.hud.panel(c.busy && c.busy.panel && c.alive ? c.busy.panel(c) : null);
   }
 
   // The ray through the crosshair, starting at your character (not behind them).
@@ -109,19 +147,29 @@ export class PlayerController {
 
   updateCamera(dt) {
     const c = this.c;
+    const raid = this.raid;
+    const zoomed = c.aiming;
+    this.zoom += ((zoomed ? 1 : 0) - this.zoom) * Math.min(1, dt * 12);
+    const scope = zoomed && WEAPONS[c.weapon].zoom ? 0.45 : 0.75;
+    const fov = this.fov * (1 - this.zoom * (1 - scope));
+    if (Math.abs(this.camera.fov - fov) > 0.01) {
+      this.camera.fov = fov;
+      this.camera.updateProjectionMatrix();
+    }
+
     const head = c.head(new THREE.Vector3());
     const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(c.pitch, c.yaw, 0, 'YXZ'));
-    const offset = CAM_OFFSET.clone().applyQuaternion(q);
+    const offset = CAM_OFFSET.clone().lerp(AIM_OFFSET, this.zoom).applyQuaternion(q);
     const want = offset.length();
 
     // Pull the camera in if a wall is in the way.
-    const hit = this.game.raycast(head, offset.clone().normalize(), want + 0.3, c, { solidsOnly: true });
+    const hit = raid.raycast(head, offset.clone().normalize(), want + 0.3, c, { solidsOnly: true });
     const allowed = hit.hit ? Math.max(0.6, hit.distance - 0.3) : want;
     this.camDist += (allowed - this.camDist) * Math.min(1, dt * (allowed < this.camDist ? 30 : 6));
 
     this.camera.position.copy(head).addScaledVector(offset.normalize(), this.camDist);
     this.camera.quaternion.copy(q);
-    const s = this.game.shake;
+    const s = raid.shake;
     if (s > 0) {
       this.camera.position.x += (Math.random() - 0.5) * s;
       this.camera.position.y += (Math.random() - 0.5) * s;

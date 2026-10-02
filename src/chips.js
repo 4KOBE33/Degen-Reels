@@ -1,4 +1,4 @@
-// Physical poker chips. Getting hit sprays your chips on the floor; anyone can grab them.
+// Physical poker chips: the raid's currency. Enemies and containers spill them; walk over to grab.
 import * as THREE from 'three';
 import { CHIP_VALUE } from './config.js';
 import { toon, outline } from './toon.js';
@@ -9,8 +9,8 @@ const MATS = [0xe63946, 0x1d4ed8, 0x2a9d8f, 0xffd23f].map((c) => toon(c));
 const MAX_CHIPS = 400;
 
 export class ChipSystem {
-  constructor(game) {
-    this.game = game;
+  constructor(raid) {
+    this.raid = raid;
     this.list = [];
   }
 
@@ -27,7 +27,7 @@ export class ChipSystem {
       mesh.castShadow = true;
       outline(mesh, 0.02);
       mesh.position.copy(origin);
-      this.game.scene.add(mesh);
+      this.raid.scene.add(mesh);
       const a = Math.random() * Math.PI * 2;
       const vel = new THREE.Vector3(Math.cos(a), 0, Math.sin(a)).multiplyScalar(speed * (0.5 + Math.random()));
       if (toward) {
@@ -50,7 +50,7 @@ export class ChipSystem {
   }
 
   remove(i) {
-    this.game.scene.remove(this.list[i].mesh);
+    this.raid.scene.remove(this.list[i].mesh);
     this.list.splice(i, 1);
   }
 
@@ -59,8 +59,8 @@ export class ChipSystem {
   }
 
   update(dt) {
-    const world = this.game.world;
-    const people = this.game.combatants;
+    const map = this.raid.map;
+    const people = this.raid.combatants;
     for (let i = this.list.length - 1; i >= 0; i--) {
       const chip = this.list[i];
       const p = chip.mesh.position;
@@ -101,7 +101,7 @@ export class ChipSystem {
       chip.mesh.rotation.x += chip.spin.x * dt;
       chip.mesh.rotation.z += chip.spin.y * dt;
 
-      const ground = world.groundAt(p.x, p.z, p.y) + 0.035;
+      const ground = map.groundAt(p.x, p.z, p.y) + 0.035;
       if (p.y <= ground) {
         p.y = ground;
         if (chip.vel.y < -2) {
@@ -116,8 +116,8 @@ export class ChipSystem {
         }
       }
       // Keep chips inside the room.
-      p.x = Math.max(-world.halfW + 1, Math.min(world.halfW - 1, p.x));
-      p.z = Math.max(-world.halfD + 1, Math.min(world.halfD - 1, p.z));
+      p.x = Math.max(-map.half + 1, Math.min(map.half - 1, p.x));
+      p.z = Math.max(-map.half + 1, Math.min(map.half - 1, p.z));
     }
   }
 }

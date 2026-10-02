@@ -2,6 +2,12 @@
 let ctx = null;
 let master = null;
 
+export function setVolume(v) {
+  if (master) master.gain.value = v;
+  pendingVolume = v;
+}
+let pendingVolume = 0.5;
+
 export function initAudio() {
   if (ctx) {
     if (ctx.state === 'suspended') ctx.resume();
@@ -10,7 +16,7 @@ export function initAudio() {
   try {
     ctx = new (window.AudioContext || window.webkitAudioContext)();
     master = ctx.createGain();
-    master.gain.value = 0.5;
+    master.gain.value = pendingVolume;
     master.connect(ctx.destination);
   } catch (e) {
     ctx = null;
@@ -97,6 +103,14 @@ export const sfx = {
     const v = Math.max(0.3, falloff(pos, listener));
     [523, 659, 784, 1047, 784, 1047, 1319].forEach((f, i) => tone({ freq: f, dur: 0.16, type: 'square', vol: 0.1 * v, delay: i * 0.09 }));
   },
+  alert(pos, listener) {
+    const v = falloff(pos, listener);
+    [880, 660].forEach((f, i) => tone({ freq: f, dur: 0.09, type: 'square', vol: 0.06 * v, delay: i * 0.09 }));
+  },
+  zap(pos, listener) { tone({ freq: 1400, to: 300, dur: 0.08, type: 'sawtooth', vol: 0.06 * falloff(pos, listener) }); },
+  heal() { [523, 784].forEach((f, i) => tone({ freq: f, dur: 0.12, type: 'sine', vol: 0.1, delay: i * 0.08 })); },
+  open(pos, listener) { noise({ dur: 0.25, vol: 0.12 * falloff(pos, listener), freq: 900, to: 300, q: 3 }); },
+  extract() { [392, 523, 659, 784, 1047].forEach((f, i) => tone({ freq: f, dur: 0.2, type: 'triangle', vol: 0.12, delay: i * 0.1 })); },
   deny() { tone({ freq: 200, to: 150, dur: 0.18, type: 'square', vol: 0.1 }); },
   cashout() { [523, 659, 784, 1047, 1319, 1568].forEach((f, i) => tone({ freq: f, dur: 0.25, type: 'triangle', vol: 0.14, delay: i * 0.12 })); },
 };

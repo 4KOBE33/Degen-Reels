@@ -1,53 +1,111 @@
-// Anyone in the casino who can fight: you or a bot.
+// A bean with a backpack: you, or a rival raider bot.
 import * as THREE from 'three';
-import { PLAYER, START_CHIPS, WEAPONS, RARITIES } from './config.js';
+import { PLAYER, WEAPONS, RARITIES, ITEMS, BACKPACK_SLOTS } from './config.js';
 import { createCharacter } from './character.js';
 import { resolve } from './physics.js';
+import { fullAmmo, itemInfo } from './items.js';
 import { sfx } from './audio.js';
 
 export class Combatant {
-  constructor(game, { name, color, hat, isPlayer = false }) {
-    this.game = game;
+  constructor(raid, { name, color, hat, isPlayer = false, team = 'raider' }) {
+    this.raid = raid;
     this.name = name;
     this.isPlayer = isPlayer;
+    this.team = isPlayer ? 'player' : team;
     this.char = createCharacter({ color, hat });
-    this.char.body.userData.combatant = this;
-    game.scene.add(this.char.root);
+    this.char.body.userData.actor = this;
+    this.hitMesh = this.char.body;
+    raid.scene.add(this.char.root);
 
     this.pos = new THREE.Vector3();
     this.vel = new THREE.Vector3();
     this.yaw = 0;
     this.pitch = 0;
-    this.chips = START_CHIPS;
+    this.maxHp = PLAYER.maxHp;
+    this.hp = PLAYER.maxHp;
     this.armor = 0;
     this.alive = true;
-    this.respawnIn = 0;
     this.onGround = true;
     this.cooldown = 0;
-    this.busy = null; // the slot machine you're using, if any
-    this.kills = 0;
     this.lastAttacker = null;
+
+    // Loadout and loot.
+    this.weapons = [null, null];
+    this.active = 0;
+    this.backpack = [];
+    this.chips = 0;
+    this.using = null; // a consumable being used: { item, t, total }
 
     // Intent, set by the player controller or a bot brain each frame.
     this.move = new THREE.Vector2();
     this.sprint = false;
     this.wantJump = false;
-
-    this.setWeapon('fists');
+    this.aiming = false;
+    this.refreshWeapon();
   }
 
-  setWeapon(kind, rarity = 0, ammo = null) {
-    this.weapon = kind;
-    this.rarity = kind === 'fists' ? 0 : rarity;
-    const base = WEAPONS[kind].ammo;
-    this.ammo = ammo !== null ? ammo : (Number.isFinite(base) ? Math.round(base * RARITIES[this.rarity].ammo) : base);
-    this.char.setWeapon(kind, RARITIES[this.rarity].color);
+  get gun() { return this.weapons[this.active]; }
+  get weapon() { return this.gun ? this.gun.kind : 'fists'; }
+  get rarity() { return this.gun ? this.gun.rarity : 0; }
+  get ammo() { return this.gun ? this.gun.ammo : Infinity; }
+  get weaponName() { return this.gun ? itemInfo(this.gun).name : 'Fists'; }
+  get capacity() { return BACKPACK_SLOTS; }
+
+  refreshWeapon() {
+    this.char.setWeapon(this.weapon, RARITIES[this.rarity].color);
   }
 
-  // e.g. "Epic Boomstick"
-  get weaponName() {
-    const name = WEAPONS[this.weapon].name;
-    return this.rarity ? `${RARITIES[this.rarity].name} ${name}` : name;
+  switchTo(i) {
+    if (i === this.active || this.using) return;
+    this.active = i;
+    this.cooldown = Math.max(this.cooldown, 0.35);
+    this.refreshWeapon();
+  }
+
+  // Puts a gun in an empty weapon slot. Returns false if both slots are full.
+  equip(gun) {
+    const slot = this.weapons[this.active] ? this.weapons.indexOf(null) : this.active;
+    if (slot < 0) return false;
+    this.weapons[slot] = gun;
+    if (slot === this.active) this.refreshWeapon();
+    return true;
+  }
+
+  count(id) {
+    return this.backpack.filter((it) => it.id === id).reduce((n, it) => n + it.qty, 0);
+  }
+
+  // Removes one of an item from the backpack.
+  takeOne(id) {
+    const it = this.backpack.find((x) => x.id === id);
+    if (!it) return false;
+    it.qty--;
+    if (it.qty <= 0) this.backpack.splice(this.backpack.indexOf(it), 1);
+    return true;
+  }
+
+  // Start using a heal or armor plate. Slows you down while it works.
+  startUsing(id) {
+    if (this.using || !this.alive) return 'Busy';
+    const def = ITEMS[id];
+    if (!this.count(id)) return `No ${def.name}`;
+    if (def.kind === 'heal' && this.hp >= this.maxHp) return 'Already at full health';
+    if (def.kind === 'armor' && this.armor >= PLAYER.maxArmor) return 'Armor is full';
+    this.using = { id, t: 0, total: def.useTime };
+    return null;
+  }
+
+  // Ammo boxes refill half a gun's ammo.
+  reload() {
+    const g = this.gun;
+    if (!g || !Number.isFinite(g.ammo)) return null;
+    const full = fullAmmo(g.kind, g.rarity);
+    if (g.ammo >= full) return 'Already full';
+    if (!this.takeOne('ammo')) return 'Out of ammo, and no Ammo Boxes';
+    g.ammo = Math.min(full, g.ammo + Math.ceil(full * 0.5));
+    this.cooldown = Math.max(this.cooldown, 1.2);
+    this.char.recoil(2);
+    return null;
   }
 
   get forward() {
@@ -58,9 +116,20 @@ export class Combatant {
     return out.set(this.pos.x, this.pos.y + PLAYER.headHeight, this.pos.z);
   }
 
+  center(out = new THREE.Vector3()) {
+    return out.set(this.pos.x, this.pos.y + 1.0, this.pos.z);
+  }
+
+  hurt(attacker) {
+    this.char.hurt();
+    if (attacker && attacker !== this) this.lastAttacker = attacker;
+  }
+
   update(dt) {
-    const canMove = this.alive && !this.busy && !this.game.intermission;
-    const speed = this.sprint ? PLAYER.sprint : PLAYER.walk;
+    const canMove = this.alive && !this.raid.frozen;
+    let speed = this.sprint && !this.aiming ? PLAYER.sprint : PLAYER.walk;
+    if (this.aiming) speed *= 0.6;
+    if (this.using) speed *= 0.45;
     const tx = canMove ? this.move.x * speed : 0;
     const tz = canMove ? this.move.y * speed : 0;
     const accel = Math.min(1, dt * (this.onGround ? 14 : 3.5));
@@ -76,15 +145,23 @@ export class Combatant {
 
     this.vel.y -= PLAYER.gravity * dt;
     this.pos.addScaledVector(this.vel, dt);
-    const r = resolve(this.pos, this.vel, PLAYER.radius, this.game.world);
+    const r = resolve(this.pos, this.vel, PLAYER.radius, this.raid.map);
     this.onGround = r.onGround;
     if (r.landed > 5) this.char.land(r.landed);
     this.cooldown -= dt;
 
-    // Busted rivals lie there a moment, then get dragged out by security.
-    if (!this.alive && !this.isPlayer) {
-      this.respawnIn -= dt;
-      if (this.respawnIn <= 0) this.game.removeCombatant(this);
+    // Finish using a consumable.
+    if (this.using && this.alive) {
+      this.using.t += dt;
+      if (this.using.t >= this.using.total) {
+        const def = ITEMS[this.using.id];
+        if (this.takeOne(this.using.id)) {
+          if (def.kind === 'heal') this.hp = Math.min(this.maxHp, this.hp + def.heal);
+          if (def.kind === 'armor') this.armor = Math.min(PLAYER.maxArmor, this.armor + def.armor);
+          if (this.isPlayer) sfx.heal();
+        }
+        this.using = null;
+      }
     }
 
     // Feed the animation with movement relative to where you're facing.
@@ -103,6 +180,8 @@ export class Combatant {
       dead: !this.alive,
       showTag: !this.isPlayer,
     });
-    if (!this.isPlayer) this.char.setTag(this.name, this.chips, this.armor);
+    if (!this.isPlayer) this.char.setTag(this.name, `${Math.ceil(this.hp)}`, Math.ceil(this.armor));
   }
 }
+
+export { WEAPONS };

@@ -136,7 +136,7 @@ function makeNameTag() {
     ctx.fillText(name, 128, 34);
     ctx.font = "28px 'Luckiest Guy', 'Arial Black', sans-serif";
     ctx.fillStyle = '#ffd23f';
-    const stack = `🪙${chips}${armor > 0 ? `  🛡️${armor}` : ''}`;
+    const stack = `❤️${chips}${armor > 0 ? `  🛡️${armor}` : ''}`;
     ctx.strokeText(stack, 128, 70);
     ctx.fillText(stack, 128, 70);
     tex.needsUpdate = true;

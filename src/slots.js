@@ -1,41 +1,29 @@
-// Walk-up slot machines. Pull one to bet chips on a weapon.
+// Loot slots in the raid. Pay chips you found, pull the lever, and go do something else:
+// when the reels stop, the prize pops out of the tray. Three of a kind pays out three prizes.
 import * as THREE from 'three';
-import { MACHINES, WEAPONS, WEAPON_TIERS, JACKPOT, FILLER_SYMBOLS, RARITIES, RARITY_ODDS } from './config.js';
-import { save } from './save.js';
+import { RAID_SLOT_COST } from './config.js';
 import { part, canvasTexture } from './toon.js';
+import { rollLoot, itemInfo } from './items.js';
 import { sfx } from './audio.js';
 
 const SPIN_TIME = 2.4;
 const REEL_STOPS = [1.0, 1.5, 2.0];
-const SYMBOLS = [...Object.values(WEAPONS).filter((w) => !w.melee || w.name === 'Lucky Spoon').map((w) => w.icon), ...FILLER_SYMBOLS];
+const SYMBOLS = ['🍒', '💎', '🔔', '7️⃣', '🎲', '🔫', '💰'];
+const JACKPOT_CHANCE = 0.08;
+const TIER_COLORS = { 1: 0x2a9d8f, 2: 0xe63946, 3: 0x7b2cbf };
+const TIER_NAMES = { 1: 'PENNY SLOTS', 2: 'LUCKY 7s', 3: 'HIGH ROLLER' };
 
-function pick(arr) { return arr[Math.floor(Math.random() * arr.length)]; }
-
-export function weightedIndex(weights) {
-  let r = Math.random() * weights.reduce((a, b) => a + b, 0);
-  for (let i = 0; i < weights.length; i++) {
-    r -= weights[i];
-    if (r < 0) return i;
-  }
-  return weights.length - 1;
-}
-
-// Each boost step makes rarer guns more likely.
-export function rollRarity(boost) {
-  return weightedIndex(RARITY_ODDS.map((w, i) => w * (1 + boost * 0.8) ** i));
-}
-
-function marqueeTexture(tier, cost) {
+function marqueeTexture(name, cost) {
   return canvasTexture(512, 160, (c, w, h) => {
     c.fillStyle = '#1b0f2b';
     c.fillRect(0, 0, w, h);
     c.textAlign = 'center';
     c.textBaseline = 'middle';
-    c.font = "70px 'Luckiest Guy', 'Arial Black', sans-serif";
+    c.font = "68px 'Luckiest Guy', 'Arial Black', sans-serif";
     c.fillStyle = '#ffd23f';
     c.shadowColor = '#ffd23f';
     c.shadowBlur = 18;
-    c.fillText(tier.name, w / 2, h * 0.4);
+    c.fillText(name, w / 2, h * 0.4);
     c.shadowBlur = 0;
     c.font = "40px 'Luckiest Guy', 'Arial Black', sans-serif";
     c.fillStyle = '#fff6e0';
@@ -44,56 +32,47 @@ function marqueeTexture(tier, cost) {
 }
 
 export class SlotMachine {
-  constructor(game, x, z, tierIndex) {
-    this.game = game;
-    this.tier = MACHINES[tierIndex];
-    this.tierIndex = tierIndex;
-    this.cost = Math.round(game.floor.bets[0] * this.tier.costMult);
+  constructor(raid, { x, z, rot = 0, tier = 1 }) {
+    this.raid = raid;
+    this.tier = tier;
+    this.cost = RAID_SLOT_COST[tier];
+    this.name = TIER_NAMES[tier];
     this.position = new THREE.Vector3(x, 0, z);
-    this.useSpot = new THREE.Vector3(x, 0, z + 1.9);
+    // Machines face +Z before rotation; you stand in front of them.
+    const front = new THREE.Vector3(0, 0, 1).applyAxisAngle(new THREE.Vector3(0, 1, 0), rot);
+    this.front = front;
+    this.spot = this.position.clone().addScaledVector(front, 1.9);
     this.user = null;
     this.t = 0;
-    this.result = null;
-    this.reels = [0, 0, 0].map(() => ({ offset: Math.random() * SYMBOLS.length, final: 0 }));
+    this.reels = [0, 0, 0].map(() => ({ offset: Math.random() * SYMBOLS.length, final: 0, stopped: false }));
     this.blink = 0;
+    this.flashTime = 0;
 
-    const g = new THREE.Group();
-    g.position.set(x, 0, z);
+    const fixed = new THREE.Group();
+    fixed.position.set(x, 0, z);
+    fixed.rotation.y = rot;
     const base = part(new THREE.BoxGeometry(1.8, 0.3, 1.4), 0x24103d);
     base.position.y = 0.15;
-    const body = part(new THREE.BoxGeometry(1.6, 2.0, 1.2), this.tier.color);
+    const body = part(new THREE.BoxGeometry(1.6, 2.0, 1.2), TIER_COLORS[tier]);
     body.position.y = 1.3;
     const top = part(new THREE.BoxGeometry(1.8, 0.62, 1.3), 0x1b0f2b);
     top.position.y = 2.62;
-    const marquee = new THREE.Mesh(new THREE.PlaneGeometry(1.7, 0.53), new THREE.MeshBasicMaterial({ map: marqueeTexture(this.tier, this.cost) }));
+    const marquee = new THREE.Mesh(new THREE.PlaneGeometry(1.7, 0.53), new THREE.MeshBasicMaterial({ map: marqueeTexture(this.name, this.cost) }));
     marquee.position.set(0, 2.62, 0.66);
     const tray = part(new THREE.BoxGeometry(1.2, 0.18, 0.35), 0xd4a63a, { ink: 0.02 });
     tray.position.set(0, 0.75, 0.68);
-    const panel = part(new THREE.BoxGeometry(1.25, 0.12, 0.3), 0x1b0f2b, { ink: 0.02 });
-    panel.position.set(0, 1.18, 0.68);
-    panel.rotation.x = 0.4;
-    // Static parts get merged with the rest of the casino; screen, bulbs and lever animate.
-    const fixed = new THREE.Group();
-    fixed.position.set(x, 0, z);
-    fixed.add(base, body, top, marquee, tray, panel);
-    game.world.statics.add(fixed);
-    for (let i = 0; i < 3; i++) {
-      const btn = part(new THREE.CylinderGeometry(0.07, 0.07, 0.06, 10), [0xff5d5d, 0xffd23f, 0x5ee27a][i], { ink: 0.015, shadow: false });
-      btn.position.set(-0.35 + i * 0.35, 1.25, 0.72);
-      btn.rotation.x = 0.4;
-      fixed.add(btn);
-    }
-
-    // Reel window drawn into a canvas each frame while spinning.
-    this.screenTex = canvasTexture(384, 170, () => {});
     const frame = part(new THREE.BoxGeometry(1.42, 0.74, 0.08), 0xd4a63a, { ink: 0.02 });
     frame.position.set(0, 1.8, 0.6);
+    fixed.add(base, body, top, marquee, tray, frame);
+    raid.map.statics.add(fixed);
+
+    const g = new THREE.Group();
+    g.position.set(x, 0, z);
+    g.rotation.y = rot;
+    this.screenTex = canvasTexture(384, 170, () => {});
     const screen = new THREE.Mesh(new THREE.PlaneGeometry(1.3, 0.62), new THREE.MeshBasicMaterial({ map: this.screenTex }));
     screen.position.set(0, 1.8, 0.645);
-    fixed.add(frame);
     g.add(screen);
-
-    // Marquee bulbs.
     this.bulbs = [];
     for (let i = 0; i < 7; i++) {
       const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.06, 8, 6), new THREE.MeshBasicMaterial({ color: 0xfff1b8 }));
@@ -101,8 +80,6 @@ export class SlotMachine {
       g.add(bulb);
       this.bulbs.push(bulb);
     }
-
-    // Lever on the right side.
     this.lever = new THREE.Group();
     this.lever.position.set(0.88, 1.5, 0.1);
     const stick = part(new THREE.CylinderGeometry(0.05, 0.05, 0.85, 8), 0xd1d5db, { ink: 0.015 });
@@ -111,99 +88,86 @@ export class SlotMachine {
     knob.position.y = 0.88;
     this.lever.add(stick, knob);
     g.add(this.lever);
+    raid.scene.add(g);
 
-    game.scene.add(g);
-    game.world.addCollider({ type: 'box', minX: x - 0.9, maxX: x + 0.9, minZ: z - 0.7, maxZ: z + 0.75, top: 2.95 });
+    const sideways = Math.abs(Math.sin(rot)) > 0.5;
+    const w = sideways ? 1.4 : 1.8;
+    const d = sideways ? 1.8 : 1.4;
+    raid.map.addCollider({ type: 'box', minX: x - w / 2, maxX: x + w / 2, minZ: z - d / 2, maxZ: z + d / 2, top: 2.95 });
     this.drawScreen();
   }
 
-  get busy() { return !!this.user; }
-  get spot() { return this.useSpot; }
-
   prompt(c) {
-    if (this.user) return 'Machine in use';
-    return `<b>E</b> Pull the lever · 🪙 ${this.cost} · ${this.tier.name}`;
+    if (this.user) return 'Spinning…';
+    return `<b>E</b> Pull the lever · 🪙 ${this.cost} · ${this.name}`;
   }
 
-  use(c) { return this.pull(c); }
-
-  // Returns a message if the pull was refused.
-  pull(c) {
-    if (this.user) return 'Machine is busy';
-    if (c.chips <= this.cost) return `Need more than ${this.cost} chips`;
+  use(c) {
+    if (this.user) return 'Already spinning';
+    if (c.chips < this.cost) return `Need 🪙 ${this.cost} raid chips (you have ${c.chips})`;
     c.chips -= this.cost;
     this.user = c;
-    c.busy = this;
-    c.yaw = 0;
     this.t = 0;
-
-    const weapon = pick(WEAPON_TIERS[weightedIndex(this.tier.odds)]);
-    const jackpot = Math.random() < this.tier.jackpot;
-    const sym = WEAPONS[weapon].icon;
-    const symbols = [sym, sym, sym];
-    if (!jackpot) symbols[Math.floor(Math.random() * 3)] = pick(SYMBOLS.filter((s) => s !== sym));
-    const rarity = weapon === 'spoon' ? 0 : rollRarity(this.tierIndex + this.game.floor.rarityBoost);
-    this.result = { weapon, rarity, jackpot, cost: this.cost };
-    symbols.forEach((s, i) => { this.reels[i].final = SYMBOLS.indexOf(s); });
-    sfx.lever(this.position, this.game.listener);
+    this.jackpot = Math.random() < JACKPOT_CHANCE;
+    const finals = this.jackpot ? Array(3).fill(Math.floor(Math.random() * SYMBOLS.length)) : [0, 1, 2].map(() => Math.floor(Math.random() * SYMBOLS.length));
+    if (!this.jackpot && finals[0] === finals[1] && finals[1] === finals[2]) finals[2] = (finals[2] + 1) % SYMBOLS.length;
+    this.reels.forEach((r, i) => { r.final = finals[i]; r.stopped = false; });
+    sfx.lever(this.position, this.raid.listener);
     return null;
   }
 
   update(dt) {
     this.blink += dt * (this.user ? 12 : 2.5);
+    this.flashTime = Math.max(0, this.flashTime - dt);
     const flashing = this.flashTime > 0;
-    this.flashTime = Math.max(0, (this.flashTime || 0) - dt);
     this.bulbs.forEach((b, i) => {
       const on = (Math.floor(this.blink) + i) % 2 === 0;
       b.material.color.setHex(flashing ? (on ? 0xffd23f : 0xff3fa4) : (on ? 0xfff1b8 : 0x6b4a2a));
     });
-
     const pullAngle = this.user ? Math.max(0, 1 - this.t * 3) : 0;
     this.lever.rotation.x += (pullAngle * 1.2 - this.lever.rotation.x) * Math.min(1, dt * 20);
-
     if (!this.user) return;
+
     this.t += dt;
-    let lastTick = this.tickCount || 0;
+    const lastTick = this.tickCount || 0;
     this.reels.forEach((reel, i) => {
       if (this.t < REEL_STOPS[i]) reel.offset += dt * 14;
       else if (!reel.stopped) {
         reel.stopped = true;
         reel.offset = reel.final;
-        sfx.reelStop(this.position, this.game.listener);
+        sfx.reelStop(this.position, this.raid.listener);
       }
     });
     this.tickCount = Math.floor(this.t * 12);
-    if (this.tickCount !== lastTick && this.t < REEL_STOPS[2]) sfx.tick(this.position, this.game.listener);
+    if (this.tickCount !== lastTick && this.t < REEL_STOPS[2]) sfx.tick(this.position, this.raid.listener);
     this.drawScreen();
-
     if (this.t >= SPIN_TIME) this.payout();
   }
 
   payout() {
     const c = this.user;
-    const r = this.result;
     this.user = null;
-    c.busy = null;
-    this.reels.forEach((reel) => { reel.stopped = false; });
-    if (!c.alive) return;
-    c.setWeapon(r.weapon, r.rarity);
-    const name = c.weaponName;
-    if (r.jackpot) {
-      const winnings = JACKPOT.flat + r.cost * JACKPOT.multiplier;
-      c.armor = JACKPOT.armor;
-      this.flashTime = 2.5;
-      const mouth = this.position.clone().add(new THREE.Vector3(0, 0.9, 0.9));
-      this.game.chips.spawnBurst(mouth, winnings, null, { toward: c.pos, speed: 5 });
-      this.game.fx.confetti(this.position.clone().add(new THREE.Vector3(0, 3, 0.6)));
-      sfx.jackpot(this.position, this.game.listener);
-      this.game.feed(`🎰 ${c.name} hit the JACKPOT on ${this.tier.name}!`);
-      if (c.isPlayer) {
-        this.game.hud.toast(`JACKPOT! ${name} + armor + ${winnings} chips`, 'big');
-        this.game.unlocked(save.update((d) => { d.jackpots++; }));
+    const tray = this.position.clone().addScaledVector(this.front, 1.2);
+    const prizes = this.jackpot ? 3 : 1;
+    let best = null;
+    for (let i = 0; i < prizes; i++) {
+      // Jackpots roll a tier higher.
+      const loot = rollLoot(Math.min(4, this.tier + (this.jackpot ? 1 : 0)));
+      const at = tray.clone().add(new THREE.Vector3((Math.random() - 0.5) * 1.5, 0, (Math.random() - 0.5) * 0.8));
+      if (loot.chips) this.raid.chips.spawnBurst(at.clone().setY(1), loot.chips, null, { speed: 2 });
+      else {
+        this.raid.dropItem(at, loot);
+        if (!best || itemInfo(loot).rarity > itemInfo(best).rarity) best = loot;
       }
+    }
+    if (this.jackpot) {
+      this.flashTime = 2.5;
+      this.raid.fx.confetti(this.position.clone().setY(3));
+      sfx.jackpot(this.position, this.raid.listener);
+      if (c && c.isPlayer) this.raid.hud.toast('🎰 JACKPOT! Three prizes!', 'big');
     } else {
-      sfx.win(this.position, this.game.listener);
-      if (c.isPlayer) this.game.hud.toast(r.weapon === 'spoon' ? `${name}… good luck with that` : `You got a ${name}!`, r.rarity >= 2 ? 'big' : '');
+      sfx.win(this.position, this.raid.listener);
+      if (c && c.isPlayer) this.raid.hud.toast(best ? `The slot paid out: ${itemInfo(best).name}` : 'The slot paid out some chips');
     }
   }
 
@@ -234,33 +198,6 @@ export class SlotMachine {
       }
       c.restore();
     });
-    // Pay line.
-    c.strokeStyle = '#e63946';
-    c.lineWidth = 4;
-    c.beginPath();
-    c.moveTo(0, h / 2);
-    c.lineTo(8, h / 2);
-    c.moveTo(w - 8, h / 2);
-    c.lineTo(w, h / 2);
-    c.stroke();
     this.screenTex.needsUpdate = true;
   }
-}
-
-// A row of machines along the back wall: cheap ones on the left, whales on the right.
-export function buildSlotRow(game) {
-  const machines = [];
-  const perTier = Math.round(game.floor.slots / 3);
-  const spacing = 3;
-  const gap = 3;
-  const total = perTier * 3 * spacing + gap * 2 - spacing;
-  let x = -total / 2;
-  for (let tier = 0; tier < 3; tier++) {
-    for (let i = 0; i < perTier; i++) {
-      machines.push(new SlotMachine(game, x, game.world.slotZ, tier));
-      x += spacing;
-    }
-    x += gap;
-  }
-  return machines;
 }

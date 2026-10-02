@@ -1,8 +1,7 @@
-// Bot brains: gamble when they're unarmed, grab loose chips, and pick fights.
+// Raider bots: other "players" looting Lost Vegas. They fight machines, grab loot, and leave
+// through an exit eventually. Most leave you alone unless you shoot them or get in their face.
 import * as THREE from 'three';
-import { WEAPONS } from './config.js';
-
-const tmp = new THREE.Vector3();
+import { WEAPONS, RAIDERS } from './config.js';
 
 function angleDiff(a, b) {
   let d = b - a;
@@ -11,221 +10,166 @@ function angleDiff(a, b) {
   return d;
 }
 
-export class BotBrain {
-  constructor(game, c) {
-    this.game = game;
+export class RaiderBrain {
+  constructor(raid, c) {
+    this.raid = raid;
     this.c = c;
-    this.skill = 0.55 + Math.random() * 0.4;
-    this.mode = 'wander';
+    c.brain = this;
+    this.hostile = Math.random() < RAIDERS.hostileChance;
     this.target = null;
-    this.machine = null;
+    this.goal = null;
     this.loot = null;
-    this.wanderTo = null;
     this.los = false;
     this.strafe = 1;
-    this.thinkIn = 0;
-    this.stuckFor = 0;
+    this.thinkIn = Math.random();
     this.reaction = 0;
+    this.stuckFor = 0;
+    this.leaveAt = 240 + Math.random() * 480;
+    this.age = 0;
+    this.atExit = 0;
+  }
+
+  canSee(a) {
+    const from = this.c.head(new THREE.Vector3());
+    const to = a.center(new THREE.Vector3());
+    const d = from.distanceTo(to);
+    return !this.raid.raycast(from, to.sub(from).normalize(), d, this.c, { solidsOnly: true }).hit;
   }
 
   think() {
-    const { c, game } = this;
+    const { c, raid } = this;
     if (Math.random() < 0.3) this.strafe *= -1;
 
-    // Unarmed (or stuck with a spoon) and can afford it: go gamble.
-    const wantsGun = c.weapon === 'fists' || (c.weapon === 'spoon' && Math.random() < 0.15);
-    if (wantsGun && c.chips > game.machines[0].cost + 15) {
-      const budget = c.chips > game.machines[0].cost * 12 ? 2 : c.chips > game.machines[0].cost * 6 ? 1 : 0;
-      let best = null;
-      let bestScore = Infinity;
-      for (const m of game.machines) {
-        if (m.busy || m.tierIndex > budget || c.chips <= m.cost + 15) continue;
-        const score = Math.hypot(m.useSpot.x - c.pos.x, m.useSpot.z - c.pos.z) - m.tierIndex * 6;
-        if (score < bestScore) { bestScore = score; best = m; }
-      }
-      if (best) {
-        this.mode = 'slots';
-        this.machine = best;
-        return;
-      }
-    }
+    // Patch up when hurt.
+    if (c.hp < 45 && !c.using && c.count('bandage')) c.startUsing('bandage');
 
-    // A better gun lying on the floor nearby? Grab it.
-    let gun = null;
-    let gunD = 14;
-    for (const p of game.pickups) {
-      if (c.weapon !== 'fists' && p.rarity <= c.rarity) continue;
-      const d = Math.hypot(p.spot.x - c.pos.x, p.spot.z - c.pos.z);
-      if (d < gunD) { gunD = d; gun = p; }
+    // Who's worth shooting? Machines always; you only if they're hostile or you hit them.
+    let best = null;
+    let bestD = 24;
+    for (const a of raid.actors) {
+      if (!a.alive || a === c) continue;
+      const enemy = a.team === 'machine' || (a.isPlayer && (this.hostile || c.lastAttacker === a)) || a === c.lastAttacker;
+      if (!enemy) continue;
+      const d = a.pos.distanceTo(c.pos);
+      if (d < bestD) { bestD = d; best = a; }
     }
-    if (gun) {
-      this.mode = 'gun';
-      this.gun = gun;
-      return;
-    }
+    if (best && best !== this.target) this.reaction = RAIDERS.reaction + Math.random() * 0.6;
+    this.target = best;
+    this.los = best ? this.canSee(best) : false;
 
-    // Pick a target: whoever hit us last if they're close, otherwise the nearest.
-    let target = null;
-    let bestD = 32;
-    for (const o of game.combatants) {
-      if (o === c || !o.alive) continue;
-      let d = Math.hypot(o.pos.x - c.pos.x, o.pos.z - c.pos.z);
-      if (o === c.lastAttacker) d *= 0.6;
-      if (d < bestD) { bestD = d; target = o; }
-    }
-
-    // Loose chips nearby are worth a detour if nobody's breathing down our neck.
-    let loot = null;
-    let lootD = 8;
-    for (const chip of game.chips.list) {
-      if (chip.owner === c && chip.age < chip.lockUntil) continue;
-      const d = Math.hypot(chip.mesh.position.x - c.pos.x, chip.mesh.position.z - c.pos.z);
-      if (d < lootD) { lootD = d; loot = chip; }
-    }
-    if (loot && (!target || bestD > 7)) {
-      this.mode = 'loot';
-      this.loot = loot;
-      return;
-    }
-
-    // Sometimes sit down at a table for a hand, when nobody's close.
-    if ((!target || bestD > 14) && c.chips > game.floor.bets[0] * 4 && Math.random() < 0.12) {
-      const seats = game.tables.flatMap((t) => t.seats).filter((st) => !st.user);
-      let seat = null;
-      let seatD = 30;
-      for (const st of seats) {
-        const d = Math.hypot(st.spot.x - c.pos.x, st.spot.z - c.pos.z);
-        if (d < seatD) { seatD = d; seat = st; }
-      }
-      if (seat) {
-        this.mode = 'table';
-        this.seat = seat;
-        return;
+    // Loot lying around nearby.
+    this.loot = null;
+    if (!best || bestD > 14) {
+      let lootD = 14;
+      for (const p of raid.pickups) {
+        const d = p.spot.distanceTo(c.pos);
+        if (d < lootD && c.backpack.length < c.capacity) { lootD = d; this.loot = p; }
       }
     }
 
-    if (target) {
-      if (target !== this.target) this.reaction = 0.35 + (1 - this.skill) * 0.4;
-      this.mode = 'fight';
-      this.target = target;
-      const from = c.head(new THREE.Vector3());
-      const to = target.pos.clone().setY(target.pos.y + 0.9);
-      const dist = from.distanceTo(to);
-      this.los = !game.raycast(from, to.sub(from).normalize(), dist, c, { solidsOnly: true }).hit;
-      return;
-    }
-
-    this.mode = 'wander';
-    if (!this.wanderTo || Math.random() < 0.3) {
-      const [x, z] = game.world.spawnPoints[Math.floor(Math.random() * game.world.spawnPoints.length)];
-      this.wanderTo = new THREE.Vector3(x, 0, z);
+    // Time to go home?
+    if (this.age > this.leaveAt) {
+      let exitD = Infinity;
+      for (const e of raid.extracts) {
+        if (!e.active) continue;
+        const d = Math.hypot(e.x - c.pos.x, e.z - c.pos.z);
+        if (d < exitD) { exitD = d; this.goal = new THREE.Vector3(e.x, 0, e.z); }
+      }
+    } else if (!this.goal || this.goal.distanceTo(c.pos) < 3 || Math.random() < 0.02) {
+      // Wander toward something interesting.
+      const k = raid.containers[Math.floor(Math.random() * raid.containers.length)];
+      this.goal = k.spot.clone();
     }
   }
 
   update(dt) {
-    const { c, game } = this;
+    const { c, raid } = this;
     c.move.set(0, 0);
     c.sprint = false;
-    if (!c.alive || c.busy || game.intermission) return;
-
+    if (!c.alive) return;
+    // Far from the player, raiders just drift toward their goal without thinking hard.
+    this.age += dt;
     this.thinkIn -= dt;
     if (this.thinkIn <= 0) {
-      this.thinkIn = 0.35 + Math.random() * 0.35;
+      this.thinkIn = 0.45 + Math.random() * 0.3;
       this.think();
     }
 
     let goal = null;
-    let faceMove = true;
-
-    if (this.mode === 'slots' && this.machine) {
-      goal = this.machine.useSpot;
-      if (Math.hypot(goal.x - c.pos.x, goal.z - c.pos.z) < 0.7) {
-        if (!this.machine.busy) this.machine.pull(c);
-        this.mode = 'wander';
-        this.machine = null;
-        return;
-      }
-      c.sprint = true;
-    } else if (this.mode === 'gun' && this.gun && game.pickups.includes(this.gun)) {
-      goal = this.gun.spot;
-      if (Math.hypot(goal.x - c.pos.x, goal.z - c.pos.z) < 1.2) {
-        game.takeGun(c, this.gun);
-        this.mode = 'wander';
-        this.gun = null;
-        return;
-      }
-    } else if (this.mode === 'table' && this.seat) {
-      goal = this.seat.spot;
-      if (Math.hypot(goal.x - c.pos.x, goal.z - c.pos.z) < 0.8) {
-        if (!this.seat.user) this.seat.use(c);
-        this.mode = 'wander';
-        this.seat = null;
-        return;
-      }
-    } else if (this.mode === 'loot' && this.loot && game.chips.list.includes(this.loot)) {
-      goal = this.loot.mesh.position;
-    } else if (this.mode === 'fight' && this.target && this.target.alive) {
-      const t = this.target;
+    const t = this.target;
+    if (t && t.alive) {
       const w = WEAPONS[c.weapon];
       const dx = t.pos.x - c.pos.x;
       const dz = t.pos.z - c.pos.z;
-      const d = Math.hypot(dx, dz) || 0.001;
-      const ideal = w.melee ? 1.0 : c.weapon === 'shotgun' ? 5 : w.projectile ? 12 : 9;
-
-      // Turn toward the target, with skill-based lag.
+      const d = Math.hypot(dx, dz) || 0.01;
       const wantYaw = Math.atan2(-dx, -dz);
-      c.yaw += angleDiff(c.yaw, wantYaw) * Math.min(1, dt * (3 + this.skill * 6));
-      c.pitch = Math.atan2(t.pos.y + 0.9 - (c.pos.y + 1.45), d);
-      faceMove = false;
-
+      c.yaw += angleDiff(c.yaw, wantYaw) * Math.min(1, dt * 4);
+      const ty = t.center(new THREE.Vector3()).y;
+      c.pitch = Math.atan2(ty - (c.pos.y + 1.45), d);
+      const ideal = w.melee ? 1.2 : c.weapon === 'shotgun' ? 6 : 12;
       let mx = 0;
       let mz = 0;
-      if (d > ideal + 1.5 || !this.los) { mx += dx / d; mz += dz / d; }
-      else if (d < ideal - 2 && !w.melee) { mx -= dx / d; mz -= dz / d; }
-      if (!w.melee && this.los) { mx += (-dz / d) * this.strafe * 0.8; mz += (dx / d) * this.strafe * 0.8; }
+      if (d > ideal + 2 || !this.los) { mx += dx / d; mz += dz / d; } else if (d < ideal - 3 && !w.melee) { mx -= dx / d; mz -= dz / d; }
+      if (this.los && !w.melee) { mx += (-dz / d) * this.strafe * 0.7; mz += (dx / d) * this.strafe * 0.7; }
       const len = Math.hypot(mx, mz);
       if (len > 0) c.move.set(mx / len, mz / len);
-      c.sprint = d > 14;
-      if (Math.random() < dt * 0.4) c.wantJump = true;
 
       this.reaction -= dt;
-      const range = w.melee ? w.range + 0.4 : w.range || 60;
-      const aimed = Math.abs(angleDiff(c.yaw, wantYaw)) < 0.2;
+      const aimed = Math.abs(angleDiff(c.yaw, wantYaw)) < 0.25;
+      const range = w.melee ? w.range + 0.5 : w.range || 60;
       if (this.los && aimed && d < range && this.reaction <= 0) {
         const origin = c.head(new THREE.Vector3());
-        const aimAt = t.pos.clone().setY(t.pos.y + 0.9);
-        const err = (1 - this.skill) * 0.12 + 0.02;
-        aimAt.x += (Math.random() - 0.5) * err * d;
-        aimAt.y += (Math.random() - 0.5) * err * d;
-        aimAt.z += (Math.random() - 0.5) * err * d;
-        game.fire(c, origin, aimAt.sub(origin).normalize());
+        const aim = t.center(new THREE.Vector3());
+        const err = RAIDERS.accuracy * (0.5 + d / 25);
+        aim.x += (Math.random() - 0.5) * err * d;
+        aim.y += (Math.random() - 0.5) * err * d * 0.6;
+        aim.z += (Math.random() - 0.5) * err * d;
+        raid.fire(c, origin, aim.sub(origin).normalize());
+        // Bots pause between taps so they aren't laser beams.
+        if (c.weapon !== 'smg') this.reaction = 0.25 + Math.random() * 0.5;
       }
-    } else if (this.wanderTo) {
-      goal = this.wanderTo;
-      if (Math.hypot(goal.x - c.pos.x, goal.z - c.pos.z) < 1.5) this.wanderTo = null;
+      if (Number.isFinite(c.ammo) && c.ammo <= 0) {
+        if (c.reload()) c.switchTo(c.active ? 0 : 1);
+      }
+    } else if (this.loot && raid.pickups.includes(this.loot)) {
+      goal = this.loot.spot;
+      if (goal.distanceTo(c.pos) < 1.4) {
+        raid.takeItem(c, this.loot);
+        this.loot = null;
+      }
+    } else if (this.goal) {
+      goal = this.goal;
     }
 
     if (goal) {
       const dx = goal.x - c.pos.x;
       const dz = goal.z - c.pos.z;
       const d = Math.hypot(dx, dz);
-      if (d > 0.2) c.move.set(dx / d, dz / d);
-    }
-    if (faceMove && c.move.lengthSq() > 0) {
-      c.yaw += angleDiff(c.yaw, Math.atan2(-c.move.x, -c.move.y)) * Math.min(1, dt * 8);
+      if (d > 0.5) c.move.set(dx / d, dz / d);
+      c.yaw += angleDiff(c.yaw, Math.atan2(-dx, -dz)) * Math.min(1, dt * 6);
       c.pitch *= 0.9;
+      c.sprint = d > 25;
     }
 
-    // Hop over things if we're trying to move but not getting anywhere.
+    // Leaving through an exit.
+    if (this.age > this.leaveAt) {
+      const at = raid.extracts.find((e) => e.active && Math.hypot(e.x - c.pos.x, e.z - c.pos.z) < 5);
+      this.atExit = at ? this.atExit + dt : 0;
+      if (this.atExit > 6) {
+        raid.feed(`🚁 ${c.name} extracted`);
+        raid.removeCombatant(c);
+        return;
+      }
+    }
+
+    // Hop over things if stuck.
     const trying = c.move.lengthSq() > 0.1;
-    const moving = Math.hypot(c.vel.x, c.vel.z) > 1.5;
+    const moving = Math.hypot(c.vel.x, c.vel.z) > 1.2;
     this.stuckFor = trying && !moving ? this.stuckFor + dt : 0;
-    if (this.stuckFor > 0.4) {
+    if (this.stuckFor > 0.5) {
       c.wantJump = true;
-      this.strafe *= -1;
-      tmp.set(-c.move.y, 0, c.move.x).multiplyScalar(this.strafe);
-      c.move.set(tmp.x, tmp.z);
-      if (this.stuckFor > 1.5) { this.stuckFor = 0; this.wanderTo = null; this.mode = 'wander'; this.thinkIn = 0.8; }
+      c.move.set(-c.move.y * this.strafe, c.move.x * this.strafe);
+      if (this.stuckFor > 2) { this.stuckFor = 0; this.goal = null; }
     }
   }
 }

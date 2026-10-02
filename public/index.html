@@ -11,63 +11,94 @@
 <body>
   <div id="app"></div>
 
-  <div id="menu" class="screen">
-    <div class="card">
-      <h1 class="logo">DEGEN<br>REELS</h1>
-      <p class="tag">Gamble for your gun. Shoot for their chips.</p>
-      <input id="name" maxlength="14" placeholder="Your name" autocomplete="off">
-      <div class="label">Color</div>
-      <div id="colors" class="swatches"></div>
-      <div class="label">Hat</div>
-      <div id="hats" class="hats"></div>
-      <p id="hatHint" class="hint"></p>
-      <button id="play" class="btn big">START A RUN</button>
-      <p id="record" class="record"></p>
-      <ul class="howto">
-        <li>🪙 <b>Chips are your health.</b> Get hit and they spill on the floor for anyone to grab.</li>
-        <li>🎰 Gamble for guns at the slots. Win chips at <b>roulette</b>, <b>blackjack</b> and <b>crash</b>.</li>
-        <li>🛗 Pay the <b>elevator fee</b> before closing time to climb to the next floor.</li>
-        <li>💀 Bust once and the run is over. Back to Floor 1.</li>
-      </ul>
-    </div>
+  <!-- The Hub: between raids -->
+  <div id="hub">
+    <header class="hubhead">
+      <h1 class="logo small">DEGEN<br>REELS</h1>
+      <div id="hubWallet" class="wallet"></div>
+    </header>
+    <nav id="hubTabs" class="tabs">
+      <button data-tab="loadout">🎒 Loadout</button>
+      <button data-tab="backroom">🎰 Back Room</button>
+      <button data-tab="fence">💰 Fence</button>
+      <button data-tab="look">🎩 Look</button>
+      <button data-tab="settings">⚙️ Settings</button>
+    </nav>
+    <main id="hubBody" class="hubbody"></main>
+    <footer class="hubfoot">
+      <p class="howto">Drop into <b>Lost Vegas</b>, loot what you can, fight off the machines, and reach an open exit before time runs out. <b>Die and you lose everything you brought.</b> The casino is deadly, but it's the only place Legendaries drop.</p>
+      <button id="deploy" class="btn big">DEPLOY</button>
+    </footer>
+    <div id="hubToast"></div>
   </div>
 
+  <!-- Raid HUD -->
   <div id="hud" hidden>
-    <div id="floorbar" class="panel"><span id="floorName"></span><span id="timer"></span></div>
-    <div id="stack" class="panel">
-      <div class="chips">🪙 <span id="chips">0</span></div>
-      <div id="armor" hidden></div>
-      <div class="goalbar"><div id="goal"></div></div>
-      <div id="goalText"></div>
+    <div id="topleft" class="panel">
+      <div id="timer"></div>
+      <div id="zone"></div>
+      <div id="exits"></div>
     </div>
-    <div id="weapon" class="panel"></div>
-    <div id="board" class="panel"></div>
+    <canvas id="minimap" width="180" height="180"></canvas>
     <div id="feed"></div>
+    <div id="bossbar" hidden><span>👑 THE PIT BOSS</span><div class="bar"><div id="bossFill"></div></div></div>
+
+    <div id="vitals" class="panel">
+      <div id="hpText"></div>
+      <div class="bar hp"><div id="hpFill"></div></div>
+      <div class="bar armor"><div id="armorFill"></div></div>
+      <div class="row2"><span id="raidChips"></span><span id="quick"></span></div>
+    </div>
+    <div id="weapons" class="panel"></div>
+
     <div id="crosshair"><i></i><i></i><i></i><i></i></div>
     <div id="hitmarker">✕</div>
     <div id="prompt" hidden></div>
+    <div id="progress" hidden><div id="progressLabel"></div><div class="bar"><div id="progressFill"></div></div></div>
     <div id="toast"></div>
+    <div id="extracting" hidden></div>
     <div id="vignette"></div>
-    <div id="table" class="panel" hidden></div>
     <div id="intro"></div>
+    <div id="keyhint">Tab bag · M map · H heal · F armor · R reload · Right click aim</div>
   </div>
 
-  <div id="fade"></div>
+  <div id="bag" class="screen dim" hidden>
+    <div class="card wide">
+      <h2>BACKPACK</h2>
+      <div id="bagList"></div>
+      <button class="btn" data-close>Back to the raid</button>
+    </div>
+  </div>
 
-  <div id="runover" class="screen dim" hidden>
-    <div class="card">
-      <h2 id="runTitle"></h2>
-      <p id="runLine"></p>
-      <p id="runUnlocks" class="unlocks"></p>
-      <button id="runAgain" class="btn big">NEW RUN</button>
-      <button id="toMenu" class="btn ghost">Change your look</button>
+  <div id="bigmap" class="screen dim" hidden>
+    <div class="card wide">
+      <h2>LOST VEGAS</h2>
+      <canvas id="bigmapCanvas" width="560" height="560"></canvas>
+      <button class="btn" data-close>Back to the raid</button>
     </div>
   </div>
 
   <div id="paused" class="screen dim" hidden>
     <div class="card">
-      <h2>CLICK TO PLAY</h2>
-      <p class="keys"><b>WASD</b> move · <b>Mouse</b> aim · <b>Click</b> shoot<br><b>Space</b> jump · <b>Shift</b> sprint · <b>E</b> use / leave · <b>Esc</b> pause<br>At tables: <b>1 2 3</b> to play · <b>scroll</b> or <b>Z X</b> to change your bet</p>
+      <h2>PAUSED</h2>
+      <p class="keys"><b>WASD</b> move · <b>Mouse</b> aim · <b>Click</b> shoot · <b>Right click</b> aim<br>
+        <b>E</b> use (hold to search) · <b>1 2 Q</b> swap guns · <b>R</b> reload<br>
+        <b>H</b> heal · <b>F</b> armor plate · <b>Tab</b> backpack · <b>M</b> map</p>
+      <label class="slider">Mouse sensitivity <b id="psensVal"></b><input type="range" id="psens" min="0.1" max="3" step="0.05"></label>
+      <label class="slider">Field of view <b id="pfovVal"></b><input type="range" id="pfov" min="60" max="100" step="1"></label>
+      <label class="slider">Volume <b id="pvolVal"></b><input type="range" id="pvol" min="0" max="1" step="0.05"></label>
+      <button id="resume" class="btn big">RESUME</button>
+      <button id="abandon" class="btn ghost">Abandon raid (lose everything)</button>
+    </div>
+  </div>
+
+  <div id="results" class="screen dim" hidden>
+    <div class="card wide">
+      <h2 id="resultsTitle"></h2>
+      <p id="resultsLine"></p>
+      <div id="resultsItems" class="chips"></div>
+      <p id="resultsUnlocks" class="unlocks"></p>
+      <button id="resultsBack" class="btn big">BACK TO THE HUB</button>
     </div>
   </div>
 

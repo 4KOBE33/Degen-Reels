@@ -1,7 +1,5 @@
 // Every tunable number in the game lives here.
 
-export const WALL_H = 8;
-
 export const PLAYER = {
   radius: 0.5,
   walk: 6.5,
@@ -9,98 +7,109 @@ export const PLAYER = {
   jump: 8.5,
   gravity: 24,
   headHeight: 1.45,
+  maxHp: 100,
+  maxArmor: 100,
 };
 
-export const START_CHIPS = 100;
-// Each physical chip on the floor is worth this much.
+// Lost Vegas: the raid map. Half-size in meters.
+export const MAP = { half: 175, wallH: 6 };
+export const RAID_TIME = 15 * 60;
+export const EXTRACT_TIME = 8;
+// The Pit Boss shows up this many seconds into a raid.
+export const BOSS_TIME = 4 * 60;
+export const BACKPACK_SLOTS = 12;
 export const CHIP_VALUE = 5;
-// How often a fresh rival walks in (seconds), up to the floor's rival count.
-export const RIVAL_ARRIVAL = 35;
-
-// A run climbs these floors. Pay the elevator fee before closing time to go up.
-export const FLOORS = [
-  {
-    name: 'The Lucky Dump',
-    halfW: 32, halfD: 22,
-    fee: 250, time: 240,
-    bets: [10, 25, 50, 100],
-    rivals: 4, rivalChips: 100, rivalGuns: [], rivalArmor: 0,
-    roulette: 1, blackjack: 2, crash: 1, slots: 9,
-    rarityBoost: 0,
-    theme: { carpet: '#8e1b2c', carpet2: '#a8263a', accent: '#d4a63a', wall: 0x3a1d5c, wallLow: 0x24103d, trim: 0xd4a63a, felt: 0x1f8a4c, neon: '#ff3fa4', fog: 0x1a0f2e },
-  },
-  {
-    name: 'The Golden Goose',
-    halfW: 40, halfD: 28,
-    fee: 600, time: 270,
-    bets: [25, 50, 100, 250],
-    rivals: 6, rivalChips: 180, rivalGuns: ['pistol', 'smg', 'shotgun'], rivalArmor: 0,
-    roulette: 2, blackjack: 3, crash: 1, slots: 12,
-    rarityBoost: 1,
-    theme: { carpet: '#14532d', carpet2: '#166534', accent: '#facc15', wall: 0x3b2a12, wallLow: 0x1f1608, trim: 0xfacc15, felt: 0x7f1d1d, neon: '#facc15', fog: 0x16120a },
-  },
-  {
-    name: 'Diamond Penthouse',
-    halfW: 48, halfD: 32,
-    fee: 1200, time: 300,
-    bets: [50, 100, 250, 500],
-    rivals: 7, rivalChips: 300, rivalGuns: ['smg', 'shotgun', 'rocket', 'pistol'], rivalArmor: 40,
-    roulette: 3, blackjack: 4, crash: 2, slots: 15,
-    rarityBoost: 2,
-    theme: { carpet: '#1e1b4b', carpet2: '#312e81', accent: '#7dd3fc', wall: 0x0f172a, wallLow: 0x020617, trim: 0x7dd3fc, felt: 0x1e3a8a, neon: '#7dd3fc', fog: 0x0b1020 },
-  },
-];
 
 export const WEAPONS = {
-  fists: { name: 'Fists', icon: '👊', melee: true, damage: 8, rate: 0.45, range: 2.0, ammo: Infinity },
-  spoon: { name: 'Lucky Spoon', icon: '🥄', melee: true, damage: 18, rate: 0.4, range: 2.4, ammo: Infinity },
-  pistol: { name: 'Pea Shooter', icon: '🔫', damage: 14, rate: 0.28, spread: 0.012, pellets: 1, range: 70, ammo: 24 },
-  smg: { name: 'Bullet Hose', icon: '⚡', damage: 6, rate: 0.08, spread: 0.035, pellets: 1, range: 50, ammo: 80 },
-  shotgun: { name: 'Boomstick', icon: '💥', damage: 8, rate: 0.85, spread: 0.09, pellets: 8, range: 22, ammo: 10 },
-  rocket: { name: 'Jackpot Launcher', icon: '🚀', damage: 55, rate: 1.3, projectile: true, speed: 30, splash: 4.5, ammo: 5 },
+  fists: { name: 'Fists', icon: '👊', melee: true, damage: 12, rate: 0.45, range: 2.0, ammo: Infinity },
+  spoon: { name: 'Lucky Spoon', icon: '🥄', melee: true, damage: 26, rate: 0.4, range: 2.4, ammo: Infinity, value: 40 },
+  pistol: { name: 'Pea Shooter', icon: '🔫', damage: 16, rate: 0.28, spread: 0.012, pellets: 1, range: 70, ammo: 60, value: 120 },
+  smg: { name: 'Bullet Hose', icon: '⚡', damage: 8, rate: 0.08, spread: 0.035, pellets: 1, range: 50, ammo: 180, value: 300 },
+  shotgun: { name: 'Boomstick', icon: '💥', damage: 10, rate: 0.85, spread: 0.09, pellets: 8, range: 22, ammo: 24, value: 320 },
+  rifle: { name: 'High Roller', icon: '🎯', damage: 45, rate: 0.9, spread: 0.002, pellets: 1, range: 140, ammo: 30, value: 500, zoom: true },
+  rocket: { name: 'Jackpot Launcher', icon: '🚀', damage: 90, rate: 1.3, projectile: true, speed: 30, splash: 4.5, ammo: 8, value: 900 },
 };
-
-// Slot results are rolled by tier; pricier machines favor higher tiers.
-export const WEAPON_TIERS = [['spoon'], ['pistol'], ['smg', 'shotgun'], ['rocket']];
+// Gun pools by tier for loot rolls.
+export const GUN_TIERS = [['spoon', 'pistol'], ['pistol', 'smg', 'shotgun'], ['smg', 'shotgun', 'rifle'], ['rifle', 'rocket', 'shotgun']];
 
 export const RARITIES = [
-  { name: 'Common', color: null, css: '#e5e7eb', damage: 1, ammo: 1 },
-  { name: 'Rare', color: 0x3b82f6, css: '#60a5fa', damage: 1.15, ammo: 1.25 },
-  { name: 'Epic', color: 0xa855f7, css: '#c084fc', damage: 1.3, ammo: 1.5 },
-  { name: 'Legendary', color: 0xffc83d, css: '#ffc83d', damage: 1.5, ammo: 2 },
+  { name: 'Common', color: null, css: '#e5e7eb', damage: 1, ammo: 1, value: 1 },
+  { name: 'Rare', color: 0x3b82f6, css: '#60a5fa', damage: 1.15, ammo: 1.25, value: 2.5 },
+  { name: 'Epic', color: 0xa855f7, css: '#c084fc', damage: 1.3, ammo: 1.5, value: 6 },
+  { name: 'Legendary', color: 0xffc83d, css: '#ffc83d', damage: 1.5, ammo: 2, value: 20 },
 ];
-// Base rarity odds; each floor and machine tier shifts them up.
-export const RARITY_ODDS = [70, 22, 7, 1];
-
-// Slot machine tiers. Price scales with the floor's base bet.
-export const MACHINES = [
-  { name: 'PENNY SLOTS', costMult: 1, color: 0x2a9d8f, odds: [35, 35, 22, 8], jackpot: 0.06 },
-  { name: 'LUCKY 7s', costMult: 2.5, color: 0xe63946, odds: [15, 35, 35, 15], jackpot: 0.12 },
-  { name: 'WHALE', costMult: 5, color: 0x7b2cbf, odds: [5, 25, 40, 30], jackpot: 0.2 },
-];
-
-// Three of a kind: armor plus a chip payout that sprays out of the machine.
-export const JACKPOT = { armor: 40, flat: 20, multiplier: 3 };
-
-export const FILLER_SYMBOLS = ['🍒', '💎', '🔔'];
-
-// The cashier, priced in multiples of the floor's base bet.
-export const SHOP = {
-  armor: { amount: 50, costMult: 4 },
-  ammo: { costMult: 3 },
+// Rarity odds [Common, Rare, Epic, Legendary] by danger tier. Legendaries simply don't exist
+// out in the desert: you have to go where it's dangerous to even have a chance.
+export const RARITY_BY_TIER = {
+  1: [80, 18, 2, 0],
+  2: [66, 26, 7.5, 0.5],
+  3: [55, 30, 13, 2],
+  4: [38, 32, 23, 7],
 };
+
+// Everything that isn't a gun.
+export const ITEMS = {
+  bandage: { name: 'Lucky Bandage', icon: '🩹', kind: 'heal', heal: 35, useTime: 1.4, value: 60, stack: 5 },
+  soda: { name: 'Jackpot Soda', icon: '🥤', kind: 'heal', heal: 80, useTime: 2.4, value: 160, stack: 3 },
+  plate: { name: 'Chip Plate', icon: '🛡️', kind: 'armor', armor: 50, useTime: 2, value: 140, stack: 3 },
+  ammo: { name: 'Ammo Box', icon: '📦', kind: 'ammo', value: 50, stack: 5 },
+  cards: { name: 'Marked Deck', icon: '🃏', kind: 'valuable', value: 90, stack: 5 },
+  dice: { name: 'Loaded Dice', icon: '🎲', kind: 'valuable', value: 140, stack: 5 },
+  hat: { name: 'Silk Top Hat', icon: '🎩', kind: 'valuable', value: 260 },
+  watch: { name: 'Gold Watch', icon: '⌚', kind: 'valuable', value: 450 },
+  ring: { name: 'Diamond Ring', icon: '💍', kind: 'valuable', value: 900 },
+  trophy: { name: 'Jackpot Trophy', icon: '🏆', kind: 'valuable', value: 1800 },
+  keycard: { name: 'Vault Keycard', icon: '💳', kind: 'key', value: 700 },
+  clover: { name: 'Four-Leaf Clover', icon: '🍀', kind: 'valuable', value: 6000, legendary: true },
+  crown: { name: "The House's Crown", icon: '👑', kind: 'valuable', value: 25000, legendary: true },
+};
+
+// Loot tables by danger tier (1 outskirts, 2 the strip, 3 the casino, 4 the vault and the boss).
+// Each entry is [weight, what]. 'gun' rolls a gun from GUN_TIERS with a rarity boost.
+export const LOOT = {
+  1: [[30, 'chips'], [18, 'bandage'], [14, 'ammo'], [16, 'cards'], [10, 'dice'], [8, 'gun'], [4, 'plate']],
+  2: [[22, 'chips'], [12, 'bandage'], [8, 'soda'], [12, 'ammo'], [10, 'dice'], [10, 'hat'], [6, 'watch'], [12, 'gun'], [8, 'plate']],
+  3: [[18, 'chips'], [8, 'soda'], [10, 'ammo'], [10, 'watch'], [8, 'ring'], [2, 'trophy'], [3, 'keycard'], [18, 'gun'], [10, 'plate'], [0.5, 'clover']],
+  4: [[14, 'chips'], [10, 'ring'], [8, 'trophy'], [24, 'gun'], [10, 'soda'], [10, 'plate'], [2, 'clover']],
+};
+export const CHIPS_BY_TIER = { 1: [15, 40], 2: [30, 80], 3: [60, 160], 4: [150, 400] };
+
+// The machines that run Lost Vegas. Damage is per bullet.
+export const ENEMIES = {
+  slotbot: { name: 'Slotbot', hp: 140, speed: 2.6, damage: 6, burst: 3, burstGap: 0.12, rate: 2.2, range: 26, aggro: 24, accuracy: 0.11, chips: [20, 50], loot: 0.5 },
+  dicer: { name: 'Dicer', hp: 55, speed: 6.5, damage: 4, burst: 1, burstGap: 0, rate: 1.4, range: 22, aggro: 26, accuracy: 0.13, chips: [8, 20], loot: 0.25 },
+  shark: { name: 'Card Shark', hp: 80, speed: 7.5, damage: 16, melee: true, rate: 1.4, range: 2.2, aggro: 18, chips: [10, 30], loot: 0.35 },
+  boss: { name: 'The Pit Boss', hp: 3200, speed: 2.2, damage: 4, burst: 10, burstGap: 0.08, rate: 3.4, range: 40, aggro: 45, accuracy: 0.12, chips: [600, 900], loot: 1 },
+};
+
+// Raider bots: other players looting the same map. Neutral unless provoked.
+export const RAIDERS = { count: 4, hostileChance: 0.25, accuracy: 0.16, reaction: 0.9 };
+
+export const SETTINGS_DEFAULT = { sensitivity: 1, fov: 72, volume: 0.6 };
+
+// Back Room slot machines in the hub: pay chips, roll a prize.
+export const HUB_SLOTS = [
+  { name: 'Bronze Reels', cost: 150, tier: 1, boost: 0 },
+  { name: 'Silver Reels', cost: 450, tier: 2, boost: 1 },
+  { name: 'Gold Reels', cost: 1200, tier: 3, boost: 2.5 },
+];
+
+// In-raid loot slots: pay with chips you found, the prize pops out of the machine.
+export const RAID_SLOT_COST = { 1: 40, 2: 80, 3: 150 };
+
+export const START_STASH = { chips: 400, items: [{ id: 'gun', kind: 'pistol', rarity: 0, ammo: 60 }, { id: 'bandage', qty: 3 }] };
 
 export const COLORS = [0xff5d5d, 0x4dabff, 0xffd23f, 0x5ee27a, 0xc77dff, 0xff9f43, 0x2ee6d6, 0xff7eb6];
 export const HATS = ['top', 'party', 'cowboy', 'visor', 'crown'];
-// Hats unlock permanently; you keep them even when a run ends.
+// Hats unlock permanently.
 export const HAT_UNLOCKS = {
   top: null,
   party: null,
-  cowboy: { floor: 2, text: 'Reach Floor 2' },
-  visor: { jackpots: 1, text: 'Hit a slot jackpot' },
-  crown: { wins: 1, text: 'Cash out at the top' },
+  cowboy: { extracts: 1, text: 'Extract once' },
+  visor: { extracts: 10, text: 'Extract 10 times' },
+  crown: { boss: 1, text: 'Take down the Pit Boss' },
 };
-export const BOT_NAMES = [
-  'Dealer Dan', 'Lucky Lou', 'Big Stack Betty', 'Slots McGee', 'Card Shark', 'Snake Eyes', 'Pit Boss Pete',
-  'High Roller Hal', 'Double Down Dot', 'Whale Wendell', 'Chip Chipperson', 'Loaded Lola', 'Busted Bob', 'Martingale Mo',
+export const RAIDER_NAMES = [
+  'Lucky Lou', 'Big Stack Betty', 'Slots McGee', 'Snake Eyes', 'Pit Boss Pete', 'High Roller Hal',
+  'Double Down Dot', 'Whale Wendell', 'Loaded Lola', 'Busted Bob', 'Martingale Mo', 'Chip Chipperson',
 ];
