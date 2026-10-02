@@ -13,7 +13,7 @@ const fontsLink = html.match(/<link rel="stylesheet" href="https:\/\/fonts\.goog
 const body = html.slice(html.indexOf('<body>') + '<body>'.length, html.indexOf('<script'));
 const js = read('public/game.js').replace(/<\/script/gi, '<\\/script');
 
-const page = `<title>Degen Reels</title>
+const page = `<title>Beat the House</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 ${fontsLink}
 <style>

@@ -1,4 +1,4 @@
-# 🎰 Degen Reels
+# 🎰 Beat the House
 
 A 3D cartoon **extraction shooter** set in a casino town gone wrong. Gear up, raid **Lost Vegas**, grab what you can, and get out alive. If you die, you lose everything you carried.
 
