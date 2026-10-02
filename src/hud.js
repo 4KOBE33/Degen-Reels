@@ -1,6 +1,6 @@
 // The raid HUD: health, armor, weapons, quick items, minimap, exits, boss bar, bag and map screens.
 import { WEAPONS, PLAYER, EXTRACT_TIME } from './config.js';
-import { itemInfo, itemTitle, isGun } from './items.js';
+import { itemInfo, itemTitle, isGun, fullAmmo } from './items.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -32,6 +32,7 @@ export class Hud {
     this.raid = null;
     this.onDrop = () => {};
     this.onUse = () => {};
+    this.onReload = () => {};
     this.onLeave = () => {};
     this.mini = $('minimap').getContext('2d');
     this.selected = null; // { where: 'weapon' | 'pack', i }
@@ -45,6 +46,7 @@ export class Hud {
       if (act === 'select') this.selected = { where, i };
       if (act === 'drop') { this.onDrop(where, i); this.selected = null; }
       if (act === 'use') this.onUse(b.dataset.id);
+      if (act === 'reload') this.onReload();
       if (act === 'equip') { this.onEquip(i); this.selected = null; }
       if (act === 'unequip') { this.onUnequip(i); this.selected = null; }
       this.last.bagList = null;
@@ -83,6 +85,7 @@ export class Hud {
       ['H', '🩹', p.count('bandage') + p.count('soda')],
       ['F', '🛡️', p.count('plate')],
       ['R', '📦', p.count('ammo')],
+      ['T', '💣', p.count('grenade')],
       ...(raid.hazards && raid.hazards.cold ? [['G', '☕', p.count('cocoa')]] : []),
     ].map(([key, icon, n]) => `<span class="${n ? '' : 'none'}"><kbd>${key}</kbd>${icon}${n}</span>`).join(''));
 
@@ -92,7 +95,10 @@ export class Hud {
       const on = i === p.active ? 'on' : '';
       if (!g) return `<div class="slot ${on}"><kbd>${i + 1}</kbd><span class="empty">👊 Empty</span></div>`;
       const info = itemInfo(g);
-      return `<div class="slot ${on}"><kbd>${i + 1}</kbd><span style="color:${info.css}">${info.icon} ${escapeHtml(info.name)}</span><b class="ammo">${g.ammo}</b></div>`;
+      // Warn when the gun is running low, and say how to fix it.
+      const low = Number.isFinite(g.ammo) && g.ammo <= fullAmmo(g.kind, g.rarity) * 0.2;
+      const tip = low && i === p.active ? (p.count('ammo') ? '<em class="tip">R to reload</em>' : '<em class="tip out">no ammo boxes</em>') : '';
+      return `<div class="slot ${on} ${low ? 'low' : ''}"><kbd>${i + 1}</kbd><span style="color:${info.css}">${info.icon} ${escapeHtml(info.name)}</span><b class="ammo">${g.ammo}</b>${tip}</div>`;
     }).join(''));
 
     // Backpack bar: always visible so you can see loot land.
@@ -406,7 +412,10 @@ export class Hud {
           : `<button class="btn" data-act="unequip" data-i="${sel.i}">To backpack</button>`;
       } else {
         stats = `<p class="desc">${escapeHtml(info.def.desc || '')}</p>`;
-        if (['heal', 'armor', 'warm'].includes(info.def.kind)) actions = `<button class="btn" data-act="use" data-id="${item.id}">Use</button>`;
+        const key = { heal: 'H', armor: 'F', warm: 'G', ammo: 'R', throw: 'T' }[info.def.kind];
+        if (['heal', 'armor', 'warm'].includes(info.def.kind)) actions = `<button class="btn" data-act="use" data-id="${item.id}">Use <kbd>${key}</kbd></button>`;
+        if (info.def.kind === 'ammo') actions = `<button class="btn" data-act="reload">Reload now <kbd>R</kbd></button>`;
+        if (key) stats += `<p class="keyhint">Shortcut in a raid: <kbd>${key}</kbd>${info.def.kind === 'throw' ? ' (hold, then let go)' : ''}</p>`;
       }
       actions += `<button class="btn ghost" data-act="drop" data-where="${sel.where}" data-i="${sel.i}">Drop</button>`;
       detail = `<div class="idetail" style="--rc:${info.css}">

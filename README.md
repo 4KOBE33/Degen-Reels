@@ -6,9 +6,11 @@ A 3D cartoon **extraction shooter** set in a casino town gone wrong. Gear up, ra
 
 | Map | Size | Danger | Vibe |
 |---|---|---|---|
-| 🌵 Lost Vegas | Huge | Medium | Desert strip, motel, gas station and junkyard around the Lucky Dump Grand |
-| 🏔️ Frostbite Peaks | Large | Hard (machines have 30% more health and damage) | Snowed-in ski town, frozen lake, gondola, the Alpine Ace Lodge |
-| 🐊 Bayou Royale | Medium | Medium | Swamp boardwalks, stilt shacks and the Riverboat Royale paddle-steamer casino |
+| 🌵 Lost Vegas | Huge (480m) | Medium | Desert strip, motel, gas station and junkyard around the Lucky Dump Grand. Out past them: the Neon Boneyard, **Area 52 Test Range**, Starlite Drive-In, bowling alley, Pharaoh's Folly, a ranch and a freight yard |
+| 🏔️ Frostbite Peaks | Huge (400m) | Hard (machines have 30% more health and damage) | Snowed-in ski town, frozen lake, gondola and the Alpine Ace Lodge. Out past them: the **Summit Observatory**, Frosty's Ice Hotel, the ski jump, Avalanche Row, a ranger station and an old mine |
+| 🐊 Bayou Royale | Large (370m) | Medium | Swamp boardwalks, stilt shacks and the Riverboat Royale paddle-steamer casino. Out past them: **Madame Marie's Mansion**, the Gator Farm, a shipwreck, a fishing camp, the Sunken Chapel and Swamp Gas |
+
+Each map has one **deadly outer area** (in bold) with tier-3 loot and heavy guards, so the casino isn't the only place worth risking it.
 
 Every map has a casino with a vault, a Pit Boss event, and four exits (two open per raid). Each also has its own hazard:
 
@@ -32,13 +34,14 @@ Every enemy has a small weak spot that takes extra damage. A crit pops a yellow 
 ## The loop
 
 1. **The Hub.** Pack a loadout from your stash: two guns plus up to 8 items. Gamble stash chips in the **Back Room** (Loot Reels, Blackjack, Roulette, Crash), sell loot to **the Fence**, and pick your look. Broke? Grab a free kit.
-2. **Deploy.** You spawn at the edge of a huge desert map with a 15-minute clock. Two of the four exits are open each raid.
+2. **Deploy.** You spawn at the edge of the map with an 18-minute clock. Two of the four exits are open each raid.
 3. **Loot.** Hold **E** to search registers, crates, lockers and safes. Pull **loot slots** with chips you found. You're free to walk away and fight while the reels spin, and the prize pops out of the tray.
 4. **Fight.** The town is run by machines:
    - **Slotbots:** walking slot machines that fire bursts.
    - **Dicers:** flying dice that circle you.
    - **Card Sharks:** playing cards that rush you with a blade.
-   - Four **rival raiders** are out there too. Most leave you alone unless you shoot them.
+   - Six **rival raiders** are out there too. Most leave you alone unless you shoot them, but some carry Cherry Bombs.
+   - **Cherry Bombs 💣:** hold **T** to see a dotted arc and a red ring where it will land and how big the blast is, then let go to throw. They bounce off walls and blow up 2 seconds later. They hurt you too. You start with 2, and they drop from crates, slots and raiders.
 5. **Extract.** Stand in an open exit's green circle for 8 seconds, and everything you're carrying goes to your stash.
 
 ## Risk and reward
@@ -60,7 +63,9 @@ Unlockable hats: cowboy (extract once), dealer visor (extract 10 times), crown (
 
 ## Controls
 
-WASD move · Space jump · Shift sprint (uses stamina; jumping costs some too) · Mouse aim · Left click shoot · **Right click aim down sights** · E use (**hold** to search) · 1/2 or mouse wheel swap guns · R reload (uses an Ammo Box) · H heal · F armor plate · G hot cocoa · Q backpack (also Tab, I or B) · M map · **V first/third person** · Esc pause and settings (**mouse sensitivity**, FOV, volume)
+WASD move · Space jump · Shift sprint (uses stamina; jumping costs some too) · Mouse aim · Left click shoot · **Right click aim down sights** · E use (**hold** to search) · 1/2 or mouse wheel swap guns · R reload (uses an Ammo Box) · **T hold to aim a Cherry Bomb, let go to throw** · H heal · F armor plate · G hot cocoa · Q backpack (also Tab, I or B) · M map · **V first/third person** · Esc pause and settings (**mouse sensitivity**, FOV, volume)
+
+**Ammo Boxes 📦** go straight into your backpack when you pick them up. Press **R** (or keep shooting when you run dry) and one box refills half of the gun in your hands. You can also open the backpack (Q), click the box and hit **Reload now**. When a gun gets low, its ammo count turns red and tells you whether you have boxes left.
 
 Running, jumping and moving make your shots spray. The crosshair opens up to show it, and aiming down sights tightens it.
 
@@ -77,7 +82,7 @@ Then open http://localhost:3000. `npm run build:artifact` packs the whole game i
 
 - **three.js** for 3D, bundled with **esbuild**. No image or model files: every building, character, machine and sound is generated in code.
 - **Cartoon look:** toon shading and ink outlines (`src/toon.js`), plus procedural animation (`src/character.js`).
-- **A big map that still runs well:** static scenery is merged per 60m chunk (`map.bake()`), colliders live in a spatial grid, the sun's shadow follows you, and far-away machines sleep and stop drawing.
+- **A big map that still runs well:** static scenery is merged per 85m chunk (`map.bake()`), colliders live in a spatial grid, the sun's shadow follows you, and far-away machines sleep and stop drawing.
 
 | File | What's in it |
 |---|---|

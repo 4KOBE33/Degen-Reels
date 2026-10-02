@@ -231,6 +231,11 @@ input#lookName { width: 100%; max-width: 360px; padding: 10px 12px; border: 4px 
 .slot.on { opacity: 1; background: rgba(255, 255, 255, 0.08); }
 .slot .ammo { margin-left: auto; color: var(--gold); font: 400 18px var(--display); }
 .slot .empty { opacity: 0.7; }
+.slot { flex-wrap: wrap; }
+.slot.low .ammo { color: #ff5d5d; animation: lowpulse 0.8s ease-in-out infinite alternate; }
+.slot .tip { width: 100%; text-align: right; font: 400 13px var(--display); font-style: normal; color: var(--gold); }
+.slot .tip.out { color: #ff8a8a; }
+@keyframes lowpulse { from { opacity: 1; } to { opacity: 0.45; } }
 
 #packbar { left: 50%; bottom: 30px; transform: translateX(-50%); padding: 6px 10px; text-align: center; }
 #packbar .t { font-size: 12px; margin-bottom: 4px; }
@@ -323,6 +328,8 @@ input#lookName { width: 100%; max-width: 360px; padding: 10px 12px; border: 4px 
 .idetail .stat { width: 100%; display: flex; justify-content: space-between; font-weight: 900; font-size: 14px; border-bottom: 2px solid rgba(255, 255, 255, 0.06); padding-bottom: 4px; }
 .idetail .stat.value b { color: var(--gold); }
 .idetail .desc { margin: 0; font-size: 14px; }
+.idetail .keyhint { margin: 0; font-size: 13px; opacity: 0.8; }
+.idetail .acts .btn kbd { margin: 0 0 0 6px; font-size: 11px; }
 .idetail .acts { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
 .idetail .acts .btn.ghost { margin-top: 0; }
 @media (max-width: 860px) { .invbody { grid-template-columns: 1fr; } }

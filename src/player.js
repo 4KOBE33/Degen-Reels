@@ -46,12 +46,25 @@ export class PlayerController {
       if (k === 'h') this.say(c.startUsing(c.count('bandage') ? 'bandage' : 'soda'), null);
       if (k === 'f') this.say(c.startUsing('plate'), null);
       if (k === 'g') this.say(c.startUsing('cocoa'), null);
+      // T: hold to see where the Cherry Bomb will land, let go to throw.
+      if (k === 't') {
+        if (c.count('grenade')) this.throwHeld = true;
+        else this.say('No Cherry Bombs. Find 💣 in crates and slots.', null);
+      }
       if (k === 'q' || k === 'tab' || k === 'i' || k === 'b') this.onToggle('bag');
       if (k === 'm') this.onToggle('map');
       if (k === 'v') this.togglePov();
     });
-    window.addEventListener('keyup', (e) => { this.keys[e.key.toLowerCase()] = false; });
-    window.addEventListener('blur', () => { this.keys = {}; this.firing = false; this.aimHeld = false; });
+    window.addEventListener('keyup', (e) => {
+      const k = e.key.toLowerCase();
+      this.keys[k] = false;
+      if (k === 't' && this.throwHeld) {
+        this.throwHeld = false;
+        const c = this.c;
+        if (c && c.alive && this.raid.active) this.say(c.throwGrenade(c.head(new THREE.Vector3()), this.aimRay().dir), null);
+      }
+    });
+    window.addEventListener('blur', () => { this.keys = {}; this.firing = false; this.aimHeld = false; this.throwHeld = false; });
     canvas.addEventListener('mousedown', (e) => {
       if (!this.locked) { this.lock(); return; }
       if (e.button === 0) this.firing = true;
@@ -82,7 +95,7 @@ export class PlayerController {
     });
     document.addEventListener('pointerlockchange', () => {
       this.locked = document.pointerLockElement === canvas;
-      if (!this.locked) { this.firing = false; this.aimHeld = false; this.keys = {}; }
+      if (!this.locked) { this.firing = false; this.aimHeld = false; this.throwHeld = false; this.keys = {}; }
       this.onLockChange(this.locked);
     });
   }
@@ -144,6 +157,10 @@ export class PlayerController {
     hud.prompt(it && !this.search ? it.prompt(c) : null);
     hud.progress(this.search ? this.search.t / this.search.target.searchTime : c.using ? c.using.t / c.using.total : null,
       this.search ? 'Searching…' : c.using ? 'Using…' : '');
+
+    // Cherry Bomb aiming arc.
+    if (this.throwHeld && c.alive && raid.active) raid.showArc(raid.grenadeArc(c, c.head(new THREE.Vector3()), this.aimRay().dir));
+    else raid.showArc(null);
 
     if (this.firing && c.alive && raid.active) {
       const weapon = c.weapon;

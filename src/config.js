@@ -26,7 +26,7 @@ export const PLAYER = {
 
 // Lost Vegas: the raid map. Half-size in meters.
 export const MAP = { half: 175, wallH: 6 };
-export const RAID_TIME = 15 * 60;
+export const RAID_TIME = 18 * 60;
 export const EXTRACT_TIME = 8;
 // The Pit Boss shows up this many seconds into a raid.
 export const BOSS_TIME = 4 * 60;
@@ -65,7 +65,8 @@ export const ITEMS = {
   bandage: { name: 'Lucky Bandage', icon: '🩹', desc: 'Heals 35 health. Takes a moment to apply.', kind: 'heal', heal: 35, useTime: 1.4, value: 60, stack: 5 },
   soda: { name: 'Jackpot Soda', icon: '🥤', desc: 'Heals 80 health. Fizzy and slow to chug.', kind: 'heal', heal: 80, useTime: 2.4, value: 160, stack: 3 },
   plate: { name: 'Chip Plate', icon: '🛡️', desc: 'Adds 50 armor. Armor soaks most of each hit.', kind: 'armor', armor: 50, useTime: 2, value: 140, stack: 3 },
-  ammo: { name: 'Ammo Box', icon: '📦', desc: 'Refills half of your gun\'s ammo. Press R or run dry.', kind: 'ammo', value: 50, stack: 5 },
+  ammo: { name: 'Ammo Box', icon: '📦', desc: 'Refills half of the gun in your hands. Press R (or just keep shooting when you run dry) and one box gets used up.', kind: 'ammo', value: 50, stack: 5 },
+  grenade: { name: 'Cherry Bomb', icon: '💣', desc: 'Hold T to aim and let go to throw. It bounces, then blows up 2 seconds later. Hurts you too.', kind: 'throw', damage: 95, splash: 5.5, fuse: 2, value: 110, stack: 4 },
   cards: { name: 'Marked Deck', icon: '🃏', desc: 'Sell it to the Fence.', kind: 'valuable', value: 90, stack: 5 },
   dice: { name: 'Loaded Dice', icon: '🎲', desc: 'Sell it to the Fence.', kind: 'valuable', value: 140, stack: 5 },
   hat: { name: 'Silk Top Hat', icon: '🎩', desc: 'Sell it to the Fence.', kind: 'valuable', value: 260 },
@@ -82,10 +83,10 @@ export const ITEMS = {
 // Loot tables by danger tier (1 outskirts, 2 the strip, 3 the casino, 4 the vault and the boss).
 // Each entry is [weight, what]. 'gun' rolls a gun from GUN_TIERS with a rarity boost.
 export const LOOT = {
-  1: [[30, 'chips'], [18, 'bandage'], [14, 'ammo'], [16, 'cards'], [10, 'dice'], [8, 'gun'], [4, 'plate'], [6, 'cocoa']],
-  2: [[22, 'chips'], [12, 'bandage'], [8, 'soda'], [12, 'ammo'], [10, 'dice'], [10, 'hat'], [6, 'watch'], [12, 'gun'], [8, 'plate'], [5, 'cocoa']],
-  3: [[18, 'chips'], [8, 'soda'], [10, 'ammo'], [10, 'watch'], [8, 'ring'], [2, 'trophy'], [3, 'keycard'], [18, 'gun'], [10, 'plate'], [0.5, 'clover']],
-  4: [[14, 'chips'], [10, 'ring'], [8, 'trophy'], [24, 'gun'], [10, 'soda'], [10, 'plate'], [2, 'clover']],
+  1: [[30, 'chips'], [18, 'bandage'], [14, 'ammo'], [16, 'cards'], [10, 'dice'], [8, 'gun'], [4, 'plate'], [6, 'cocoa'], [6, 'grenade']],
+  2: [[22, 'chips'], [12, 'bandage'], [8, 'soda'], [12, 'ammo'], [10, 'dice'], [10, 'hat'], [6, 'watch'], [12, 'gun'], [8, 'plate'], [5, 'cocoa'], [8, 'grenade']],
+  3: [[18, 'chips'], [8, 'soda'], [10, 'ammo'], [10, 'watch'], [8, 'ring'], [2, 'trophy'], [3, 'keycard'], [18, 'gun'], [10, 'plate'], [8, 'grenade'], [0.5, 'clover']],
+  4: [[14, 'chips'], [10, 'ring'], [8, 'trophy'], [24, 'gun'], [10, 'soda'], [10, 'plate'], [6, 'grenade'], [2, 'clover']],
 };
 export const CHIPS_BY_TIER = { 1: [15, 40], 2: [30, 80], 3: [60, 160], 4: [150, 400] };
 
@@ -100,7 +101,7 @@ export const ENEMIES = {
 };
 
 // Raider bots: other players looting the same map. Neutral unless provoked.
-export const RAIDERS = { count: 4, hostileChance: 0.25, accuracy: 0.16, reaction: 0.9 };
+export const RAIDERS = { count: 6, hostileChance: 0.25, accuracy: 0.16, reaction: 0.9 };
 
 export const SETTINGS_DEFAULT = { sensitivity: 1, fov: 72, volume: 0.6, firstPerson: false };
 
@@ -114,7 +115,7 @@ export const HUB_SLOTS = [
 // In-raid loot slots: pay with chips you found, the prize pops out of the machine.
 export const RAID_SLOT_COST = { 1: 40, 2: 80, 3: 150 };
 
-export const START_STASH = { chips: 400, items: [{ id: 'gun', kind: 'pistol', rarity: 0, ammo: 60 }, { id: 'bandage', qty: 3 }] };
+export const START_STASH = { chips: 400, items: [{ id: 'gun', kind: 'pistol', rarity: 0, ammo: 60 }, { id: 'bandage', qty: 3 }, { id: 'grenade', qty: 2 }] };
 
 export const COLORS = [0xff5d5d, 0x4dabff, 0xffd23f, 0x5ee27a, 0xc77dff, 0xff9f43, 0x2ee6d6, 0xff7eb6];
 export const HATS = ['top', 'party', 'cowboy', 'visor', 'crown'];

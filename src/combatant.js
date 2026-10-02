@@ -118,6 +118,17 @@ export class Combatant {
     return null;
   }
 
+  // Lob a Cherry Bomb along `dir` from `origin`.
+  throwGrenade(origin, dir) {
+    if (!this.alive || this.using) return 'Busy';
+    if (this.throwCooldown > 0) return 'Still winding up';
+    if (!this.takeOne('grenade')) return 'No Cherry Bombs';
+    this.throwCooldown = 0.9;
+    this.raid.spawnGrenade(this, origin, dir);
+    this.char.recoil(1.5);
+    return null;
+  }
+
   get forward() {
     return new THREE.Vector3(-Math.sin(this.yaw), 0, -Math.cos(this.yaw));
   }
@@ -185,6 +196,7 @@ export class Combatant {
     this.onGround = r.onGround;
     if (r.landed > 5) this.char.land(r.landed);
     this.cooldown -= dt;
+    this.throwCooldown = Math.max(0, (this.throwCooldown || 0) - dt);
 
     // Finish using a consumable.
     if (this.using && this.alive) {

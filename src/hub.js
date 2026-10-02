@@ -117,7 +117,7 @@ export class Hub {
       <section><h3>Raid loadout</h3><p class="hint">Whatever you bring is lost if you die. Click to send it back to the stash.</p>
         <div class="wslots">${lo.weapons.map((g, i) => (g ? this.itemCard(g, 'unequip', i) : `<div class="item empty">Weapon ${i + 1}<br><small>empty</small></div>`)).join('')}</div>
         <div class="grid">${lo.items.map((it, i) => this.itemCard(it, 'unpack', i)).join('')}${Array(Math.max(0, LOADOUT_SLOTS - lo.items.length)).fill('<div class="item empty"></div>').join('')}</div>
-        ${noGuns ? '<button class="btn" data-act="freekit">Grab a free kit (Pea Shooter + bandages)</button>' : ''}
+        ${noGuns ? '<button class="btn" data-act="freekit">Grab a free kit (Pea Shooter, bandages, a Cherry Bomb)</button>' : ''}
       </section>
       <section><h3>Stash</h3><p class="hint">Click to pack it for the raid.</p>
         <div class="grid">${d.stash.items.map((it, i) => this.itemCard(it, 'pack', i)).join('') || '<p class="hint">Empty. Go raid!</p>'}</div>
@@ -256,7 +256,7 @@ export class Hub {
         save.update((x) => { addToStash(x.stash.items, x.loadout.items[i]); x.loadout.items.splice(i, 1); });
         break;
       case 'freekit':
-        save.update((x) => { x.loadout.weapons[0] = makeGun('pistol', 0); addToList(x.loadout.items, makeItem('bandage', 2), LOADOUT_SLOTS); });
+        save.update((x) => { x.loadout.weapons[0] = makeGun('pistol', 0); addToList(x.loadout.items, makeItem('bandage', 2), LOADOUT_SLOTS); addToList(x.loadout.items, makeItem('grenade', 1), LOADOUT_SLOTS); });
         this.toast('Free kit packed. Try not to lose it.');
         break;
       case 'sell': {

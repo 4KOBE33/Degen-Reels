@@ -128,6 +128,11 @@ export class RaiderBrain {
         // Bots pause between taps so they aren't laser beams.
         if (c.weapon !== 'smg') this.reaction = 0.25 + Math.random() * 0.5;
       }
+      // Now and then, lob a Cherry Bomb at someone in the open.
+      if (this.los && d > 8 && d < 24 && c.count('grenade') && Math.random() < dt * 0.12) {
+        const from = c.head(new THREE.Vector3());
+        c.throwGrenade(from, raid.aimGrenade(from, t.pos));
+      }
       if (Number.isFinite(c.ammo) && c.ammo <= 0) {
         if (c.reload()) c.switchTo(c.active ? 0 : 1);
       }

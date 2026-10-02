@@ -2,7 +2,7 @@
 // then reach an extraction point before time runs out. Die and you lose everything you carried.
 import * as THREE from 'three';
 import {
-  WEAPONS, RARITIES, RAID_TIME, EXTRACT_TIME, BOSS_TIME, RAIDERS, RAIDER_NAMES, COLORS, HATS, ENEMIES,
+  WEAPONS, RARITIES, RAID_TIME, EXTRACT_TIME, BOSS_TIME, RAIDERS, RAIDER_NAMES, COLORS, HATS, ENEMIES, ITEMS,
 } from './config.js';
 import { buildMap, drawMinimap, neonSign } from './map.js';
 import { SlotMachine } from './slots.js';
@@ -23,6 +23,10 @@ import { sfx } from './audio.js';
 
 const raycaster = new THREE.Raycaster();
 const tmp = new THREE.Vector3();
+// Cherry Bomb throws.
+const GRENADE_SPEED = 17;
+const GRENADE_LIFT = 4.5;
+const GRENADE_GRAVITY = 22;
 
 export class Raid {
   constructor(hud, mapId = 'vegas') {
@@ -51,6 +55,7 @@ export class Raid {
     this.machines = [];
     this.pickups = [];
     this.rockets = [];
+    this.grenades = [];
     this.player = null;
     this.active = false;
     this.populate();
@@ -144,6 +149,7 @@ export class Raid {
   }
 
   spawnMachine(type, x, z) {
+    if (type !== 'gator' && type !== 'boss') [x, z] = this.openSpot(x, z, 0.9);
     const m = new Machine(this, type, x, z);
     this.machines.push(m);
     return m;
@@ -153,10 +159,12 @@ export class Raid {
     const taken = new Set(this.combatants.map((c) => c.name));
     const name = pick(RAIDER_NAMES.filter((n) => !taken.has(n))) || 'Some Raider';
     const c = new Combatant(this, { name, color: pick(COLORS), hat: pick(HATS) });
-    const [x, z] = pick(this.map.spawns);
-    c.pos.set(x + (Math.random() - 0.5) * 10, 0, z + (Math.random() - 0.5) * 10);
+    const [sx, sz] = pick(this.map.spawns);
+    const [x, z] = this.openSpot(sx + (Math.random() - 0.5) * 10, sz + (Math.random() - 0.5) * 10);
+    c.pos.set(x, 0, z);
     c.equip(makeGun(pick(['pistol', 'pistol', 'smg', 'shotgun']), rollRarity(1)));
     c.backpack.push(makeItem('bandage', 2));
+    if (Math.random() < 0.35) c.backpack.push(makeItem('grenade', randInt(1, 2)));
     if (Math.random() < 0.5) c.backpack.push(rollLoot(2).chips ? makeItem('dice') : rollLoot(2));
     c.chips = randInt(20, 120);
     this.combatants.push(c);
@@ -173,6 +181,8 @@ export class Raid {
     this.chips.clear();
     for (const r of this.rockets) this.scene.remove(r.mesh);
     this.rockets = [];
+    for (const g of this.grenades) this.scene.remove(g.mesh);
+    this.grenades = [];
     for (const k of this.containers) k.reset();
     for (const s of this.slots) s.user = null;
     this.closeVault();
@@ -193,7 +203,8 @@ export class Raid {
     });
 
     const p = new Combatant(this, { name, color, hat, isPlayer: true });
-    const [x, z] = pick(this.map.spawns);
+    const [sx, sz] = pick(this.map.spawns);
+    const [x, z] = this.openSpot(sx, sz);
     p.pos.set(x, 0, z);
     p.yaw = Math.atan2(x, z);
     for (const gun of loadout.weapons) {
@@ -291,14 +302,15 @@ export class Raid {
     let ok;
     if (isGun(item)) ok = c.equip(item) || addToList(c.backpack, item, c.capacity);
     else ok = addToList(c.backpack, item, c.capacity);
-    if (!ok) return c.isPlayer ? 'Backpack full. Press Tab to drop something.' : 'full';
+    if (!ok) return c.isPlayer ? 'Backpack full. Press Q and drop something.' : 'full';
     pickup.remove();
     this.pickups = this.pickups.filter((p) => p !== pickup);
     if (c.isPlayer) {
       const info = itemInfo(item);
       sfx.pickup();
       if (info.rarity >= 2) sfx.win();
-      this.hud.toast(`+ ${info.icon} ${info.name}`, info.rarity >= 2 ? 'big' : '');
+      const hint = { ammo: ' · press R to reload', grenade: ' · hold T to throw', bandage: ' · press H to heal', soda: ' · press H to heal', plate: ' · press F to use', cocoa: ' · press G to drink' }[item.id] || '';
+      this.hud.toast(`+ ${info.icon} ${info.name}${hint}`, info.rarity >= 2 ? 'big' : '');
     }
     return null;
   }
@@ -311,6 +323,20 @@ export class Raid {
     const p = new ItemPickup(this, spot, item, from);
     this.pickups.push(p);
     return p;
+  }
+
+  // The nearest open ground to (x, z), so nobody spawns inside a rock or a wall.
+  openSpot(x, z, pad = 0.7) {
+    if (this.map.isFree(x, z, pad)) return [x, z];
+    for (let r = 1.5; r <= 12; r += 1.5) {
+      for (let k = 0; k < 12; k++) {
+        const a = (k / 12) * Math.PI * 2;
+        const nx = x + Math.cos(a) * r;
+        const nz = z + Math.sin(a) * r;
+        if (this.map.isFree(nx, nz, pad)) return [nx, nz];
+      }
+    }
+    return [x, z];
   }
 
   findDropSpot(from, want) {
@@ -392,7 +418,10 @@ export class Raid {
     raycaster.set(origin, dir);
     raycaster.far = range;
     const hit = raycaster.intersectObjects(targets, false)[0];
-    if (hit) return { hit: true, point: hit.point.clone(), target: hit.object.userData.actor || null, crit: hit.object.userData.crit || 1, distance: hit.distance };
+    if (hit) {
+      const normal = hit.face ? hit.face.normal.clone().transformDirection(hit.object.matrixWorld) : null;
+      return { hit: true, point: hit.point.clone(), target: hit.object.userData.actor || null, crit: hit.object.userData.crit || 1, distance: hit.distance, normal };
+    }
     return { hit: false, point: origin.clone().addScaledVector(dir, range), target: null, distance: range };
   }
 
@@ -524,14 +553,146 @@ export class Raid {
     }
   }
 
+  // ---------- grenades ----------
+
+  // Where a throw starts and how fast it goes. Shared by real throws and the aiming arc.
+  grenadeLaunch(origin, dir) {
+    const pos = origin.clone().addScaledVector(dir, 0.6);
+    const vel = dir.clone().multiplyScalar(GRENADE_SPEED);
+    vel.y += GRENADE_LIFT;
+    return { pos, vel };
+  }
+
+  // Move a grenade one step: gravity, bounces off walls and floors. Returns true if it bounced.
+  stepGrenade(g, dt) {
+    let bounced = false;
+    g.vel.y -= GRENADE_GRAVITY * dt;
+    const speed = g.vel.length();
+    if (speed > 0.01) {
+      const dir = g.vel.clone().divideScalar(speed);
+      const hit = this.raycast(g.pos, dir, speed * dt + 0.15, g.owner, { solidsOnly: true });
+      if (hit.hit && hit.normal) {
+        const n = hit.normal;
+        g.pos.copy(hit.point).addScaledVector(n, 0.16);
+        g.vel.addScaledVector(n, -2 * g.vel.dot(n)).multiplyScalar(0.45);
+        bounced = speed > 3;
+      } else g.pos.addScaledVector(g.vel, dt);
+    }
+    const floor = this.map.groundAt(g.pos.x, g.pos.z, g.pos.y) + 0.15;
+    if (g.pos.y < floor) {
+      g.pos.y = floor;
+      if (g.vel.y < 0) {
+        bounced = g.vel.y < -3;
+        g.vel.y = Math.abs(g.vel.y) < 2 ? 0 : -g.vel.y * 0.35;
+        g.vel.x *= 0.6;
+        g.vel.z *= 0.6;
+      }
+    }
+    return bounced;
+  }
+
+  spawnGrenade(owner, origin, dir) {
+    const def = ITEMS.grenade;
+    const { pos, vel } = this.grenadeLaunch(origin, dir);
+    const mesh = new THREE.Group();
+    const ball = part(new THREE.SphereGeometry(0.2, 12, 10), 0xe63946, { ink: 0.03, shadow: false });
+    const stem = part(new THREE.CylinderGeometry(0.025, 0.025, 0.25, 6), 0x2d6a4f, { ink: 0.015, shadow: false });
+    stem.position.set(0.05, 0.25, 0);
+    stem.rotation.z = -0.4;
+    const spark = new THREE.Mesh(new THREE.SphereGeometry(0.07, 6, 5), new THREE.MeshBasicMaterial({ color: 0xffd23f }));
+    spark.position.set(0.1, 0.36, 0);
+    mesh.add(ball, stem, spark);
+    mesh.position.copy(pos);
+    this.scene.add(mesh);
+    this.grenades.push({ mesh, spark, pos, vel, owner, fuse: def.fuse, blink: 0 });
+    sfx.lever(pos, this.listener);
+  }
+
+  updateGrenades(dt) {
+    for (let i = this.grenades.length - 1; i >= 0; i--) {
+      const g = this.grenades[i];
+      g.fuse -= dt;
+      if (this.stepGrenade(g, dt)) sfx.tick(g.pos, this.listener);
+      g.mesh.position.copy(g.pos);
+      g.mesh.rotation.x += g.vel.length() * dt * 2;
+      // The fuse blinks faster as it burns down.
+      g.blink += dt * (g.fuse < 0.7 ? 18 : 7);
+      g.spark.visible = Math.floor(g.blink) % 2 === 0;
+      if (g.fuse <= 0) {
+        const def = ITEMS.grenade;
+        this.explode(g.pos.clone().setY(g.pos.y + 0.3), { owner: g.owner, damage: def.damage, splash: def.splash });
+        this.scene.remove(g.mesh);
+        this.grenades.splice(i, 1);
+      }
+    }
+  }
+
+  // Points along the path a throw would take, for the aiming arc.
+  grenadeArc(owner, origin, dir) {
+    const g = { ...this.grenadeLaunch(origin, dir), owner };
+    const pts = [g.pos.clone()];
+    const dt = 1 / 30;
+    let bounces = 0;
+    for (let t = 0; t < ITEMS.grenade.fuse && bounces < 2; t += dt) {
+      if (this.stepGrenade(g, dt)) bounces++;
+      pts.push(g.pos.clone());
+    }
+    return pts;
+  }
+
+  // Draw the aiming arc as a trail of dots plus a ring showing the blast.
+  showArc(pts) {
+    if (!this.arc) {
+      if (!pts) return;
+      const dotGeo = new THREE.SphereGeometry(0.07, 6, 5);
+      const dotMat = new THREE.MeshBasicMaterial({ color: 0xffd23f, transparent: true, opacity: 0.9 });
+      const dots = Array.from({ length: 32 }, () => new THREE.Mesh(dotGeo, dotMat));
+      const ring = new THREE.Mesh(new THREE.RingGeometry(0.85, 1, 40), new THREE.MeshBasicMaterial({ color: 0xff5d5d, transparent: true, opacity: 0.7, side: THREE.DoubleSide, depthWrite: false }));
+      ring.rotation.x = -Math.PI / 2;
+      ring.scale.setScalar(ITEMS.grenade.splash);
+      this.arc = new THREE.Group();
+      this.arc.add(ring, ...dots);
+      this.arc.userData = { dots, ring };
+      this.scene.add(this.arc);
+    }
+    this.arc.visible = !!pts;
+    if (!pts) return;
+    const { dots, ring } = this.arc.userData;
+    dots.forEach((d, i) => {
+      const p = pts[i * 2 + 1];
+      d.visible = !!p;
+      if (p) d.position.copy(p);
+    });
+    const end = pts[pts.length - 1];
+    ring.position.set(end.x, this.map.groundAt(end.x, end.z, end.y) + 0.06, end.z);
+  }
+
+  // A bot picks a throw angle that lands near `to`.
+  aimGrenade(from, to) {
+    const dx = to.x - from.x;
+    const dz = to.z - from.z;
+    const d = Math.hypot(dx, dz) || 1;
+    let best = null;
+    for (let pitch = -0.3; pitch <= 0.9; pitch += 0.05) {
+      const dir = new THREE.Vector3((dx / d) * Math.cos(pitch), Math.sin(pitch), (dz / d) * Math.cos(pitch));
+      const vh = GRENADE_SPEED * Math.cos(pitch);
+      const vy = GRENADE_SPEED * Math.sin(pitch) + GRENADE_LIFT;
+      const h0 = from.y - to.y;
+      const tLand = (vy + Math.sqrt(Math.max(0, vy * vy + 2 * GRENADE_GRAVITY * h0))) / GRENADE_GRAVITY;
+      const err = Math.abs(vh * tLand - d);
+      if (!best || err < best.err) best = { dir, err };
+    }
+    return best.dir;
+  }
+
   explode(point, rocket) {
-    const w = WEAPONS.rocket;
+    const w = { splash: rocket.splash || WEAPONS.rocket.splash, damage: WEAPONS.rocket.damage };
     const owner = rocket.owner;
     this.fx.explosion(point, w.splash);
     sfx.boom(point, this.listener);
     const pd = this.player && this.player.alive ? this.player.pos.distanceTo(point) : 99;
     this.shake = Math.max(this.shake, Math.max(0, 0.6 - pd / 30));
-    const base = rocket.damage || w.damage * RARITIES[rocket.rarity].damage;
+    const base = rocket.damage || w.damage * RARITIES[rocket.rarity || 0].damage;
     for (const a of this.actors) {
       if (!a.alive) continue;
       const center = a.center(new THREE.Vector3());
@@ -679,6 +840,7 @@ export class Raid {
     for (const pk of this.pickups) pk.update(dt);
     if (this.vaultOpen && this.vaultDoor.position.y < 14) this.vaultDoor.position.y += dt * 4;
     this.updateRockets(dt);
+    this.updateGrenades(dt);
     this.hazards.update(dt);
     this.chips.update(dt);
     this.map.update(dt);
@@ -694,7 +856,7 @@ export class Raid {
     for (const mark of [300, 120, 60, 30]) {
       if (this.timeLeft <= mark && !this.warned[mark]) {
         this.warned[mark] = true;
-        this.hud.toast(`⏰ ${mark >= 60 ? `${mark / 60} minute${mark > 60 ? 's' : ''}` : `${mark} seconds`} until The House locks down Lost Vegas. Get to an exit!`, 'big');
+        this.hud.toast(`⏰ ${mark >= 60 ? `${mark / 60} minute${mark > 60 ? 's' : ''}` : `${mark} seconds`} until The House locks down ${this.map.name}. Get to an exit!`, 'big');
       }
     }
     if (this.timeLeft <= 0) {

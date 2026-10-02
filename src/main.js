@@ -86,6 +86,11 @@ $('povBtn').addEventListener('click', () => controller.togglePov());
 hud.onDrop = (where, i) => raid.dropFromInventory(raid.player, where, i);
 hud.onEquip = (i) => { const r = raid.equipFromPack(raid.player, i); if (r) hud.toast(r); };
 hud.onUnequip = (i) => { const r = raid.unequipToPack(raid.player, i); if (r) hud.toast(r); };
+hud.onReload = () => {
+  if (!raid.player.gun) { hud.toast('Switch to a gun first (1 or 2)'); return; }
+  const refusal = raid.player.reload();
+  hud.toast(refusal || 'Reloaded. One 📦 Ammo Box used.');
+};
 hud.onUse = (id) => {
   const refusal = raid.player.startUsing(id);
   if (refusal) hud.toast(refusal);

@@ -112,21 +112,21 @@ function skyDome([topC, midC, lowC]) {
 // The maps you can deploy to. Each has its own look, size and layout builder below.
 export const MAPS = {
   vegas: {
-    name: 'Lost Vegas', icon: '🌵', size: 'Huge', danger: 'Medium', half: 175,
+    name: 'Lost Vegas', icon: '🌵', size: 'Huge', danger: 'Medium', half: 240, wilds: 'The Desert',
     blurb: 'A sun-baked desert strip. The Lucky Dump Grand casino sits in the middle with a vault in the back.',
     sky: [0x2a1650, 0xb3477a, 0xf6a35c], fog: 0xd77a6a,
     ground: { base: '#e8b878', a: 'rgba(170,110,60,0.18)', b: 'rgba(255,230,180,0.25)' },
     mapGround: '#e7c08a', hemi: [0xffe2c4, 0x7a4a5a, 1.7], sun: [0xffd2a1, 2.3], mountains: [0xa0522d, 0x8b4513], glow: 0xff3fa4, tough: 1,
   },
   frost: {
-    name: 'Frostbite Peaks', icon: '🏔️', size: 'Large', danger: 'Hard', half: 140,
+    name: 'Frostbite Peaks', icon: '🏔️', size: 'Huge', danger: 'Hard', half: 200, wilds: 'The Backcountry',
     blurb: 'A snowed-in ski town. Machines are tougher up here, and the Alpine Ace Lodge hides the good stuff.',
     sky: [0x1e3a5f, 0x7aa6d6, 0xdbeafe], fog: 0xc7d9ef,
     ground: { base: '#eef2f7', a: 'rgba(148,163,184,0.22)', b: 'rgba(255,255,255,0.7)' },
     mapGround: '#eef3f8', hemi: [0xeef6ff, 0x8090b0, 1.8], sun: [0xfff4e6, 2.2], mountains: [0xe2e8f0, 0x94a3b8], glow: 0x2ee6d6, tough: 1.3,
   },
   bayou: {
-    name: 'Bayou Royale', icon: '🐊', size: 'Medium', danger: 'Medium', half: 130,
+    name: 'Bayou Royale', icon: '🐊', size: 'Large', danger: 'Medium', half: 185, wilds: 'The Swamp',
     blurb: 'A muggy swamp town wrapped around the Riverboat Royale, a casino on a paddle steamer.',
     sky: [0x173326, 0x5e8a54, 0xe6c97a], fog: 0x9aa97f,
     ground: { base: '#6f8f3c', a: 'rgba(40,70,20,0.3)', b: 'rgba(170,190,90,0.3)' },
@@ -660,11 +660,136 @@ export function buildMap(scene, mapId = 'vegas') {
     };
   }
 
+  // ---------- bigger set pieces for the outer areas ----------
+
+  const fencePanel = new THREE.MeshBasicMaterial({ color: 0x9ca3af, transparent: true, opacity: 0.28, side: THREE.DoubleSide, depthWrite: false });
+  // A straight chain-link fence between two points on the same row or column.
+  function fence(x1, z1, x2, z2, h = 2.6) {
+    const horiz = Math.abs(z2 - z1) < Math.abs(x2 - x1);
+    const len = horiz ? Math.abs(x2 - x1) : Math.abs(z2 - z1);
+    if (len < 0.5) return;
+    const cx = (x1 + x2) / 2;
+    const cz = (z1 + z2) / 2;
+    const panel = new THREE.Mesh(new THREE.PlaneGeometry(len, h), fencePanel);
+    panel.position.set(cx, h / 2, cz);
+    if (!horiz) panel.rotation.y = Math.PI / 2;
+    statics.add(panel);
+    const rail = part(new THREE.BoxGeometry(horiz ? len : 0.1, 0.1, horiz ? 0.1 : len), 0x6b7280, { ink: 0 });
+    rail.position.set(cx, h, cz);
+    statics.add(rail);
+    for (let t = 0; t <= len + 0.01; t += 4) {
+      const post = part(new THREE.CylinderGeometry(0.08, 0.08, h + 0.2, 6), 0x4b5563, { ink: 0.015, shadow: false });
+      post.position.set(horiz ? Math.min(x1, x2) + t : cx, (h + 0.2) / 2, horiz ? cz : Math.min(z1, z2) + t);
+      statics.add(post);
+    }
+    box(cx, cz, horiz ? len : 0.2, horiz ? 0.2 : len, h);
+  }
+  // A fenced yard with a gate in the middle of each listed side. Counts as an outdoor zone.
+  function yard({ name, x, z, w, d, gates = ['s'], gate = 8, tier = 2, mapColor = '#8a8a8a' }) {
+    const hw = w / 2;
+    const hd = d / 2;
+    const side = (key, ax, az, bx, bz) => {
+      if (!gates.includes(key)) { fence(ax, az, bx, bz); return; }
+      const mx = (ax + bx) / 2;
+      const mz = (az + bz) / 2;
+      const horiz = az === bz;
+      fence(ax, az, horiz ? mx - gate / 2 : mx, horiz ? mz : mz - gate / 2);
+      fence(horiz ? mx + gate / 2 : mx, horiz ? mz : mz + gate / 2, bx, bz);
+    };
+    side('n', x - hw, z - hd, x + hw, z - hd);
+    side('s', x - hw, z + hd, x + hw, z + hd);
+    side('w', x - hw, z - hd, x - hw, z + hd);
+    side('e', x + hw, z - hd, x + hw, z + hd);
+    zones.push({ name, x, z, w, d, tier });
+    minimap.push({ x, z, w, d, color: mapColor, label: name, tier, yard: true });
+  }
+
+  function waterTower(x, z, color = 0xd1d5db, label = null) {
+    const g = new THREE.Group();
+    g.position.set(x, 0, z);
+    for (const [dx, dz] of [[-1.8, -1.8], [1.8, -1.8], [-1.8, 1.8], [1.8, 1.8]]) {
+      const leg = part(new THREE.CylinderGeometry(0.2, 0.25, 10, 6), 0x6b7280, { ink: 0.02 });
+      leg.position.set(dx, 5, dz);
+      g.add(leg);
+    }
+    const tank = part(new THREE.CylinderGeometry(3.4, 3.4, 4.5, 16), color, { ink: 0.05 });
+    tank.position.y = 12.2;
+    const cap = part(new THREE.ConeGeometry(3.6, 2, 16), 0x4b5563, { ink: 0.04 });
+    cap.position.y = 15.4;
+    g.add(tank, cap);
+    if (label) {
+      const sg = neonSign(label, '#ffd23f', 6);
+      sg.position.set(0, 12.2, 3.5);
+      g.add(sg);
+    }
+    statics.add(g);
+    for (const [dx, dz] of [[-1.8, -1.8], [1.8, -1.8], [-1.8, 1.8], [1.8, 1.8]]) circle(x + dx, z + dz, 0.3, 10);
+  }
+
+  function watchtower(x, z, color = 0x8b5a2b) {
+    const g = new THREE.Group();
+    g.position.set(x, 0, z);
+    for (const [dx, dz] of [[-1.4, -1.4], [1.4, -1.4], [-1.4, 1.4], [1.4, 1.4]]) {
+      const leg = part(new THREE.BoxGeometry(0.3, 6, 0.3), color, { ink: 0.02 });
+      leg.position.set(dx, 3, dz);
+      g.add(leg);
+    }
+    const deck = part(new THREE.BoxGeometry(3.6, 0.3, 3.6), color, { ink: 0.03 });
+    deck.position.y = 6;
+    const rail = part(new THREE.BoxGeometry(3.6, 1, 3.6), color, { ink: 0.03 });
+    rail.position.y = 6.6;
+    const roofCone = part(new THREE.ConeGeometry(3, 1.6, 4), 0x2b2140, { ink: 0.04 });
+    roofCone.position.y = 8.6;
+    roofCone.rotation.y = Math.PI / 4;
+    g.add(deck, rail, roofCone);
+    statics.add(g);
+    for (const [dx, dz] of [[-1.4, -1.4], [1.4, -1.4], [-1.4, 1.4], [1.4, 1.4]]) circle(x + dx, z + dz, 0.25, 6);
+  }
+
+  function tent(x, z, color = 0x2a9d8f) {
+    const t = part(new THREE.ConeGeometry(2.3, 2.6, 4), color, { ink: 0.04 });
+    t.position.set(x, 1.3, z);
+    t.rotation.y = Math.random() * Math.PI;
+    statics.add(t);
+    circle(x, z, 1.6, 2.6);
+  }
+
+  // A railway boxcar. Good cover.
+  function boxcar(x, z, color = 0x9b2226) {
+    const body = part(new THREE.BoxGeometry(3.6, 3.4, 12), color, { ink: 0.05 });
+    body.position.set(x, 2.5, z);
+    const roofTop = part(new THREE.BoxGeometry(3.8, 0.3, 12.2), 0x3f3f46, { ink: 0.02 });
+    roofTop.position.set(x, 4.3, z);
+    statics.add(body, roofTop);
+    for (const dz of [-4, 4]) {
+      const truck = part(new THREE.BoxGeometry(3, 0.8, 2.6), 0x1f2937, { ink: 0.02 });
+      truck.position.set(x, 0.4, z + dz);
+      statics.add(truck);
+    }
+    box(x, z, 3.6, 12, 4.4);
+  }
+
+  function rails(x, z1, z2) {
+    const len = Math.abs(z2 - z1);
+    const cz = (z1 + z2) / 2;
+    for (const dx of [-0.75, 0.75]) flat(x + dx, cz, 0.18, len, toon(0x6b7280), 0.08);
+    for (let t = Math.min(z1, z2); t < Math.max(z1, z2); t += 1.6) flat(x, t, 2.6, 0.35, toon(0x5b4636), 0.06);
+  }
+
+  function pyramid(x, z, s, color = 0xe9c46a) {
+    const p = part(new THREE.ConeGeometry(s, s * 0.9, 4), color, { ink: 0.08 });
+    p.position.set(x, s * 0.45, z);
+    p.rotation.y = Math.PI / 4;
+    statics.add(p);
+    box(x, z, s * 1.2, s * 1.2, s * 0.9);
+  }
+
   const kit = {
     H, THREE, statics, zones, minimap, containers, slotSpots, enemySpots, solids,
     part, toon, neonSign, carpetTexture, flat, box, circle, addCollider, addRayBlocker,
     car, palm, cactus, rock, streetLight, billboard, crateStack, building, container, enemies,
     pine, snowman, cypress, reeds, pond, mountains, scatter, casino, fire, ponds, fires,
+    fence, yard, waterTower, watchtower, tent, boxcar, rails, pyramid, boardTexture,
   };
   const layout = BUILDERS[mapId in BUILDERS ? mapId : 'vegas'](kit);
   mountains(def.mountains);
@@ -752,7 +877,7 @@ export function buildMap(scene, mapId = 'vegas') {
       for (const zn of zones) {
         if (Math.abs(x - zn.x) <= zn.w / 2 && Math.abs(z - zn.z) <= zn.d / 2 && (!best || zn.w * zn.d < best.w * best.d)) best = zn;
       }
-      return best ? best.name : 'The Desert';
+      return best ? best.name : def.wilds;
     },
 
     isFree(x, z, r = 1) {
@@ -845,7 +970,7 @@ export function buildMap(scene, mapId = 'vegas') {
 
 // The overhead map, drawn once into a canvas. The HUD draws live markers on top.
 // `labels` adds building names (for the full map; the minimap stays uncluttered).
-const SKIP_LABELS = new Set(['Trailer', 'Ski Cabin', 'Stilt Shack', 'Ice Hut', 'Vault']);
+const SKIP_LABELS = new Set(['Trailer', 'Ski Cabin', 'Stilt Shack', 'Ice Hut', 'Vault', 'Snack Bar', 'Farm Office', 'Bait Shed', 'Buried Cabin']);
 
 function roundRect(c, x, y, w, h, r) {
   r = Math.min(r, w / 2, h / 2);
@@ -889,6 +1014,17 @@ export function drawMinimap(map, size = 512, labels = false) {
     const y = tx(r.z - r.d / 2);
     const w = r.w * s;
     const h = r.d * s;
+    if (r.yard) {
+      // Fenced yards: a faint lot with a dashed fence line.
+      c.fillStyle = 'rgba(27,15,43,0.08)';
+      c.fillRect(x, y, w, h);
+      c.strokeStyle = r.tier >= 3 ? '#b8860b' : 'rgba(27,15,43,0.55)';
+      c.lineWidth = 1.5 * k;
+      c.setLineDash([4 * k, 3 * k]);
+      c.strokeRect(x, y, w, h);
+      c.setLineDash([]);
+      continue;
+    }
     c.fillStyle = r.color;
     roundRect(c, x, y, w, h, Math.min(w, h) * 0.3);
     c.fill();
@@ -931,6 +1067,7 @@ export function drawMinimap(map, size = 512, labels = false) {
 
   if (labels) {
     const seen = new Set();
+    const placed = [];
     c.font = `900 ${Math.round(13 * k)}px Nunito, system-ui, sans-serif`;
     c.textAlign = 'center';
     c.textBaseline = 'middle';
@@ -940,8 +1077,13 @@ export function drawMinimap(map, size = 512, labels = false) {
       const text = r.label;
       const tw = c.measureText(text).width + 12 * k;
       const th = 18 * k;
-      const lx = tx(r.x);
-      const ly = Math.min(size - th, tx(r.z + r.d / 2) + th * 0.9);
+      // Keep labels on the map and off each other: nudge down, then up, else skip.
+      const lx = Math.max(tw / 2 + 2, Math.min(size - tw / 2 - 2, tx(r.x)));
+      const base = Math.min(size - th, tx(r.z + r.d / 2) + th * 0.9);
+      const hits = (y) => placed.some((q) => Math.abs(q.x - lx) < (q.w + tw) / 2 + 2 && Math.abs(q.y - y) < th + 1);
+      const ly = [0, 1, -1, 2, -2].map((n) => Math.max(th / 2, Math.min(size - th / 2, base + n * (th + 2)))).find((y) => !hits(y));
+      if (ly === undefined) continue;
+      placed.push({ x: lx, y: ly, w: tw });
       c.fillStyle = r.tier >= 3 ? 'rgba(122,16,40,0.92)' : 'rgba(27,15,43,0.82)';
       roundRect(c, lx - tw / 2, ly - th / 2, tw, th, th / 2);
       c.fill();
@@ -961,17 +1103,18 @@ function lostVegas(k) {
   const {
     H, THREE, statics, zones, minimap, slotSpots, part, toon, neonSign, flat, box, circle,
     car, palm, cactus, rock, streetLight, billboard, crateStack, building, container, enemies, casino,
+    watchtower, waterTower, rails, boxcar, pyramid,
   } = k;
   const asphalt = toon(0x3b3548);
   // ---------- the strip ----------
 
   // Main road south from the casino, and a cross street.
-  flat(0, 80, 16, 200, asphalt);
+  flat(0, 110, 16, 260, asphalt);
   flat(0, 40, H * 2, 14, asphalt, 0.025);
-  minimap.push({ x: 0, z: 80, w: 16, d: 200, color: '#3b3548' }, { x: 0, z: 40, w: H * 2, d: 14, color: '#3b3548' });
+  minimap.push({ x: 0, z: 110, w: 16, d: 260, color: '#3b3548' }, { x: 0, z: 40, w: H * 2, d: 14, color: '#3b3548' });
   const dash = toon(0xffd23f);
-  for (let z = -15; z < 175; z += 8) if (Math.abs(z - 40) > 9) flat(0, z, 0.4, 3.5, dash, 0.035);
-  for (let x = -170; x < 175; x += 8) if (Math.abs(x) > 10) flat(x, 40, 3.5, 0.4, dash, 0.035);
+  for (let z = -15; z < H; z += 8) if (Math.abs(z - 40) > 9) flat(0, z, 0.4, 3.5, dash, 0.035);
+  for (let x = -H + 4; x < H; x += 8) if (Math.abs(x) > 10) flat(x, 40, 3.5, 0.4, dash, 0.035);
   // Parking lot behind the casino.
   flat(0, -125, 70, 40, asphalt);
   minimap.push({ x: 0, z: -125, w: 70, d: 40, color: '#3b3548' });
@@ -1124,11 +1267,11 @@ function lostVegas(k) {
   enemies('dicer', 106, 150, 1);
 
   // ----- Strip dressing -----
-  for (let z = 0; z < 170; z += 18) {
+  for (let z = 0; z < H - 10; z += 18) {
     streetLight(-9, z);
     streetLight(9, z + 9);
   }
-  for (let x = -160; x < 170; x += 24) if (Math.abs(x) > 12) streetLight(x, 32);
+  for (let x = -H + 10; x < H - 10; x += 24) if (Math.abs(x) > 12) streetLight(x, 32);
   for (const [px, pz] of [[-12, 20], [12, 60], [-12, 100], [12, 120], [-12, 150]]) palm(px, pz);
   for (let i = 0; i < 10; i++) car(i % 2 ? 11 : -11, 70 + i * 9 - (i % 2) * 4, 'z');
   for (let i = 0; i < 10; i++) car(-28 + (i % 5) * 14, -118 + Math.floor(i / 5) * 12, 'z');
@@ -1143,23 +1286,163 @@ function lostVegas(k) {
   enemies('dicer', 100, 40, 1);
   zones.push({ name: 'The Strip', x: 0, z: 80, w: 40, d: 200, tier: 2 });
 
+  // ===== The outer ring: the new, wider desert =====
+
+  // ----- Neon Boneyard (northwest): where old casino signs go to die -----
+  {
+    const bx = -170;
+    const bz = -150;
+    k.yard({ name: 'Neon Boneyard', x: bx, z: bz, w: 56, d: 44, gates: ['s', 'e'], tier: 2, mapColor: '#8d5a97' });
+    const dead = [['GOLDEN NUGGET', '#ffd23f'], ['STARDUST', '#ff7eb6'], ['LUCKY 7', '#2ee6d6'], ['DUNES', '#ff9f43'], ['SAHARA', '#c77dff'], ['FREE BUFFET', '#5ee27a']];
+    dead.forEach(([text, color], i) => {
+      const sg = neonSign(text, color, 12);
+      const x = bx - 18 + (i % 3) * 18;
+      const z = bz - 10 + Math.floor(i / 3) * 18;
+      sg.position.set(x, 1.6, z);
+      sg.rotation.set(-0.35 + Math.random() * 0.2, Math.random() * 0.6 - 0.3, Math.random() * 0.3 - 0.15);
+      statics.add(sg);
+      box(x, z, 12, 1.4, 2.4);
+      if (i % 2 === 0) container('crate', x + 7.5, z + 3, 2);
+    });
+    container('safe', bx + 22, bz - 16, 2);
+    container('locker', bx - 24, bz + 16, 2);
+    slotSpots.push({ x: bx + 20, z: bz + 14, rot: 0, tier: 2 });
+    enemies('slotbot', bx, bz, 2, 20);
+    enemies('dicer', bx, bz + 30, 2, 16);
+  }
+
+  // ----- Area 52 Test Range (southeast… well, north-east): high risk, high reward -----
+  {
+    const ax = 175;
+    const az = -172;
+    k.yard({ name: 'Area 52 Test Range', x: ax, z: az, w: 70, d: 56, gates: ['w', 's'], tier: 3, mapColor: '#4b5563' });
+    building({
+      name: 'Hangar 52', x: ax + 6, z: az - 6, w: 34, d: 22, h: 9, color: 0x9ca3af, trim: 0x1f2937, tier: 3, sign: 'HANGAR 52', signColor: '#5ee27a', mapColor: '#374151',
+      doors: [{ side: 's', at: 0, width: 10 }, { side: 'w', at: 0, width: 3 }],
+    });
+    container('safe', ax - 6, az - 13, 3);
+    container('safe', ax + 18, az - 13, 3);
+    container('locker', ax + 18, az + 1, 3);
+    container('crate', ax - 6, az + 1, 3);
+    crateStack(ax + 6, az - 10);
+    for (const [dx, dz] of [[-31, -24], [31, -24], [-31, 24], [31, 24]]) watchtower(ax + dx, az + dz, 0x4b5563);
+    container('crate', ax - 22, az + 18, 2);
+    container('crate', ax + 24, az + 20, 2);
+    enemies('slotbot', ax + 6, az - 6, 3, 18);
+    enemies('shark', ax - 20, az + 16, 2, 8);
+    enemies('dicer', ax, az + 34, 3, 24);
+    billboard(ax - 42, az + 34, Math.PI / 4, 'NOTHING TO\nSEE HERE', '#1f2937', '#5ee27a');
+  }
+
+  // ----- Starlite Drive-In (southwest) -----
+  {
+    const dx0 = -160;
+    const dz0 = 190;
+    zones.push({ name: 'Starlite Drive-In', x: dx0, z: dz0, w: 64, d: 50, tier: 1 });
+    minimap.push({ x: dx0, z: dz0, w: 64, d: 50, color: '#4b4458', label: 'Starlite Drive-In', tier: 1 });
+    flat(dx0, dz0, 64, 50, asphalt, 0.02);
+    const screen = new THREE.Mesh(new THREE.BoxGeometry(30, 14, 0.6), [
+      toon(0xf8f9fa), toon(0xf8f9fa), toon(0xf8f9fa), toon(0xf8f9fa),
+      new THREE.MeshBasicMaterial({ map: k.boardTexture('TONIGHT:\nTHE HOUSE WINS', '#1b0f2b', '#fff6e0') }), toon(0x6b7280),
+    ]);
+    screen.position.set(dx0, 11, dz0 - 24);
+    statics.add(screen);
+    for (const sx of [-12, 12]) {
+      const leg = part(new THREE.BoxGeometry(0.8, 5, 0.8), 0x6b7280, { ink: 0.02 });
+      leg.position.set(dx0 + sx, 2.5, dz0 - 24);
+      statics.add(leg);
+      box(dx0 + sx, dz0 - 24, 0.8, 0.8, 5);
+    }
+    for (let i = 0; i < 12; i++) car(dx0 - 20 + (i % 4) * 13, dz0 - 8 + Math.floor(i / 4) * 9, 'z', undefined, i % 5 === 0);
+    building({
+      name: 'Snack Bar', x: dx0, z: dz0 + 20, w: 14, d: 8, h: 4, color: 0xffd6a5, trim: 0xe63946, tier: 2, sign: 'SNACKS', signColor: '#ff5d5d', mapColor: '#b5651d',
+      doors: [{ side: 'n', at: 0, width: 3 }],
+    });
+    container('register', dx0 + 3, dz0 + 21, 2);
+    container('locker', dx0 - 4, dz0 + 22, 2);
+    enemies('shark', dx0, dz0, 2, 30);
+    enemies('dicer', dx0, dz0 - 10, 1);
+  }
+
+  // ----- Bust-a-Lane Bowling (far west) -----
+  building({
+    name: 'Bust-a-Lane Bowling', x: -190, z: 85, w: 32, d: 20, h: 6, color: 0xff7eb6, trim: 0x1b0f2b, tier: 2, sign: 'BUST-A-LANE', signColor: '#2ee6d6', mapColor: '#c2457a',
+    doors: [{ side: 'e', at: 0, width: 4 }, { side: 'n', at: -10, width: 2.4 }],
+  });
+  for (let i = 0; i < 4; i++) flat(-196, 78 + i * 4.5, 14, 2.6, toon(0xd4a373), 0.07);
+  container('register', -178, 80, 2);
+  container('locker', -203, 92, 2);
+  container('crate', -203, 78, 2);
+  slotSpots.push({ x: -178, z: 92, rot: -Math.PI / 2, tier: 2 });
+  enemies('slotbot', -170, 85, 1);
+  enemies('shark', -190, 85, 1);
+
+  // ----- Pharaoh's Folly: a half-built pyramid casino that went bust (south of the parking lot) -----
+  {
+    const px = -80;
+    const pz = -205;
+    pyramid(px, pz, 18);
+    zones.push({ name: "Pharaoh's Folly", x: px, z: pz, w: 60, d: 40, tier: 2 });
+    minimap.push({ x: px, z: pz, w: 22, d: 22, color: '#c9a227', label: "Pharaoh's Folly", tier: 2 });
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2;
+      const col = part(new THREE.CylinderGeometry(0.8, 0.9, 5 + (i % 3) * 2, 10), 0xe9c46a, { ink: 0.03 });
+      col.position.set(px + Math.cos(a) * 22, (5 + (i % 3) * 2) / 2, pz + Math.sin(a) * 16);
+      statics.add(col);
+      circle(px + Math.cos(a) * 22, pz + Math.sin(a) * 16, 0.9, 9);
+    }
+    container('safe', px + 14, pz + 12, 2);
+    container('crate', px - 15, pz + 12, 2);
+    container('crate', px + 16, pz - 12, 2);
+    crateStack(px - 18, pz - 10);
+    enemies('slotbot', px, pz + 16, 1);
+    enemies('dicer', px, pz, 2, 30);
+  }
+
+  // ----- Dusty Spur Ranch (southeast) -----
+  {
+    const rx = 175;
+    const rz = 195;
+    building({
+      name: 'Dusty Spur Barn', x: rx, z: rz, w: 22, d: 14, h: 7, color: 0xb23a48, trim: 0xf8f9fa, tier: 1, mapColor: '#8b2c38',
+      doors: [{ side: 'w', at: 0, width: 5 }],
+    });
+    waterTower(rx - 26, rz - 14, 0xd1d5db, 'DUSTY');
+    k.yard({ name: 'Ranch Corral', x: rx - 30, z: rz + 18, w: 24, d: 18, gates: ['n'], tier: 1, mapColor: '#a47148' });
+    container('crate', rx + 6, rz - 3, 1);
+    container('locker', rx + 6, rz + 4, 1);
+    container('crate', rx - 30, rz + 20, 1);
+    enemies('shark', rx - 10, rz, 1);
+    enemies('dicer', rx - 30, rz + 18, 1);
+  }
+
+  // ----- Freight yard along the east edge -----
+  rails(H - 12, -H + 10, H - 10);
+  minimap.push({ x: H - 12, z: 0, w: 3, d: H * 2 - 20, color: '#5b4636' });
+  for (const [z, color] of [[-60, 0x9b2226], [-20, 0x005f73], [70, 0xca6702], [110, 0x9b2226], [150, 0x3a5a40]]) boxcar(H - 12, z, color);
+  zones.push({ name: 'Freight Yard', x: H - 20, z: 40, w: 30, d: 120, tier: 1 });
+  container('crate', H - 18, -40, 1);
+  container('crate', H - 18, 90, 1);
+  container('locker', H - 18, 130, 2);
+  enemies('slotbot', H - 24, 40, 1);
+
   // ----- Helipad and the extraction points -----
   const helipad = part(new THREE.CylinderGeometry(8, 8, 0.3, 32), 0x4b5563, { ink: 0.05 });
-  helipad.position.set(0, 0.15, -158);
+  helipad.position.set(40, 0.15, -222);
   statics.add(helipad);
-  flat(0, -158, 9, 1.4, toon(0xffffff), 0.32);
+  flat(40, -222, 9, 1.4, toon(0xffffff), 0.32);
   const extracts = [
-    { name: 'Helipad', x: 0, z: -158 },
-    { name: 'Getaway Car', x: 0, z: 165 },
-    { name: 'Storm Drain', x: -163, z: 40 },
-    { name: 'Freight Train', x: 163, z: 40 },
+    { name: 'Helipad', x: 40, z: -222 },
+    { name: 'Getaway Car', x: 0, z: H - 10 },
+    { name: 'Storm Drain', x: -H + 10, z: 40 },
+    { name: 'Freight Train', x: H - 20, z: 40 },
   ];
-  car(4, 160, 'z', 0x1b0f2b);
+  car(4, H - 15, 'z', 0x1b0f2b);
 
   // ----- Outskirts -----
   const blocked = (x, z, pad) => zones.some((zn) => Math.abs(x - zn.x) < zn.w / 2 + pad && Math.abs(z - zn.z) < zn.d / 2 + pad)
-    || Math.abs(x) < 14 || Math.abs(z - 40) < 12 || (Math.abs(x) < 40 && z < -100) || extracts.some((e) => Math.hypot(x - e.x, z - e.z) < 12);
-  for (let i = 0; i < 260; i++) {
+    || Math.abs(x) < 14 || Math.abs(z - 40) < 12 || (Math.abs(x) < 40 && z < -100) || x > H - 20 || extracts.some((e) => Math.hypot(x - e.x, z - e.z) < 12);
+  for (let i = 0; i < 480; i++) {
     const x = (Math.random() * 2 - 1) * (H - 6);
     const z = (Math.random() * 2 - 1) * (H - 6);
     if (blocked(x, z, 6)) continue;
@@ -1169,25 +1452,26 @@ function lostVegas(k) {
     else crateStack(x, z);
   }
   // Some loose loot out in the desert.
-  for (let i = 0; i < 18; i++) {
+  for (let i = 0; i < 36; i++) {
     const x = (Math.random() * 2 - 1) * (H - 20);
     const z = (Math.random() * 2 - 1) * (H - 20);
     if (blocked(x, z, 4)) continue;
     container('crate', x, z, 1);
   }
-  for (let i = 0; i < 6; i++) enemies('dicer', (Math.random() * 2 - 1) * 140, (Math.random() * 2 - 1) * 140, 1);
+  for (let i = 0; i < 12; i++) enemies('dicer', (Math.random() * 2 - 1) * 200, (Math.random() * 2 - 1) * 200, 1);
+  for (let i = 0; i < 4; i++) enemies('shark', (Math.random() * 2 - 1) * 200, (Math.random() * 2 - 1) * 200, 1);
 
   return {
     ...cas,
     extracts,
-    spawns: [[-150, 150], [150, 150], [-150, -130], [150, -130], [-160, -20], [160, -20], [80, 165], [-80, 165], [-150, 95], [150, 95]],
+    spawns: [[-215, 215], [215, 120], [-215, -60], [110, -215], [-215, -10], [205, -60], [80, 220], [-60, 220], [-120, 140], [130, 140], [-140, -215]],
     // Cars cruise the strip and the cross street. Don't stand in the road.
     hazards: {
       lanes: [
-        { axis: 'z', at: 3.5, from: -16, to: 172, dir: 1 },
-        { axis: 'z', at: -3.5, from: -16, to: 172, dir: -1 },
-        { axis: 'x', at: 43.5, from: -172, to: 172, dir: 1 },
-        { axis: 'x', at: 36.5, from: -172, to: 172, dir: -1 },
+        { axis: 'z', at: 3.5, from: -16, to: H - 4, dir: 1 },
+        { axis: 'z', at: -3.5, from: -16, to: H - 4, dir: -1 },
+        { axis: 'x', at: 43.5, from: -H + 4, to: H - 4, dir: 1 },
+        { axis: 'x', at: 36.5, from: -H + 4, to: H - 4, dir: -1 },
       ],
     },
   };
@@ -1197,12 +1481,12 @@ function frostbitePeaks(k) {
   const {
     H, THREE, statics, zones, minimap, slotSpots, part, toon, neonSign, flat, box, circle,
     car, rock, streetLight, billboard, crateStack, building, container, enemies, casino,
-    pine, snowman, scatter, fire,
+    pine, snowman, scatter, fire, yard, watchtower, waterTower, tent,
   } = k;
   const path = toon(0xb8c4d6);
-  flat(0, 75, 14, 130, path);
+  flat(0, 105, 14, 190, path);
   flat(0, 40, H * 2, 12, path, 0.025);
-  minimap.push({ x: 0, z: 75, w: 14, d: 130, color: '#94a3b8' }, { x: 0, z: 40, w: H * 2, d: 12, color: '#94a3b8' });
+  minimap.push({ x: 0, z: 105, w: 14, d: 190, color: '#94a3b8' }, { x: 0, z: 40, w: H * 2, d: 12, color: '#94a3b8' });
 
   const cas = casino({
     x: 0, z: -45, name: 'Alpine Ace Lodge', sign: 'ALPINE ACE LODGE', signColor: '#2ee6d6',
@@ -1300,7 +1584,7 @@ function frostbitePeaks(k) {
   enemies('dicer', 85, 70, 2, 30);
 
   // Ski lift towers marching up toward the peaks.
-  for (let i = 0; i < 6; i++) {
+  for (let i = 0; i < 9; i++) {
     const x = -20 - i * 20;
     const z = -100 + i * 4;
     const pole = part(new THREE.CylinderGeometry(0.4, 0.5, 12, 8), 0x475569, { ink: 0.03 });
@@ -1311,37 +1595,190 @@ function frostbitePeaks(k) {
     circle(x, z, 0.5, 12);
   }
   for (let i = 0; i < 6; i++) car(-12 + (i % 3) * 12, -95 - Math.floor(i / 3) * 10, 'z');
-  for (let z = 0; z < 140; z += 22) { streetLight(-8, z); streetLight(8, z + 11); }
+  for (let z = 0; z < H - 10; z += 22) { streetLight(-8, z); streetLight(8, z + 11); }
   billboard(-25, 50, Math.PI / 2, 'FRESH POWDER\nFRESH LOSSES', '#1e3a8a', '#fff6e0');
   billboard(25, 10, -Math.PI / 2, 'THE HOUSE\nNEVER MELTS', '#7c2d12', '#ffd23f');
   zones.push({ name: 'Main Street', x: 0, z: 75, w: 30, d: 130, tier: 2 });
   enemies('slotbot', 0, 60, 1);
   enemies('dicer', 0, 110, 2, 20);
 
+  // ===== The outer ring =====
+
+  // ----- Summit Observatory (northwest peak): the most dangerous spot outside the lodge -----
+  {
+    const ox = -150;
+    const oz = -155;
+    building({
+      name: 'Summit Observatory', x: ox, z: oz, w: 26, d: 26, h: 7, color: 0xe2e8f0, trim: 0x1e293b, tier: 3, sign: 'OBSERVATORY', signColor: '#c77dff', mapColor: '#6d28d9',
+      doors: [{ side: 's', at: 0, width: 4 }, { side: 'e', at: 6, width: 2.4 }],
+    });
+    const dome = part(new THREE.SphereGeometry(10, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2), 0xcbd5e1, { ink: 0.05 });
+    dome.position.set(ox, 7.4, oz);
+    const scope = part(new THREE.CylinderGeometry(1.2, 1.6, 12, 12), 0x334155, { ink: 0.04 });
+    scope.position.set(ox + 4, 14, oz - 2);
+    scope.rotation.z = -0.8;
+    statics.add(dome, scope);
+    container('safe', ox - 9, oz - 9, 3);
+    container('safe', ox + 9, oz - 9, 3);
+    container('locker', ox - 9, oz + 6, 3);
+    container('crate', ox + 9, oz + 6, 3);
+    enemies('slotbot', ox, oz + 4, 2, 10);
+    enemies('shark', ox, oz + 22, 2, 14);
+    enemies('dicer', ox + 20, oz, 2, 14);
+  }
+
+  // ----- Frosty's Ice Hotel (southeast) -----
+  {
+    const ix = 150;
+    const iz = 150;
+    building({
+      name: "Frosty's Ice Hotel", x: ix, z: iz, w: 32, d: 18, h: 6, color: 0xbfe3f5, trim: 0x0ea5e9, tier: 2, sign: 'ICE HOTEL', signColor: '#2ee6d6', mapColor: '#38bdf8',
+      doors: [{ side: 'w', at: 0, width: 4 }, { side: 'n', at: 8, width: 2.4 }],
+    });
+    for (const dx of [-8, 0, 8]) {
+      const wall = part(new THREE.BoxGeometry(0.5, 6, 11), 0xbfe3f5, { ink: 0.03 });
+      wall.position.set(ix + dx + 2, 3, iz + 3.5);
+      statics.add(wall);
+      box(ix + dx + 2, iz + 3.5, 0.5, 11, 6);
+    }
+    container('register', ix - 12, iz - 5, 2);
+    container('locker', ix - 2, iz + 6, 2);
+    container('locker', ix + 6, iz + 6, 2);
+    container('safe', ix + 14, iz + 6, 2);
+    slotSpots.push({ x: ix + 13, z: iz - 6, rot: -Math.PI / 2, tier: 2 });
+    snowman(ix - 22, iz - 6);
+    snowman(ix - 22, iz + 6);
+    enemies('slotbot', ix - 26, iz, 1);
+    enemies('shark', ix, iz - 18, 2, 14);
+  }
+
+  // ----- Ranger Station (southwest) -----
+  {
+    const rx = -160;
+    const rz = 145;
+    building({
+      name: 'Ranger Station', x: rx, z: rz, w: 16, d: 12, h: 4.5, color: 0x3f6212, trim: 0xf8fafc, tier: 2, sign: 'RANGERS', signColor: '#5ee27a', mapColor: '#4d7c0f',
+      doors: [{ side: 'e', at: 0, width: 3 }],
+    });
+    watchtower(rx + 20, rz - 16);
+    container('locker', rx - 4, rz - 3, 2);
+    container('crate', rx - 4, rz + 3, 2);
+    container('crate', rx + 20, rz - 12, 1);
+    for (let i = 0; i < 4; i++) tent(rx - 10 + i * 8, rz + 22, [0xf97316, 0x2a9d8f, 0xe63946, 0xffd23f][i]);
+    zones.push({ name: 'Campground', x: rx + 2, z: rz + 22, w: 40, d: 12, tier: 1 });
+    container('crate', rx + 2, rz + 26, 1);
+    enemies('dicer', rx, rz + 10, 2, 20);
+    enemies('shark', rx + 10, rz + 22, 1);
+  }
+
+  // ----- Big Air Ski Jump (north) -----
+  {
+    const jx = 60;
+    const jz = -165;
+    const slope = Math.atan2(14, 44);
+    const ramp = part(new THREE.BoxGeometry(7, 0.6, 46), 0xf8fafc, { ink: 0.05 });
+    ramp.position.set(jx, 10, jz);
+    ramp.rotation.x = slope;
+    statics.add(ramp);
+    for (const dz of [-18, -6, 6, 18]) {
+      const hgt = 10 - (dz / 23) * 7 - 0.4;
+      for (const dx of [-3, 3]) {
+        const leg = part(new THREE.BoxGeometry(0.5, hgt, 0.5), 0x475569, { ink: 0.02 });
+        leg.position.set(jx + dx, hgt / 2, jz + dz);
+        statics.add(leg);
+        box(jx + dx, jz + dz, 0.5, 0.5, hgt);
+      }
+    }
+    const hut = part(new THREE.BoxGeometry(8, 4, 6), 0xdc2626, { ink: 0.05 });
+    hut.position.set(jx, 19, jz - 25);
+    statics.add(hut);
+    zones.push({ name: 'Big Air Ski Jump', x: jx, z: jz, w: 30, d: 56, tier: 2 });
+    minimap.push({ x: jx, z: jz, w: 7, d: 46, color: '#e2e8f0', label: 'Ski Jump', tier: 2 });
+    container('crate', jx - 7, jz + 10, 2);
+    container('locker', jx + 7, jz + 14, 2);
+    container('crate', jx + 7, jz - 4, 2);
+    crateStack(jx - 8, jz - 8);
+    enemies('dicer', jx, jz, 3, 24);
+  }
+
+  // ----- Avalanche Row: cabins half-buried by the last slide (far east) -----
+  {
+    const vx = 168;
+    const vz = -25;
+    for (const [dz, c] of [[-26, 0x8b5a2b], [0, 0x9c6644], [26, 0x7f5539]]) {
+      building({
+        name: 'Buried Cabin', x: vx, z: vz + dz, w: 12, d: 10, h: 4, color: c, trim: 0xf8fafc, floor: 0x6b4f3a, tier: 2, roof: dz !== 0, mapColor: '#8b5a2b',
+        doors: [{ side: 'w', at: 0, width: 2.4 }],
+      });
+      const drift = part(new THREE.SphereGeometry(7, 14, 8, 0, Math.PI * 2, 0, Math.PI / 2), 0xf8fafc, { ink: 0.04 });
+      drift.scale.set(0.7, 0.6, 1);
+      drift.position.set(vx + 9, 0, vz + dz);
+      statics.add(drift);
+      box(vx + 9, vz + dz, 9, 12, 4);
+      container(dz ? 'locker' : 'safe', vx - 2, vz + dz - 2, 2);
+    }
+    zones.push({ name: 'Avalanche Row', x: vx, z: vz, w: 34, d: 70, tier: 2 });
+    enemies('slotbot', vx - 14, vz, 1);
+    enemies('shark', vx - 10, vz + 30, 1);
+  }
+
+  // ----- Old Mine (far south-west by the frozen creek) -----
+  {
+    const mx = -175;
+    const mz = 40;
+    const rockFace = part(new THREE.BoxGeometry(14, 12, 18), 0x64748b, { ink: 0.06 });
+    rockFace.position.set(mx - 10, 6, mz);
+    const mouth = part(new THREE.BoxGeometry(1, 4.5, 5), 0x111827, { ink: 0 });
+    mouth.position.set(mx - 2.6, 2.25, mz);
+    statics.add(rockFace, mouth);
+    box(mx - 10, mz, 14, 18, 12);
+    waterTower(mx + 8, mz - 16, 0x94a3b8);
+    for (let i = 0; i < 3; i++) {
+      const cart = part(new THREE.BoxGeometry(2, 1.4, 3), 0x78350f, { ink: 0.03 });
+      cart.position.set(mx + 4 + i * 4, 0.9, mz + 8);
+      statics.add(cart);
+      box(mx + 4 + i * 4, mz + 8, 2, 3, 1.6);
+    }
+    zones.push({ name: 'Old Mine', x: mx, z: mz, w: 30, d: 36, tier: 1 });
+    minimap.push({ x: mx - 10, z: mz, w: 14, d: 18, color: '#64748b', label: 'Old Mine', tier: 1 });
+    container('crate', mx + 2, mz - 6, 1);
+    container('crate', mx + 2, mz + 4, 2);
+    enemies('slotbot', mx + 10, mz, 1);
+  }
+
   // Burning barrels to warm up at, spread so you can hop between them.
   for (const [x, z] of [[-15, 30], [15, 50], [-8, 100], [8, 128], [-60, 30], [65, 30], [-90, -65], [100, -70], [70, 80], [-40, 82], [40, 112],
-    [-110, 0], [110, 0], [-100, 110], [100, 115], [-60, -110], [40, -110], [0, -5], [-125, 45], [-120, -85], [110, -100]]) fire(x, z);
+    [-110, 0], [110, 0], [-100, 110], [100, 115], [-60, -110], [40, -110], [0, -5], [-125, 45], [-120, -85], [110, -100],
+    // The outer ring.
+    [-150, -130], [-130, -175], [150, 130], [125, 160], [-145, 130], [-160, 168], [60, -138], [40, -180], [150, -25], [150, 15],
+    [-160, 60], [-160, 15], [0, 170], [0, 195], [-60, 165], [75, 160], [175, 80], [175, -100], [-90, -170], [100, -165], [-185, -40], [130, 190]]) fire(x, z);
 
   const extracts = [
-    { name: 'Gondola', x: 115, z: -112 },
-    { name: 'Snowmobile Trail', x: -128, z: 60 },
-    { name: 'Ice Road', x: 0, z: 132 },
-    { name: 'Ski Lift', x: -128, z: -95 },
+    { name: 'Gondola', x: 160, z: -175 },
+    { name: 'Snowmobile Trail', x: -188, z: 95 },
+    { name: 'Ice Road', x: 0, z: 188 },
+    { name: 'Ski Lift', x: -190, z: -95 },
   ];
-  scatter(220, (x, z) => {
+  scatter(400, (x, z) => {
     const r = Math.random();
     if (r < 0.6) pine(x, z);
     else if (r < 0.85) rock(x, z, 0.8 + Math.random() * 2);
     else if (r < 0.92) snowman(x, z);
     else crateStack(x, z);
   }, (x, z) => Math.abs(x) < 12 || Math.abs(z - 40) < 10 || extracts.some((e) => Math.hypot(x - e.x, z - e.z) < 12) || (Math.abs(x) < 25 && z < -85));
-  for (let i = 0; i < 6; i++) enemies('dicer', (Math.random() * 2 - 1) * 110, (Math.random() * 2 - 1) * 110, 1);
-  for (let i = 0; i < 12; i++) container('crate', (Math.random() * 2 - 1) * 120, (Math.random() * 2 - 1) * 120, 1);
+  for (let i = 0; i < 10; i++) enemies('dicer', (Math.random() * 2 - 1) * 170, (Math.random() * 2 - 1) * 170, 1);
+  for (let i = 0; i < 3; i++) enemies('shark', (Math.random() * 2 - 1) * 170, (Math.random() * 2 - 1) * 170, 1);
+  for (let i = 0; i < 22; i++) {
+    const x = (Math.random() * 2 - 1) * (H - 20);
+    const z = (Math.random() * 2 - 1) * (H - 20);
+    if (zones.some((zn) => Math.abs(x - zn.x) < zn.w / 2 + 4 && Math.abs(z - zn.z) < zn.d / 2 + 4)) continue;
+    container('crate', x, z, 1);
+  }
 
   return {
     ...cas,
     extracts,
-    spawns: [[-120, 120], [120, 125], [-125, -30], [125, -30], [-60, 130], [60, 130], [125, 20], [-125, 20]],
+    spawns: [[-180, 175], [175, 185], [-185, -20], [185, 45], [-80, 185], [80, 188], [185, -120], [-100, -185], [20, -185]],
     hazards: { cold: true },
   };
 }
@@ -1350,13 +1787,13 @@ function bayouRoyale(k) {
   const {
     H, THREE, statics, zones, minimap, slotSpots, part, toon, neonSign, flat, box, circle,
     rock, streetLight, billboard, crateStack, building, container, enemies, casino,
-    cypress, reeds, pond, scatter, car,
+    cypress, reeds, pond, scatter, car, yard, tent, watchtower, fire,
   } = k;
   const planks = toon(0x8b6a43);
   // Boardwalks instead of roads.
-  flat(0, 60, 8, 110, planks, 0.05);
+  flat(0, 90, 8, 170, planks, 0.05);
   flat(0, 30, H * 2 - 20, 7, planks, 0.055);
-  minimap.push({ x: 0, z: 60, w: 8, d: 110, color: '#8b6a43' }, { x: 0, z: 30, w: H * 2 - 20, d: 7, color: '#8b6a43' });
+  minimap.push({ x: 0, z: 90, w: 8, d: 170, color: '#8b6a43' }, { x: 0, z: 30, w: H * 2 - 20, d: 7, color: '#8b6a43' });
   // The river behind the riverboat.
   const river = new THREE.Mesh(new THREE.PlaneGeometry(H * 2, 30), new THREE.MeshBasicMaterial({ color: 0x356b5c }));
   river.rotation.x = -Math.PI / 2;
@@ -1444,14 +1881,15 @@ function bayouRoyale(k) {
   crateStack(-92, -52);
   enemies('slotbot', -95, -55, 2, 10);
 
-  for (const [x, z, r] of [[-80, 0, 10], [75, -20, 12], [-30, 70, 8], [30, 75, 7], [-100, 100, 12], [100, 105, 10], [70, -60, 9]]) {
+  for (const [x, z, r] of [[-80, 0, 10], [75, -20, 12], [-30, 70, 8], [30, 75, 7], [-100, 100, 12], [100, 105, 10], [70, -60, 9],
+    [-160, -10, 10], [155, 95, 11], [60, 155, 9], [-20, 140, 7], [-150, 120, 9]]) {
     pond(x, z, r);
     for (let i = 0; i < 5; i++) {
       const a = Math.random() * Math.PI * 2;
       reeds(x + Math.cos(a) * r, z + Math.sin(a) * r);
     }
   }
-  for (let z = 0; z < 110; z += 22) { streetLight(-6, z + 5); streetLight(6, z + 16); }
+  for (let z = 0; z < H - 15; z += 22) { streetLight(-6, z + 5); streetLight(6, z + 16); }
   billboard(-20, 50, Math.PI / 2, 'FEED THE\nGATORS', '#14532d', '#ffd23f');
   billboard(20, 70, -Math.PI / 2, 'ALL ABOARD\nTHE ROYALE', '#991b1b', '#fff6e0');
   for (let i = 0; i < 4; i++) car(-20 + i * 12, 15, 'x', undefined, i % 2 === 0);
@@ -1459,26 +1897,155 @@ function bayouRoyale(k) {
   enemies('slotbot', 0, 50, 1);
   enemies('dicer', 0, 75, 2, 16);
 
+  // ===== The outer ring =====
+
+  // ----- Madame Marie's Mansion (southeast): spooky, guarded, worth it -----
+  {
+    const mx = 140;
+    const mz = 145;
+    building({
+      name: "Madame Marie's Mansion", x: mx, z: mz, w: 32, d: 22, h: 8, color: 0xe7e5e4, trim: 0x44403c, tier: 3, sign: "MARIE'S", signColor: '#c77dff', mapColor: '#57534e',
+      doors: [{ side: 'n', at: 0, width: 4 }, { side: 'w', at: 5, width: 2.4 }],
+    });
+    for (let i = 0; i < 6; i++) {
+      const col = part(new THREE.CylinderGeometry(0.5, 0.55, 8, 10), 0xf5f5f4, { ink: 0.03 });
+      col.position.set(mx - 13 + i * 5.2, 4, mz - 13);
+      statics.add(col);
+      circle(mx - 13 + i * 5.2, mz - 13, 0.55, 8);
+    }
+    const wall = part(new THREE.BoxGeometry(0.5, 8, 14), 0xe7e5e4, { ink: 0.03 });
+    wall.position.set(mx + 4, 4, mz + 4);
+    statics.add(wall);
+    box(mx + 4, mz + 4, 0.5, 14, 8);
+    container('safe', mx + 13, mz + 8, 3);
+    container('safe', mx - 13, mz + 8, 3);
+    container('locker', mx + 13, mz - 6, 3);
+    container('crate', mx - 6, mz + 8, 3);
+    slotSpots.push({ x: mx + 9, z: mz + 9, rot: Math.PI, tier: 3 });
+    for (const dx of [-24, 24]) cypress(mx + dx, mz - 18);
+    enemies('slotbot', mx, mz - 22, 2, 14);
+    enemies('shark', mx, mz, 2, 14);
+    enemies('dicer', mx - 26, mz, 2, 14);
+  }
+
+  // ----- Gator Farm (west): fenced ponds full of gators, and lots of teeth -----
+  {
+    const gx = -145;
+    const gz = 55;
+    yard({ name: 'Gator Farm', x: gx, z: gz, w: 54, d: 44, gates: ['e', 'n'], tier: 2, mapColor: '#5b7f3a' });
+    for (const [dx, dz, r] of [[-14, -8, 8], [12, -10, 7], [-2, 12, 8]]) pond(gx + dx, gz + dz, r);
+    building({
+      name: 'Farm Office', x: gx + 18, z: gz + 14, w: 10, d: 8, h: 4, color: 0x9c6644, trim: 0x3f3f2f, tier: 2, mapColor: '#6b705c',
+      doors: [{ side: 'w', at: 0, width: 2.2 }],
+    });
+    container('register', gx + 20, gz + 12, 2);
+    container('safe', gx + 20, gz + 16, 2);
+    watchtower(gx - 22, gz + 18);
+    enemies('shark', gx + 30, gz, 1);
+  }
+
+  // ----- Shipwreck (across the river, southwest) -----
+  {
+    const sx = -120;
+    const sz = -150;
+    building({
+      name: 'Shipwreck', x: sx, z: sz, w: 30, d: 10, h: 3.5, color: 0x5b4636, trim: 0x2b2117, floor: 0x6b4f3a, tier: 2, roof: false, mapColor: '#5b4636',
+      doors: [{ side: 'n', at: -6, width: 3 }, { side: 'e', at: 0, width: 3 }],
+    });
+    const bow = part(new THREE.ConeGeometry(5, 9, 4), 0x5b4636, { ink: 0.05 });
+    bow.rotation.set(0, Math.PI / 4, Math.PI / 2);
+    bow.position.set(sx - 19, 2.5, sz);
+    bow.scale.set(1, 1, 0.7);
+    const mast = part(new THREE.CylinderGeometry(0.35, 0.4, 16, 8), 0x3f2e1f, { ink: 0.03 });
+    mast.position.set(sx + 2, 7, sz);
+    mast.rotation.z = 0.35;
+    statics.add(bow, mast);
+    circle(sx - 19, sz, 3.5, 5);
+    container('safe', sx - 10, sz + 2, 2);
+    container('crate', sx, sz - 2, 2);
+    container('crate', sx + 10, sz + 2, 2);
+    enemies('slotbot', sx, sz + 14, 1);
+    enemies('dicer', sx, sz, 2, 16);
+  }
+
+  // ----- Fishing Camp (southeast, across the river) -----
+  {
+    const fx0 = 140;
+    const fz0 = -150;
+    for (let i = 0; i < 5; i++) tent(fx0 - 16 + i * 8, fz0 + (i % 2) * 6, [0xf97316, 0x2a9d8f, 0xe63946, 0xffd23f, 0x4dabff][i]);
+    fire(fx0, fz0 + 12);
+    building({
+      name: 'Bait Shed', x: fx0 + 22, z: fz0 + 10, w: 10, d: 8, h: 3.6, color: 0x6b705c, trim: 0x3f3f2f, tier: 1, mapColor: '#6b705c',
+      doors: [{ side: 'w', at: 0, width: 2.2 }],
+    });
+    zones.push({ name: 'Fishing Camp', x: fx0, z: fz0 + 4, w: 44, d: 24, tier: 1 });
+    minimap.push({ x: fx0, z: fz0 + 4, w: 36, d: 14, color: '#7c6a4f', label: 'Fishing Camp', tier: 1 });
+    container('crate', fx0 - 12, fz0 + 8, 1);
+    container('locker', fx0 + 24, fz0 + 8, 1);
+    container('crate', fx0 + 6, fz0 - 4, 1);
+    enemies('shark', fx0, fz0, 1);
+    enemies('dicer', fx0 + 10, fz0 + 10, 1);
+  }
+
+  // ----- Sunken Chapel (north-west of the bus stop) -----
+  {
+    const cx = -65;
+    const cz = 160;
+    building({
+      name: 'Sunken Chapel', x: cx, z: cz, w: 14, d: 20, h: 6, color: 0xd6d3d1, trim: 0x44403c, tier: 2, sign: 'ST. JACKPOT', signColor: '#ffd23f', mapColor: '#78716c',
+      doors: [{ side: 'e', at: 0, width: 3 }],
+    });
+    const steeple = part(new THREE.ConeGeometry(2.5, 6, 4), 0x44403c);
+    steeple.position.set(cx, 9.3, cz - 6);
+    steeple.rotation.set(0.15, Math.PI / 4, 0.1);
+    statics.add(steeple);
+    pond(cx - 18, cz, 7);
+    container('locker', cx - 3, cz - 6, 2);
+    container('safe', cx - 3, cz + 6, 2);
+    slotSpots.push({ x: cx + 3, z: cz - 8, rot: 0, tier: 2 });
+    enemies('shark', cx + 14, cz, 1);
+    enemies('dicer', cx, cz + 16, 1);
+  }
+
+  // ----- Swamp Gas & Bait (east, on the far boardwalk) -----
+  {
+    flat(130, 30, 60, 7, planks, 0.055);
+    building({
+      name: 'Swamp Gas', x: 160, z: 50, w: 16, d: 12, h: 4.5, color: 0xfacc15, trim: 0x1a2e05, tier: 2, sign: 'SWAMP GAS', signColor: '#5ee27a', mapColor: '#ca8a04',
+      doors: [{ side: 'n', at: 0, width: 3 }],
+    });
+    container('register', 156, 52, 2);
+    container('locker', 165, 54, 2);
+    for (let i = 0; i < 3; i++) car(140 + i * 9, 40, 'z', undefined, i === 1);
+    enemies('slotbot', 160, 36, 1);
+  }
+
   const extracts = [
-    { name: 'Airboat Dock', x: -110, z: -100 },
-    { name: 'Old Bridge', x: 115, z: -25 },
-    { name: 'Bus Stop', x: 0, z: 122 },
-    { name: 'Hidden Bayou', x: -112, z: 110 },
+    { name: 'Airboat Dock', x: -160, z: -165 },
+    { name: 'Old Bridge', x: 170, z: -40 },
+    { name: 'Bus Stop', x: 0, z: 175 },
+    { name: 'Hidden Bayou', x: -165, z: 165 },
   ];
-  scatter(200, (x, z) => {
+  scatter(380, (x, z) => {
     const r = Math.random();
     if (r < 0.5) cypress(x, z);
     else if (r < 0.75) reeds(x, z);
     else if (r < 0.9) rock(x, z, 0.8 + Math.random() * 1.8);
     else crateStack(x, z);
   }, (x, z) => Math.abs(x) < 9 || Math.abs(z - 30) < 8 || Math.abs(z + 100) < 18 || extracts.some((e) => Math.hypot(x - e.x, z - e.z) < 12));
-  for (let i = 0; i < 6; i++) enemies('dicer', (Math.random() * 2 - 1) * 100, (Math.random() * 2 - 1) * 100, 1);
-  for (let i = 0; i < 12; i++) container('crate', (Math.random() * 2 - 1) * 110, (Math.random() * 2 - 1) * 110, 1);
+  for (let i = 0; i < 10; i++) enemies('dicer', (Math.random() * 2 - 1) * 160, (Math.random() * 2 - 1) * 160, 1);
+  for (let i = 0; i < 3; i++) enemies('shark', (Math.random() * 2 - 1) * 160, (Math.random() * 2 - 1) * 160, 1);
+  for (let i = 0; i < 22; i++) {
+    const x = (Math.random() * 2 - 1) * (H - 20);
+    const z = (Math.random() * 2 - 1) * (H - 20);
+    if (zones.some((zn) => Math.abs(x - zn.x) < zn.w / 2 + 4 && Math.abs(z - zn.z) < zn.d / 2 + 4)) continue;
+    container('crate', x, z, 1);
+  }
 
   return {
     ...cas,
     extracts,
-    spawns: [[-115, 75], [115, 75], [-115, -25], [115, 10], [-60, 120], [60, 120], [110, -70], [-70, -75]],
+    spawns: [[-170, 20], [172, 10], [-120, -175], [120, -175], [-100, 175], [100, 175], [172, 110], [-172, -60], [50, -175]],
   };
 }
 
