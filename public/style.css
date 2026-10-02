@@ -711,3 +711,15 @@ body.spectating #hud, body.spectating #intro, body.spectating #paused { display:
 .qrow span { margin-right: 6px; }
 .cchip.locked { filter: grayscale(0.9); opacity: 0.55; position: relative; }
 .cchip.locked i { position: absolute; bottom: -4px; left: 50%; transform: translateX(-50%); font: 900 8px var(--body); font-style: normal; background: #1b0f2b; color: #ffd23f; padding: 0 3px; border-radius: 4px; }
+
+/* Cloud save + leaderboard */
+.account { background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(255, 255, 255, 0.12); border-radius: 14px; padding: 12px 14px; display: grid; gap: 6px; margin-bottom: 10px; }
+.account.in { border-color: rgba(94, 226, 122, 0.45); }
+.account input { background: rgba(0, 0, 0, 0.3); border: 1px solid rgba(255, 255, 255, 0.2); color: var(--cream); border-radius: 10px; padding: 8px 10px; font: 800 14px var(--body); width: 150px; }
+.account .dim { opacity: 0.6; }
+table.board { width: 100%; border-collapse: collapse; font-weight: 800; }
+table.board th { text-align: left; font-size: 12px; opacity: 0.6; padding: 6px 8px; }
+table.board td { padding: 8px; border-top: 1px solid rgba(255, 255, 255, 0.08); }
+table.board .num { text-align: right; white-space: nowrap; }
+table.board .rk { width: 36px; text-align: center; font-size: 18px; }
+table.board tr.me td { background: rgba(255, 210, 63, 0.14); }

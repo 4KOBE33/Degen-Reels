@@ -6,6 +6,7 @@ import {
   itemInfo, isGun, rollLoot, addToList, addToStash, makeGun, makeItem, fullAmmo,
 } from './items.js';
 import { save } from './save.js';
+import { cloud } from './cloud.js';
 import { iconHtml, gunIcon } from './icons.js';
 import { renderBinds, wireBinds } from './keys.js';
 import { MAPS } from './map.js';
@@ -157,6 +158,9 @@ export class Hub {
       net.on('error', (m) => this.toast(m.text));
     }
     $('deploy').addEventListener('click', () => this.deploy());
+    cloud.onUpdate(() => { if (!$('hub').hidden && ['settings', 'leaders'].includes(this.tab)) this.render(); else this.renderHeader(); });
+    this.board = null;
+    this.boardBy = 'worth';
     this.render();
   }
 
@@ -196,6 +200,7 @@ export class Hub {
       look: () => this.renderLook(),
       records: () => this.renderRecords(),
       settings: () => this.renderSettings(),
+      leaders: () => this.renderLeaders(),
     }[this.tab]();
     $('hubBody').innerHTML = body;
     $('hubBody').dataset.tab = this.tab;
@@ -418,9 +423,62 @@ export class Hub {
       <h3>Gear</h3><div class="colitems">${itemCells('Gear')}</div>`;
   }
 
+  // Cloud save account: name + PIN, so your progress follows you and shows on the leaderboard.
+  renderAccount() {
+    const u = cloud.user;
+    if (u) {
+      const when = cloud.syncedAt ? `last saved ${new Date(cloud.syncedAt).toLocaleTimeString()}` : 'syncing…';
+      return `<section class="account in"><b>☁️ Cloud save: ${escapeHtml(u.name)}</b>
+        <small>${cloud.status && cloud.status !== 'saved' ? `⚠️ ${escapeHtml(cloud.status)}` : `Your progress saves to the server automatically (${when}). Log in with the same name and PIN on any device.`}</small>
+        <div class="prow"><button class="btn ghost" data-act="cloudsync">Save now</button><button class="btn ghost" data-act="cloudout">Log out</button></div></section>`;
+    }
+    return `<section class="account"><b>☁️ Cloud save</b>
+      <small>Make an account to keep your progress if you clear your browser or switch computers, and to show up on the 👑 leaderboard.</small>
+      <div class="prow"><input id="cloudName" maxlength="16" placeholder="Name" autocomplete="username" value="${escapeHtml(this.cloudName || '')}">
+      <input id="cloudPin" maxlength="8" placeholder="PIN (4-8 digits)" inputmode="numeric" type="password" autocomplete="current-password">
+      <button class="btn" data-act="cloudreg">Create account</button><button class="btn ghost" data-act="cloudin">Log in</button></div>
+      <small class="dim">Logging in replaces the progress on this device with your cloud save.</small></section>`;
+  }
+
+  // Richest players everywhere.
+  renderLeaders() {
+    const b = this.board;
+    if (!b || b.by !== this.boardBy) this.loadBoard();
+    const me = cloud.user && cloud.user.name.toLowerCase();
+    const rows = b && b.rows ? b.rows.map((r, i) => `<tr class="${me && r.name.toLowerCase() === me ? 'me' : ''}"><td class="rk">${i < 3 ? ['🥇', '🥈', '🥉'][i] : i + 1}</td><td>${escapeHtml(r.name)}</td><td>LV ${r.level}</td>
+      <td class="num">🪙 ${fmt(r.chips)}</td><td class="num">💰 ${fmt(r.worth)}</td></tr>`).join('') : '';
+    return `<h3>👑 High Rollers</h3>
+      <div class="subtabs"><button class="subtab ${this.boardBy === 'worth' ? 'on' : ''}" data-act="boardby" data-by="worth">Net worth</button><button class="subtab ${this.boardBy === 'chips' ? 'on' : ''}" data-act="boardby" data-by="chips">Chips</button><button class="subtab" data-act="boardrefresh">↻ Refresh</button></div>
+      <p class="hint">Net worth is your chips plus everything in your stash at Fence prices.${cloud.user ? '' : ' <b>Make a cloud save account in ⚙️ Settings to get on the board.</b>'}</p>
+      ${b && b.error ? `<p class="hint">⚠️ Couldn't reach the leaderboard: ${escapeHtml(b.error)}</p>` : ''}
+      ${!b ? '<p class="hint">Loading…</p>' : rows ? `<table class="board"><tr><th></th><th>Player</th><th>Level</th><th class="num">Chips</th><th class="num">Net worth</th></tr>${rows}</table>` : (b.error ? '' : '<p class="hint">Nobody on the board yet. Be the first!</p>')}`;
+  }
+
+  async loadBoard() {
+    if (this.boardLoading) return;
+    this.boardLoading = true;
+    const by = this.boardBy;
+    try { this.board = await cloud.leaderboard(by); } catch (e) { this.board = { by, error: e.message }; }
+    this.boardLoading = false;
+    if (this.tab === 'leaders' && !$('hub').hidden) this.render();
+  }
+
+  async cloudAction(kind) {
+    const name = ($('cloudName') || {}).value || '';
+    const pin = ($('cloudPin') || {}).value || '';
+    this.cloudName = name;
+    try {
+      if (kind === 'reg') { await cloud.register(name, pin); this.toast(`☁️ Account made. Your progress is saved as ${name}.`); }
+      else { await cloud.login(name, pin); this.toast(`☁️ Welcome back, ${cloud.user.name}! Cloud save loaded.`); }
+      this.board = null;
+      if (this.onSettings) this.onSettings();
+    } catch (e) { this.toast(`⚠️ ${e.message}`); }
+    this.render();
+  }
+
   renderSettings() {
     const s = this.data.settings;
-    return `<h3>Settings</h3>
+    return `${this.renderAccount()}<h3>Settings</h3>
       <label class="slider">Mouse sensitivity <b id="sensVal">${s.sensitivity.toFixed(2)}x</b><input type="range" id="sens" min="0.1" max="3" step="0.05" value="${s.sensitivity}"></label>
       <label class="slider">Field of view <b id="fovVal">${s.fov}°</b><input type="range" id="fov" min="60" max="100" step="1" value="${s.fov}"></label>
       <label class="slider">Volume <b id="volVal">${Math.round(s.volume * 100)}%</b><input type="range" id="vol" min="0" max="1" step="0.05" value="${s.volume}"></label>
@@ -860,6 +918,12 @@ export class Hub {
       case 'pcopy':
         try { navigator.clipboard.writeText(this.net.room.code); this.toast(`Copied ${this.net.room.code}. Send it to your friends!`); } catch (err) { this.toast(`Party code: ${this.net.room.code}`); }
         return;
+      case 'cloudreg': this.cloudAction('reg'); return;
+      case 'cloudin': this.cloudAction('in'); return;
+      case 'cloudout': cloud.logout(); this.toast('Logged out. Progress on this device stays here.'); break;
+      case 'cloudsync': cloud.push(); this.toast('☁️ Saving…'); return;
+      case 'boardby': this.boardBy = b.dataset.by; this.board = null; break;
+      case 'boardrefresh': this.board = null; break;
       case 'quality':
         save.update((x) => { x.settings.quality = b.dataset.q; });
         if (this.onSettings) this.onSettings();

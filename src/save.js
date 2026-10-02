@@ -24,23 +24,29 @@ function fresh() {
   };
 }
 
+// Fill in anything an older (or cloud) save is missing.
+function normalize(stored) {
+  const d = { ...fresh(), ...stored };
+  d.settings = { ...SETTINGS_DEFAULT, ...stored.settings };
+  d.look = { ...LOOK_DEFAULT, ...stored.look };
+  d.stats = { ...JSON.parse(JSON.stringify(STAT_DEFAULTS)), ...stored.stats };
+  d.stats.extractsByMap = { ...(stored.stats && stored.stats.extractsByMap) };
+  d.collection = { ...stored.collection };
+  d.achievements = { ...stored.achievements };
+  d.xp = stored.xp || 0;
+  return d;
+}
+
 let data = fresh();
 try {
   const stored = JSON.parse(localStorage.getItem(KEY) || 'null');
-  if (stored) {
-    data = { ...fresh(), ...stored };
-    data.settings = { ...SETTINGS_DEFAULT, ...stored.settings };
-    data.look = { ...LOOK_DEFAULT, ...stored.look };
-    data.stats = { ...JSON.parse(JSON.stringify(STAT_DEFAULTS)), ...stored.stats };
-    data.stats.extractsByMap = { ...(stored.stats && stored.stats.extractsByMap) };
-    data.collection = { ...stored.collection };
-    data.achievements = { ...stored.achievements };
-    data.xp = stored.xp || 0;
-  }
+  if (stored) data = normalize(stored);
 } catch (e) { /* storage blocked: progress lasts for this visit only */ }
 
+const listeners = [];
 function persist() {
   try { localStorage.setItem(KEY, JSON.stringify(data)); } catch (e) { /* storage blocked */ }
+  for (const fn of listeners) fn(data);
 }
 
 export const save = {
@@ -56,4 +62,13 @@ export const save = {
     data = fresh();
     persist();
   },
+
+  // Swap in a whole save (e.g. one loaded from the cloud).
+  replace(stored) {
+    data = normalize(stored);
+    persist();
+  },
+
+  // Called after every change.
+  onChange(fn) { listeners.push(fn); },
 };

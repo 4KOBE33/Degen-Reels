@@ -16,7 +16,9 @@ if (!fs.existsSync(bundle)) {
 }
 
 const app = express();
+app.set('trust proxy', 1);
 app.use(express.static(path.join(__dirname, '..', 'public')));
+app.use('/api', require('./accounts').router);
 app.get('/health', (req, res) => res.json({ ok: true, rooms: rooms.size }));
 
 const server = http.createServer(app);
