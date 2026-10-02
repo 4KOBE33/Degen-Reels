@@ -53,7 +53,7 @@ export class Net {
         this.dropped();
         return;
       }
-      try { ws.send(JSON.stringify({ t: 'ping', at: performance.now() })); } catch (e) { /* closing */ }
+      try { this.ws.send(JSON.stringify({ t: 'ping', at: performance.now() })); } catch (e) { /* closing */ }
     }, PING_EVERY);
     // Coming back to the tab or the network: reconnect right away instead of waiting.
     const poke = () => { if (!this.ws && (this.resume || this.wantOnline)) { clearTimeout(this.retryTimer); this.connect(); } };

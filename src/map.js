@@ -25,10 +25,15 @@ export function neonSign(text, color, width = 18) {
     c.fillStyle = '#fff6e0';
     c.fillText(text, w / 2, h / 2 + 8, w - 40);
   });
-  return new THREE.Mesh(
-    new THREE.PlaneGeometry(width, width * 0.195),
-    new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false, side: THREE.DoubleSide }),
-  );
+  // Two faces back to back, so it reads the right way round from either side.
+  const geo = new THREE.PlaneGeometry(width, width * 0.195);
+  const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false });
+  const g = new THREE.Group();
+  const front = new THREE.Mesh(geo, mat);
+  const back = new THREE.Mesh(geo, mat);
+  back.rotation.y = Math.PI;
+  g.add(front, back);
+  return g;
 }
 
 function boardTexture(text, bg, fg) {
@@ -355,8 +360,11 @@ export function buildMap(scene, mapId = 'vegas') {
 
   // ---------- buildings ----------
 
+  const winFrameMat = toon(0xfff6e0);
+  const winPaneMat = new THREE.MeshBasicMaterial({ color: 0x35507a });
+
   // Walls with door gaps, a floor and a roof. doors: [{ side: 'n'|'s'|'e'|'w', at, width }]
-  function building({ name, x, z, w, d, h = 5, color = 0xe9d8a6, trim = 0x2b2140, floor = 0x9c6b4a, floorMap = null, doors = [], tier = 2, sign = null, signColor = '#ff3fa4', roof = true, mapColor = '#6b4f3a' }) {
+  function building({ name, x, z, w, d, h = 5, color = 0xe9d8a6, trim = 0x2b2140, floor = 0x9c6b4a, floorMap = null, doors = [], tier = 2, sign = null, signColor = '#ff3fa4', roof = true, mapColor = '#6b4f3a', windows = !def.indoor }) {
     const T = 0.5;
     const wallMat = toon(color);
     const trimMat = toon(trim);
@@ -395,6 +403,33 @@ export function buildMap(scene, mapId = 'vegas') {
         base.position.set(wx, 0.45, wz);
         statics.add(base);
         box(wx, wz, ww, wd, h);
+        // Windows along the outside, so buildings aren't blank boxes.
+        if (windows && roof && h >= 3.6 && len >= 3.4) {
+          const out = key === 'n' || key === 'w' ? -1 : 1;
+          const n = Math.max(1, Math.floor((len - 1) / 4.2));
+          const step = len / n;
+          const wy = Math.min(2.3, h * 0.5);
+          for (let i = 0; i < n; i++) {
+            const along = a + step * (i + 0.5);
+            const px = s.horiz ? s.cx + along : s.cx + out * (T / 2 + 0.03);
+            const pz = s.horiz ? s.cz + out * (T / 2 + 0.03) : s.cz + along;
+            const fr = new THREE.Mesh(new THREE.BoxGeometry(s.horiz ? 1.7 : 0.08, 1.35, s.horiz ? 0.08 : 1.7), winFrameMat);
+            fr.position.set(px, wy, pz);
+            const pane = new THREE.Mesh(new THREE.BoxGeometry(s.horiz ? 1.4 : 0.1, 1.05, s.horiz ? 0.1 : 1.4), winPaneMat);
+            pane.position.set(px + (s.horiz ? 0 : out * 0.02), wy, pz + (s.horiz ? out * 0.02 : 0));
+            const sill = new THREE.Mesh(new THREE.BoxGeometry(s.horiz ? 1.9 : 0.22, 0.12, s.horiz ? 0.22 : 1.9), trimMat);
+            sill.position.set(px + (s.horiz ? 0 : out * 0.06), wy - 0.72, pz + (s.horiz ? out * 0.06 : 0));
+            statics.add(fr, pane, sill);
+            // Taller buildings get a second row.
+            if (h >= 7.5) {
+              const fr2 = fr.clone();
+              fr2.position.y = wy + 3.4;
+              const pane2 = pane.clone();
+              pane2.position.y = wy + 3.4;
+              statics.add(fr2, pane2);
+            }
+          }
+        }
       }
       // Lintels over doors.
       for (const [a, b] of gaps) {
@@ -583,7 +618,7 @@ export function buildMap(scene, mapId = 'vegas') {
     const CW = 100;
     const CD = 70;
     const doorways = [{ side: 's', at: 0, width: 12 }, { side: 'w', at: 10, width: 5 }, { side: 'e', at: 10, width: 5 }, { side: 'n', at: 30, width: 4 }];
-    building({ name, x: CX, z: CZ, w: CW, d: CD, h: 10, color, trim, floorMap: carpetTexture(), tier: 3, mapColor, doors: doorways });
+    building({ name, x: CX, z: CZ, w: CW, d: CD, h: 10, color, trim, floorMap: carpetTexture(), tier: 3, mapColor, doors: doorways, windows: false });
     // Where the doorways are in the world (the Pit Boss fight seals them).
     const doors = doorways.map((dr) => {
       const horiz = dr.side === 's' || dr.side === 'n';
@@ -1188,11 +1223,10 @@ export function buildMap(scene, mapId = 'vegas') {
         circle(x - 4, z - 5, 4.5, h + 18);
         const clear = new THREE.MeshBasicMaterial({ color: 0xdbeafe, transparent: true, opacity: 0.55, side: THREE.DoubleSide });
         const bowl = new THREE.Mesh(new THREE.SphereGeometry(4.5, 20, 12, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), clear);
-        bowl.rotation.x = Math.PI;
         bowl.position.set(x + 7, h + 12, z - 3);
-        const wine = new THREE.Mesh(new THREE.CircleGeometry(4, 20), new THREE.MeshBasicMaterial({ color: 0x7f1d3a }));
+        const wine = new THREE.Mesh(new THREE.CircleGeometry(4.2, 20), new THREE.MeshBasicMaterial({ color: 0x7f1d3a }));
         wine.rotation.x = -Math.PI / 2;
-        wine.position.set(x + 7, h + 10.5, z - 3);
+        wine.position.set(x + 7, h + 10.6, z - 3);
         const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.45, 0.45, 8, 10), clear);
         stem.position.set(x + 7, h + 4, z - 3);
         const foot = new THREE.Mesh(new THREE.CylinderGeometry(3.2, 3.4, 0.5, 20), clear);
@@ -1465,6 +1499,67 @@ export function buildMap(scene, mapId = 'vegas') {
       ],
     }[mapId] || [];
     for (const place of LANDMARKS) place();
+
+    // ---------- ground detail: little things so the open ground doesn't look empty ----------
+    // Purely visual (you walk right through them), merged with the scenery so they cost nothing.
+    {
+      const blocked = minimap.filter((q) => q.w && q.d && (q.building || !q.label));
+      const free = (x, z) => !blocked.some((q) => Math.abs(x - q.x) < q.w / 2 + 1.5 && Math.abs(z - q.z) < q.d / 2 + 1.5)
+        && !extracts.some((e) => Math.hypot(x - e.x, z - e.z) < 9);
+      const STYLE = {
+        vegas: { tuft: [0xc9a46a, 0xb08850], pebble: 0x9c7b5b, tumble: 0x9a7444, mound: null, puddle: null },
+        tequila: { tuft: [0x9aa65a, 0xc9a46a, 0x7d8f4a], pebble: 0x9c8a6a, tumble: 0x9a7444, mound: null, puddle: null },
+        frost: { tuft: [0x8fa3a0], pebble: 0x94a3b8, tumble: null, mound: 0xf8fbff, puddle: null },
+        bayou: { tuft: [0x5a7d2a, 0x6f8f3c, 0x4d6b22], pebble: 0x6b6b5a, tumble: null, mound: null, puddle: 0x3d4a2a },
+      }[mapId] || { tuft: [0x9aa65a], pebble: 0x9c8a6a, tumble: null, mound: null, puddle: null };
+      const tuftMats = STYLE.tuft.map((c) => toon(c));
+      const pebbleMat = toon(STYLE.pebble);
+      const bladeGeo = new THREE.ConeGeometry(0.09, 0.7, 3);
+      const pebbleGeo = new THREE.DodecahedronGeometry(0.28, 0);
+      const count = Math.round((H * H) / 120);
+      for (let i = 0; i < count; i++) {
+        const x = (Math.random() * 2 - 1) * (H - 4);
+        const z = (Math.random() * 2 - 1) * (H - 4);
+        if (!free(x, z)) continue;
+        const r = Math.random();
+        if (r < 0.55) {
+          // A tuft of grass: a few blades leaning out.
+          const mat = tuftMats[Math.floor(Math.random() * tuftMats.length)];
+          const s = 0.7 + Math.random() * 0.8;
+          for (let b = 0; b < 4; b++) {
+            const blade = new THREE.Mesh(bladeGeo, mat);
+            const a = (b / 4) * Math.PI * 2 + Math.random();
+            blade.position.set(x + Math.cos(a) * 0.12 * s, 0.32 * s, z + Math.sin(a) * 0.12 * s);
+            blade.rotation.set(Math.sin(a) * 0.45, 0, -Math.cos(a) * 0.45);
+            blade.scale.setScalar(s);
+            statics.add(blade);
+          }
+        } else if (r < 0.85) {
+          const pb = new THREE.Mesh(pebbleGeo, pebbleMat);
+          const s = 0.5 + Math.random() * 1.2;
+          pb.position.set(x, 0.08 * s, z);
+          pb.scale.set(s, s * 0.55, s * (0.7 + Math.random() * 0.6));
+          pb.rotation.y = Math.random() * Math.PI;
+          statics.add(pb);
+        } else if (STYLE.tumble && r < 0.9) {
+          const tw = new THREE.Mesh(new THREE.IcosahedronGeometry(0.45 + Math.random() * 0.3, 0), toon(STYLE.tumble));
+          tw.position.set(x, 0.45, z);
+          tw.rotation.set(Math.random(), Math.random(), Math.random());
+          statics.add(tw);
+        } else if (STYLE.mound && r < 0.97) {
+          const md = new THREE.Mesh(new THREE.SphereGeometry(1 + Math.random() * 1.6, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2), toon(STYLE.mound));
+          md.scale.y = 0.35;
+          md.position.set(x, 0, z);
+          statics.add(md);
+        } else if (STYLE.puddle && r < 0.95) {
+          const pd = new THREE.Mesh(new THREE.CircleGeometry(0.8 + Math.random() * 1.4, 12), toon(STYLE.puddle));
+          pd.rotation.x = -Math.PI / 2;
+          pd.scale.set(1, 0.6 + Math.random() * 0.5, 1);
+          pd.position.set(x, 0.035, z);
+          statics.add(pd);
+        }
+      }
+    }
 
     // New machines out in the open: Roulette Rollers roam in pairs, Bouncers guard the bigger spots.
     for (let i = 0; i < Math.round(H / 45); i++) {
@@ -2639,6 +2734,19 @@ function bayouRoyale(k) {
       statics.add(col);
       circle(mx - 13 + i * 5.2, mz - 13, 0.55, 8);
     }
+    // A steep slate roof and a covered porch over the columns.
+    const roofTop = part(new THREE.ConeGeometry(1, 1, 4), 0x44403c, { ink: 0.03 });
+    roofTop.rotation.y = Math.PI / 4;
+    roofTop.scale.set(32 * 0.74, 7, 22 * 0.74);
+    roofTop.position.set(mx, 8.4 + 3.5, mz);
+    const porch = part(new THREE.BoxGeometry(33, 0.4, 4.2), 0x44403c, { ink: 0.03 });
+    porch.position.set(mx, 8.2, mz - 12.9);
+    statics.add(roofTop, porch);
+    for (const dx of [-10, 10]) {
+      const chimney = part(new THREE.BoxGeometry(1.6, 6, 1.6), 0x57534e, { ink: 0.03 });
+      chimney.position.set(mx + dx, 12, mz + 4);
+      statics.add(chimney);
+    }
     const wall = part(new THREE.BoxGeometry(0.5, 8, 14), 0xe7e5e4, { ink: 0.03 });
     wall.position.set(mx + 4, 4, mz + 4);
     statics.add(wall);
@@ -3163,16 +3271,22 @@ function wineCountry(k) {
   }
   // A hot air balloon: striped envelope, a basket underneath.
   const BALLOON = [[0xe63946, 0xffd23f], [0x2ee6d6, 0xfff6e0], [0xc77dff, 0xff7eb6], [0xff9f43, 0x4dabff], [0x5ee27a, 0xffd23f], [0xff3fa4, 0x7b2cbf]];
+  // Balloon fabric ignores the haze so they stay bright even far away.
+  const balloonMats = new Map();
+  const balloonMat = (c) => {
+    if (!balloonMats.has(c)) balloonMats.set(c, toon(c, { unique: true, fog: false }));
+    return balloonMats.get(c);
+  };
   function balloonModel(i, s = 1) {
     const g = new THREE.Group();
     const [c1, c2] = BALLOON[i % BALLOON.length];
     for (let k2 = 0; k2 < 8; k2++) {
-      const gore = new THREE.Mesh(new THREE.SphereGeometry(5 * s, 6, 12, (k2 / 8) * Math.PI * 2, Math.PI / 4), toon(k2 % 2 ? c1 : c2));
+      const gore = new THREE.Mesh(new THREE.SphereGeometry(5 * s, 6, 12, (k2 / 8) * Math.PI * 2, Math.PI / 4), balloonMat(k2 % 2 ? c1 : c2));
       gore.scale.y = 1.2;
       gore.position.y = 9 * s;
       g.add(gore);
     }
-    const skirt = new THREE.Mesh(new THREE.CylinderGeometry(1.6 * s, 2.6 * s, 2 * s, 12, 1, true), toon(c1));
+    const skirt = new THREE.Mesh(new THREE.CylinderGeometry(1.6 * s, 2.6 * s, 2 * s, 12, 1, true), balloonMat(c1));
     skirt.position.y = 3.6 * s;
     const basket = part(new THREE.BoxGeometry(2 * s, 1.4 * s, 2 * s), 0x8b5a2b, { ink: 0.03 });
     basket.position.y = 0.7 * s;
@@ -3203,11 +3317,10 @@ function wineCountry(k) {
     plaza(px, pz) {
       // A fountain shaped like a giant wine glass, and a ring of barrels.
       const bowl = new THREE.Mesh(new THREE.SphereGeometry(3.4, 18, 10, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xdbeafe, transparent: true, opacity: 0.7, side: THREE.DoubleSide }));
-      bowl.position.set(px, 5.2, pz);
-      bowl.rotation.x = Math.PI;
-      const wine = new THREE.Mesh(new THREE.CircleGeometry(3.1, 20), new THREE.MeshBasicMaterial({ color: 0x7f1d3a }));
+      bowl.position.set(px, 6.8, pz);
+      const wine = new THREE.Mesh(new THREE.CircleGeometry(3.2, 20), new THREE.MeshBasicMaterial({ color: 0x7f1d3a }));
       wine.rotation.x = -Math.PI / 2;
-      wine.position.set(px, 4.4, pz);
+      wine.position.set(px, 6.15, pz);
       const stem = part(new THREE.CylinderGeometry(0.3, 0.3, 3.4, 10), 0xdbeafe, { ink: 0.02 });
       stem.position.set(px, 1.9, pz);
       const foot = part(new THREE.CylinderGeometry(2.4, 2.6, 0.4, 20), 0xdbeafe, { ink: 0.02 });

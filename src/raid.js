@@ -795,14 +795,26 @@ export class Raid {
     const spots = this.map.slotSpots;
     const out = [];
     const n = Math.min(spots.length, spots.length >= 6 ? 3 : 2);
-    for (let k = 0; k < n; k++) {
-      const s = spots[Math.floor(((k + 0.5) * spots.length) / n)];
+    // Try slots spread across the list first, then the rest, until we've placed enough.
+    const order = [];
+    for (let k = 0; k < n; k++) order.push(Math.floor(((k + 0.5) * spots.length) / n));
+    for (let k = 0; k < spots.length; k++) if (!order.includes(k)) order.push(k);
+    for (const idx of order) {
+      if (out.length >= n) break;
+      const s = spots[idx];
       const rot = s.rot || 0;
       const fx = Math.sin(rot);
       const fz = Math.cos(rot);
-      const [x, z] = this.openSpot(s.x + fz * 3.2 + fx * 0.6, s.z - fx * 3.2 + fz * 0.6, 1.9);
-      if (out.some((o) => Math.hypot(o.x - x, o.z - z) < 8)) continue;
-      out.push({ x, z, rot });
+      // Either side of the slot, never in front of anything you need to stand at.
+      for (const side of [1, -1]) {
+        const x = s.x + side * fz * 3.2 + fx * 0.6;
+        const z = s.z - side * fx * 3.2 + fz * 0.6;
+        if (!this.map.isFree(x, z, 1.9) || !this.map.isFree(x + fx * 1.6, z + fz * 1.6, 0.6)) continue;
+        if (this.slots.some((sl) => Math.hypot(sl.spot.x - x, sl.spot.z - z) < 2.6)) continue;
+        if (out.some((o) => Math.hypot(o.x - x, o.z - z) < 8)) continue;
+        out.push({ x, z, rot });
+        break;
+      }
     }
     return out;
   }
