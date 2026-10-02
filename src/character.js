@@ -37,6 +37,62 @@ function buildHat(kind) {
     pom.position.y = 0.62;
     hat.add(pom);
     hat.rotation.z = 0.2;
+  } else if (kind === 'beanie') {
+    const cap = part(new THREE.SphereGeometry(0.4, 18, 12, 0, Math.PI * 2, 0, Math.PI / 2), 0x2a9d8f);
+    cap.scale.y = 0.8;
+    cap.position.y = -0.12;
+    const cuff = part(new THREE.CylinderGeometry(0.41, 0.41, 0.12, 18), 0x21867a, { ink: 0.02 });
+    cuff.position.y = -0.1;
+    const pom = part(new THREE.SphereGeometry(0.1, 10, 8), 0xfff6e0, { ink: 0.02 });
+    pom.position.y = 0.24;
+    hat.add(cap, cuff, pom);
+  } else if (kind === 'cap') {
+    const dome = part(new THREE.SphereGeometry(0.38, 18, 10, 0, Math.PI * 2, 0, Math.PI / 2), 0xe63946);
+    dome.position.y = -0.1;
+    const bill = part(new THREE.BoxGeometry(0.42, 0.04, 0.32), 0xe63946, { ink: 0.02 });
+    bill.position.set(0, -0.08, -0.44);
+    hat.add(dome, bill);
+  } else if (kind === 'propeller') {
+    const dome = part(new THREE.SphereGeometry(0.37, 18, 10, 0, Math.PI * 2, 0, Math.PI / 2), 0xffd23f);
+    dome.position.y = -0.1;
+    const stem = part(new THREE.CylinderGeometry(0.03, 0.03, 0.2, 6), 0x374151, { ink: 0.01 });
+    stem.position.y = 0.36;
+    const prop = new THREE.Group();
+    prop.position.y = 0.46;
+    for (const [c, r] of [[0xe63946, 0], [0x4dabff, Math.PI]]) {
+      const blade = part(new THREE.BoxGeometry(0.34, 0.02, 0.09), c, { ink: 0.01 });
+      blade.position.x = 0.17;
+      const arm = new THREE.Group();
+      arm.rotation.y = r;
+      arm.add(blade);
+      prop.add(arm);
+    }
+    hat.userData.spin = prop;
+    hat.add(dome, stem, prop);
+  } else if (kind === 'chef') {
+    const band = part(new THREE.CylinderGeometry(0.34, 0.34, 0.22, 18), 0xffffff, { ink: 0.02 });
+    band.position.y = 0.02;
+    hat.add(band);
+    for (const [x, z] of [[0, 0], [0.16, 0.1], [-0.16, 0.1], [0, -0.16]]) {
+      const puff = part(new THREE.SphereGeometry(0.22, 12, 10), 0xffffff, { ink: 0.02 });
+      puff.position.set(x, 0.3, z);
+      hat.add(puff);
+    }
+  } else if (kind === 'viking') {
+    const dome = part(new THREE.SphereGeometry(0.4, 18, 10, 0, Math.PI * 2, 0, Math.PI / 2), 0x9ca3af);
+    dome.position.y = -0.12;
+    hat.add(dome);
+    for (const side of [-1, 1]) {
+      const horn = part(new THREE.ConeGeometry(0.09, 0.42, 10), 0xfff6e0, { ink: 0.02 });
+      horn.position.set(side * 0.42, 0.12, 0);
+      horn.rotation.z = -side * 0.9;
+      hat.add(horn);
+    }
+  } else if (kind === 'halo') {
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.3, 0.045, 8, 28), new THREE.MeshBasicMaterial({ color: 0xffe066 }));
+    ring.rotation.x = Math.PI / 2;
+    ring.position.y = 0.38;
+    hat.add(ring);
   } else if (kind === 'crown') {
     const ring = part(new THREE.CylinderGeometry(0.3, 0.28, 0.22, 10, 1, true), toon(0xffd23f, { unique: true, side: THREE.DoubleSide }));
     ring.position.y = 0.1;
@@ -49,6 +105,193 @@ function buildHat(kind) {
     }
   }
   return hat;
+}
+
+// ---------- face and outfit pieces (see looks.js for the list) ----------
+
+function buildPupil(style) {
+  if (style === 'stars') {
+    const star = new THREE.Mesh(new THREE.OctahedronGeometry(0.085, 0), toon(0xffd23f));
+    star.scale.z = 0.4;
+    return star;
+  }
+  if (style === 'dollar') {
+    const tex = canvasTexture(64, 64, (c, w, h) => {
+      c.fillStyle = '#16a34a';
+      c.beginPath(); c.arc(w / 2, h / 2, 30, 0, Math.PI * 2); c.fill();
+      c.fillStyle = '#fff6e0';
+      c.font = 'bold 46px sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.fillText('$', w / 2, h / 2 + 3);
+    });
+    const m = new THREE.Mesh(new THREE.CircleGeometry(0.085, 16), new THREE.MeshBasicMaterial({ map: tex }));
+    m.rotation.y = Math.PI;
+    return m;
+  }
+  const r = style === 'big' ? 0.11 : 0.075;
+  return new THREE.Mesh(new THREE.SphereGeometry(r, 12, 8), toon(INK));
+}
+
+function addEyeExtras(eye, style, side, color) {
+  if (style === 'sleepy') {
+    // A heavy lid in the body color over the top half.
+    const lid = new THREE.Mesh(new THREE.SphereGeometry(0.18, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2.1), toon(color));
+    lid.rotation.x = -0.35;
+    eye.add(lid);
+  } else if (style === 'angry') {
+    const brow = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.06, 0.06), toon(INK));
+    brow.position.set(0, 0.17, -0.1);
+    brow.rotation.z = side * 0.45;
+    eye.add(brow);
+  } else if (style === 'happy') {
+    // ^ ^ eyes: hide the pupil behind a curved line.
+    eye.scale.y = 0.75;
+    const arc = new THREE.Mesh(new THREE.TorusGeometry(0.07, 0.022, 6, 12, Math.PI), toon(INK));
+    arc.position.set(0, -0.02, -0.15);
+    eye.add(arc);
+    eye.userData.hidePupil = true;
+  }
+}
+
+function buildMouth(style) {
+  const g = new THREE.Group();
+  g.position.set(0, 0.16, -0.47);
+  const ink = toon(INK);
+  if (style === 'grin') {
+    const m = new THREE.Mesh(new THREE.SphereGeometry(0.13, 16, 8, 0, Math.PI * 2, Math.PI / 2, Math.PI / 2), ink);
+    m.scale.set(1, 0.7, 0.4);
+    const teeth = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.04, 0.02), toon(0xffffff));
+    teeth.position.set(0, -0.02, -0.05);
+    g.add(m, teeth);
+  } else if (style === 'o') {
+    const m = new THREE.Mesh(new THREE.TorusGeometry(0.05, 0.022, 6, 14), ink);
+    g.add(m);
+  } else if (style === 'flat') {
+    const m = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.035, 0.03), ink);
+    g.add(m);
+  } else if (style === 'mustache') {
+    for (const side of [-1, 1]) {
+      const half = new THREE.Mesh(new THREE.CapsuleGeometry(0.035, 0.11, 4, 8), toon(0x3b2a1a));
+      half.rotation.z = Math.PI / 2 + side * 0.35;
+      half.position.set(side * 0.07, 0.05, -0.02);
+      g.add(half);
+    }
+    const smile = new THREE.Mesh(new THREE.TorusGeometry(0.06, 0.02, 6, 10, Math.PI), ink);
+    smile.rotation.z = Math.PI;
+    smile.position.y = -0.03;
+    g.add(smile);
+  } else {
+    const m = new THREE.Mesh(new THREE.TorusGeometry(0.09, 0.025, 6, 12, Math.PI), ink);
+    m.rotation.set(0.25, 0, Math.PI);
+    g.add(m);
+    if (style === 'tongue') {
+      const t = new THREE.Mesh(new THREE.SphereGeometry(0.05, 10, 8), toon(0xff7eb6));
+      t.scale.set(1, 1.3, 0.5);
+      t.position.set(0.02, -0.1, -0.01);
+      g.add(t);
+    }
+    if (style === 'goldtooth') {
+      const tooth = new THREE.Mesh(new THREE.BoxGeometry(0.04, 0.045, 0.02), toon(0xffd23f));
+      tooth.position.set(0.04, -0.07, -0.02);
+      g.add(tooth);
+    }
+  }
+  return g;
+}
+
+function buildGlasses(style) {
+  const g = new THREE.Group();
+  g.position.set(0, 0.38, -0.52);
+  const frame = toon(INK);
+  if (style === 'eyepatch') {
+    const patch = new THREE.Mesh(new THREE.CircleGeometry(0.15, 16), frame);
+    patch.position.set(0.19, 0, -0.02);
+    patch.rotation.y = Math.PI;
+    const strap = new THREE.Mesh(new THREE.TorusGeometry(0.5, 0.015, 4, 32), frame);
+    strap.position.set(0, 0.04, 0.42);
+    strap.rotation.set(Math.PI / 2, 0, 0.35);
+    g.add(patch, strap);
+    return g;
+  }
+  if (style === 'monocle') {
+    const ring = new THREE.Mesh(new THREE.TorusGeometry(0.15, 0.02, 6, 20), toon(0xd4a63a));
+    ring.position.x = 0.19;
+    const lens = new THREE.Mesh(new THREE.CircleGeometry(0.14, 18), new THREE.MeshBasicMaterial({ color: 0xbfe3f5, transparent: true, opacity: 0.35 }));
+    lens.position.x = 0.19;
+    lens.rotation.y = Math.PI;
+    const chain = new THREE.Mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.35, 4), toon(0xd4a63a));
+    chain.position.set(0.3, -0.2, 0.05);
+    chain.rotation.z = 0.3;
+    g.add(ring, lens, chain);
+    return g;
+  }
+  const tint = { shades: 0x111827, nerd: 0xbfe3f5, star: 0xff3fa4 }[style] || 0x111827;
+  const opacity = style === 'nerd' ? 0.3 : 0.92;
+  for (const side of [-1, 1]) {
+    let lens;
+    if (style === 'star') {
+      lens = new THREE.Mesh(new THREE.CircleGeometry(0.17, 5), new THREE.MeshBasicMaterial({ color: tint }));
+      lens.rotation.z = Math.PI / 2;
+    } else {
+      lens = new THREE.Mesh(style === 'nerd' ? new THREE.CircleGeometry(0.15, 18) : new THREE.PlaneGeometry(0.28, 0.17), new THREE.MeshBasicMaterial({ color: tint, transparent: opacity < 1, opacity }));
+    }
+    lens.position.x = side * 0.19;
+    lens.rotation.y = Math.PI;
+    g.add(lens);
+    if (style === 'nerd') {
+      const rim = new THREE.Mesh(new THREE.TorusGeometry(0.15, 0.025, 6, 20), frame);
+      rim.position.x = side * 0.19;
+      g.add(rim);
+    }
+  }
+  const bridge = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.03, 0.03), frame);
+  g.add(bridge);
+  for (const side of [-1, 1]) {
+    const arm = new THREE.Mesh(new THREE.BoxGeometry(0.03, 0.03, 0.4), frame);
+    arm.position.set(side * 0.38, 0, 0.2);
+    g.add(arm);
+  }
+  return g;
+}
+
+function buildNeck(style) {
+  const g = new THREE.Group();
+  if (style === 'bowtie') {
+    g.position.set(0, -0.02, -0.5);
+    for (const side of [-1, 1]) {
+      const wing = part(new THREE.ConeGeometry(0.1, 0.16, 4), 0xe63946, { ink: 0.015, shadow: false });
+      wing.rotation.z = side * Math.PI / 2;
+      wing.position.x = side * 0.08;
+      g.add(wing);
+    }
+    const knot = part(new THREE.SphereGeometry(0.045, 8, 6), 0xb5172b, { ink: 0.01, shadow: false });
+    g.add(knot);
+  } else if (style === 'scarf') {
+    const wrap = part(new THREE.TorusGeometry(0.47, 0.09, 8, 24), 0xe63946, { ink: 0.02, shadow: false });
+    wrap.rotation.x = Math.PI / 2;
+    wrap.position.y = 0.0;
+    const tail = part(new THREE.BoxGeometry(0.14, 0.4, 0.06), 0xe63946, { ink: 0.02, shadow: false });
+    tail.position.set(0.2, -0.22, -0.47);
+    tail.rotation.z = 0.15;
+    g.add(wrap, tail);
+  } else if (style === 'chain' || style === 'medal') {
+    const chain = new THREE.Mesh(new THREE.TorusGeometry(0.42, 0.025, 6, 28, Math.PI), toon(0xffd23f));
+    chain.rotation.set(Math.PI / 2 + 0.5, 0, Math.PI);
+    chain.position.set(0, 0.04, -0.06);
+    g.add(chain);
+    const charm = style === 'medal'
+      ? part(new THREE.CylinderGeometry(0.1, 0.1, 0.03, 16), 0xffd23f, { ink: 0.015, shadow: false })
+      : part(new THREE.CylinderGeometry(0.07, 0.07, 0.03, 12), 0xffd23f, { ink: 0.015, shadow: false });
+    charm.rotation.x = Math.PI / 2;
+    charm.position.set(0, -0.3, -0.49);
+    g.add(charm);
+  } else if (style === 'cape') {
+    const cape = part(new THREE.CylinderGeometry(0.52, 0.62, 1.0, 16, 1, true, -Math.PI * 0.4, Math.PI * 0.8), toon(0x7b2cbf, { side: THREE.DoubleSide }), { ink: 0, shadow: true });
+    cape.position.set(0, -0.35, 0.02);
+    const clasp = part(new THREE.SphereGeometry(0.05, 8, 6), 0xffd23f, { ink: 0.01, shadow: false });
+    clasp.position.set(0, 0.12, -0.46);
+    g.add(cape, clasp);
+  }
+  return g;
 }
 
 // Gun models point down -Z from the grip. Each has a `muzzle` marker.
@@ -161,7 +404,7 @@ function makeNameTag() {
   return sprite;
 }
 
-export function createCharacter({ color, hat }) {
+export function createCharacter({ color, hat = 'top', eyes: eyeStyle = 'normal', mouth: mouthStyle = 'smile', glasses = 'none', neck = 'none', shoes = 0x2b2140 }) {
   const root = new THREE.Group();
   root.rotation.order = 'YXZ';
   // Everything that squashes and leans hangs off this pivot at the feet.
@@ -184,9 +427,10 @@ export function createCharacter({ color, hat }) {
     const eye = part(new THREE.SphereGeometry(0.17, 16, 12), EYE_WHITE, { ink: 0.025, shadow: false });
     eye.scale.z = 0.7;
     eye.position.set(side * 0.19, 0.38, -0.4);
-    const pupil = new THREE.Mesh(new THREE.SphereGeometry(0.075, 12, 8), toon(INK));
+    const pupil = buildPupil(eyeStyle);
     pupil.position.set(0, 0, -0.14);
     eye.add(pupil);
+    addEyeExtras(eye, eyeStyle, side, color);
     const cross = new THREE.Group();
     for (const r of [0.785, -0.785]) {
       const bar = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.05, 0.05), toon(INK));
@@ -201,10 +445,9 @@ export function createCharacter({ color, hat }) {
     eyes.push(eye);
   }
 
-  const mouth = new THREE.Mesh(new THREE.TorusGeometry(0.09, 0.025, 6, 12, Math.PI), toon(INK));
-  mouth.position.set(0, 0.16, -0.48);
-  mouth.rotation.set(0.25, 0, Math.PI);
-  body.add(mouth);
+  body.add(buildMouth(mouthStyle));
+  if (glasses !== 'none') body.add(buildGlasses(glasses));
+  if (neck !== 'none') body.add(buildNeck(neck));
 
   const hatMesh = buildHat(hat);
   hatMesh.position.y += 0.78;
@@ -212,7 +455,7 @@ export function createCharacter({ color, hat }) {
 
   const feet = [];
   for (const side of [-1, 1]) {
-    const foot = part(new THREE.SphereGeometry(0.2, 14, 10), 0x2b2140, { ink: 0.03 });
+    const foot = part(new THREE.SphereGeometry(0.2, 14, 10), shoes, { ink: 0.03 });
     foot.scale.set(0.95, 0.6, 1.3);
     foot.position.set(side * 0.23, 0.11, 0);
     pivot.add(foot);
@@ -284,6 +527,7 @@ export function createCharacter({ color, hat }) {
     // s: { speed, forward, side, onGround, pitch, dead }
     animate(dt, s) {
       anim.t += dt;
+      if (hatMesh.userData.spin) hatMesh.userData.spin.rotation.y += dt * 14;
       const moving = Math.min(1, s.speed / 6);
       anim.phase += dt * (6 + s.speed * 1.1) * (moving > 0.05 ? 1 : 0);
 
@@ -327,9 +571,12 @@ export function createCharacter({ color, hat }) {
       // Falling over when busted.
       const target = s.dead ? 1 : 0;
       anim.dead += (target - anim.dead) * Math.min(1, dt * (s.dead ? 7 : 12));
-      root.rotation.x = anim.dead * (Math.PI / 2 - 0.15);
+      // Downed: flat on your belly, wriggling as you crawl.
+      anim.down = (anim.down || 0) + ((s.downed && !s.dead ? 1 : 0) - (anim.down || 0)) * Math.min(1, dt * 8);
+      root.rotation.x = anim.dead * (Math.PI / 2 - 0.15) - anim.down * (1.25 + Math.sin(anim.t * 9) * 0.05 * Math.min(1, s.speed));
+      root.rotation.z = anim.down * Math.sin(anim.t * 9) * 0.12 * Math.min(1, s.speed);
       for (const eye of eyes) {
-        eye.userData.pupil.visible = !s.dead;
+        eye.userData.pupil.visible = !s.dead && !eye.userData.hidePupil;
         eye.userData.cross.visible = s.dead;
       }
       tag.visible = !s.dead && s.showTag !== false;

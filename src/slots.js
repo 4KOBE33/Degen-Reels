@@ -107,6 +107,7 @@ export class SlotMachine {
     if (this.user) return 'Already spinning';
     if (c.chips < this.cost) return `Need 🪙 ${this.cost} raid chips (you have ${c.chips})`;
     c.chips -= this.cost;
+    if (c.isPlayer) this.raid.run.slotPulls++;
     this.user = c;
     this.t = 0;
     this.jackpot = Math.random() < JACKPOT_CHANCE;

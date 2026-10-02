@@ -1,22 +1,33 @@
 // The Hub between raids: stash and loadout, the Back Room (gambling), the Fence (selling),
-// your look, and settings. Everything here is plain HTML on top of the 3D backdrop.
-import { HUB_SLOTS, COLORS, HATS, HAT_UNLOCKS, ITEMS } from './config.js';
+// your look, your records (stats, achievements, collection log) and settings.
+// Everything here is plain HTML on top of the 3D backdrop.
+import { HUB_SLOTS, ITEMS, LOOT, RARITY_BY_TIER } from './config.js';
 import {
-  itemInfo, itemTitle, isGun, rollLoot, addToList, addToStash, makeGun, makeItem, weightedIndex, fullAmmo,
+  itemInfo, isGun, rollLoot, addToList, addToStash, makeGun, makeItem, fullAmmo,
 } from './items.js';
 import { save } from './save.js';
-import { iconHtml } from './icons.js';
+import { iconHtml, gunIcon } from './icons.js';
 import { renderBinds, wireBinds } from './keys.js';
 import { MAPS } from './map.js';
 import { escapeHtml } from './hud.js';
 import { sfx, initAudio, setVolume } from './audio.js';
+import {
+  progress, levelInfo, ACHIEVEMENTS, TIER_NAMES, collectionEntries, collectionProgress, GUN_KINDS, lookUnlocked, itemKey,
+} from './progress.js';
+import {
+  LOOKS, LOOK_PARTS, unlockText, wornLook,
+} from './looks.js';
+import { LookPreview } from './preview.js';
 
 const $ = (id) => document.getElementById(id);
-const HAT_ICONS = { top: '🎩', cowboy: '🤠', visor: '🃏', party: '🥳', crown: '👑' };
 const LOADOUT_SLOTS = 8;
 const BETS = [25, 100, 250, 1000];
+const fmt = (n) => Math.round(n).toLocaleString('en-US');
+const hex = (c) => `#${Number(c).toString(16).padStart(6, '0')}`;
 
+// ---------- card games ----------
 const RED = new Set([1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36]);
+const WHEEL = [0, 32, 15, 19, 4, 21, 2, 25, 17, 34, 6, 27, 13, 36, 11, 30, 8, 23, 10, 5, 24, 16, 33, 1, 20, 14, 31, 9, 22, 18, 29, 7, 28, 12, 35, 3, 26];
 const SUITS = ['♠', '♥', '♦', '♣'];
 const RANKS = ['A', '2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K'];
 const drawCard = () => ({ rank: RANKS[Math.floor(Math.random() * 13)], suit: SUITS[Math.floor(Math.random() * 4)] });
@@ -30,8 +41,29 @@ function handValue(hand) {
   while (total > 21 && aces) { total -= 10; aces--; }
   return total;
 }
-const cardHtml = (c, hidden) => (hidden ? '<span class="pcard back"></span>'
-  : `<span class="pcard ${c.suit === '♥' || c.suit === '♦' ? 'red' : ''}">${c.rank}${c.suit}</span>`);
+const cardHtml = (c, hidden, i = 0) => (hidden ? `<span class="pcard back" style="--i:${i}"></span>`
+  : `<span class="pcard ${c.suit === '♥' || c.suit === '♦' ? 'red' : ''}" style="--i:${i}"><i>${c.rank}</i><em>${c.suit}</em><i class="flip">${c.rank}</i></span>`);
+
+// ---------- Loot Reels ----------
+const REEL_SYMBOLS = ['🍒', '🍋', '🔔', '7️⃣', '💎', '🪙', '🎲', '⭐'];
+const ROW = 62;
+const PRIZE_SYMBOL = ['🍒', '🔔', '7️⃣', '💎'];
+
+// Rough odds from one pull, for the machine cards.
+function reelOdds(tier) {
+  const table = LOOT[tier];
+  const total = table.reduce((n, [w]) => n + w, 0);
+  const gun = (table.find(([, w]) => w === 'gun') || [0])[0] / total;
+  const legItems = table.filter(([, w]) => ITEMS[w] && ITEMS[w].legendary).reduce((n, [w]) => n + w, 0) / total;
+  return { legendary: gun * RARITY_BY_TIER[tier][3] + legItems * 100, epic: gun * RARITY_BY_TIER[tier][2], gun: gun * 100 };
+}
+
+const GAMES = [
+  ['slots', '🎰', 'Loot Reels', 'Spin for a mystery prize'],
+  ['blackjack', '🃏', 'Blackjack', 'Beat the dealer to 21'],
+  ['roulette', '🎡', 'Roulette', 'Pick a color, spin the wheel'],
+  ['crash', '🚀', 'Crash', 'Cash out before it blows'],
+];
 
 export class Hub {
   constructor({ onDeploy, onMapChange }) {
@@ -42,18 +74,37 @@ export class Hub {
     this.bet = 100;
     this.bj = null;
     this.crash = null;
-    this.slotSpin = null;
+    this.roulette = null;
+    this.reels = null;
+    this.machine = 0;
+    this.session = 0;
+    this.history = [];
+    this.lookPart = 'color';
+    this.recTab = 'overview';
     this.armedReset = false;
+    this.preview = new LookPreview();
     const d = save.get();
     if (!d.loadout) save.update((x) => { x.loadout = { weapons: [null, null], items: [] }; });
     if (!d.selectedMap || !MAPS[d.selectedMap]) save.update((x) => { x.selectedMap = 'vegas'; });
-    if (d.look.color === null) save.update((x) => { x.look.color = COLORS[Math.floor(Math.random() * COLORS.length)]; });
+    if (d.look.color === null) save.update((x) => { x.look.color = LOOKS.color[Math.floor(Math.random() * 8)].id; });
+    // Older profiles: count what's already in the stash as found, and award anything already earned.
+    progress((x) => {
+      if (x.collectionSeeded) return;
+      x.collectionSeeded = true;
+      for (const it of x.stash.items) { const k = itemKey(it); x.collection[k] = (x.collection[k] || 0) + (it.qty || 1); }
+    });
 
     $('hubTabs').addEventListener('click', (e) => {
       const b = e.target.closest('[data-tab]');
       if (!b) return;
       this.tab = b.dataset.tab;
       initAudio();
+      this.render();
+    });
+    $('hubWallet').addEventListener('click', (e) => {
+      if (!e.target.closest('.prof')) return;
+      this.tab = 'records';
+      this.recTab = 'overview';
       this.render();
     });
     $('hubBody').addEventListener('click', (e) => this.onClick(e));
@@ -80,26 +131,56 @@ export class Hub {
     el.classList.add('show');
   }
 
+  // Shout about anything a change unlocked.
+  announce(out) {
+    if (!out) return;
+    const bits = [];
+    if (out.levelUp) bits.push(`⭐ Level ${out.levelUp}!`);
+    for (const a of out.achievements) bits.push(`🏆 ${a.name}`);
+    if (out.looks.length) bits.push(`🎨 ${out.looks.length} new look${out.looks.length > 1 ? 's' : ''}`);
+    if (bits.length) { this.toast(bits.join(' · ')); sfx.jackpot(); }
+  }
+
   // ---------- rendering ----------
 
   render() {
     const d = this.data;
-    const stashValue = d.stash.items.reduce((n, it) => n + itemInfo(it).value, 0);
-    $('hubWallet').innerHTML = `🪙 <b>${d.stash.chips}</b><small>Stash worth 🪙 ${stashValue} · Raids ${d.stats.raids} · Extracts ${d.stats.extracts} · Best haul 🪙 ${d.stats.bestHaul}</small>`;
+    this.renderHeader();
     document.querySelectorAll('#hubTabs [data-tab]').forEach((b) => b.classList.toggle('on', b.dataset.tab === this.tab));
     const body = {
       loadout: () => this.renderLoadout(),
       backroom: () => this.renderBackRoom(),
       fence: () => this.renderFence(),
       look: () => this.renderLook(),
+      records: () => this.renderRecords(),
       settings: () => this.renderSettings(),
     }[this.tab]();
     $('hubBody').innerHTML = body;
+    $('hubBody').dataset.tab = this.tab;
     if (this.tab === 'backroom' && this.game === 'crash') this.drawCrash();
-    const lo = d.loadout;
-    const hasGun = lo.weapons.some(Boolean);
+    if (this.tab === 'look') {
+      this.preview.setLook(wornLook(d.look), d.loadout.weapons.find(Boolean));
+      this.preview.mount($('lookSlot'));
+    }
+    const hasGun = d.loadout.weapons.some(Boolean);
     const m = MAPS[d.selectedMap];
-    $('deploy').innerHTML = hasGun ? `DEPLOY TO ${m.name.toUpperCase()}` : 'DEPLOY (no gun!)';
+    $('deploy').innerHTML = hasGun ? `DEPLOY<small>${m.icon} ${m.name}</small>` : 'DEPLOY<small>no gun packed!</small>';
+  }
+
+  renderHeader() {
+    const d = this.data;
+    const lv = levelInfo(d.xp);
+    const look = wornLook(d.look);
+    const hat = LOOKS.hat.find((h) => h.id === look.hat);
+    const stashValue = d.stash.items.reduce((n, it) => n + itemInfo(it).value, 0);
+    $('hubWallet').innerHTML = `
+      <button class="prof" title="Your records">
+        <span class="avatar" style="--c:${hex(look.color)}">${hat && hat.id !== 'none' ? hat.icon : '🙂'}</span>
+        <span class="pinfo"><b>${escapeHtml((d.look.name || '').trim() || 'High Roller')}</b>
+          <span class="lvrow"><span class="lvlbadge">LV ${lv.level}</span><span class="xpbar"><i style="width:${(lv.frac * 100).toFixed(1)}%"></i></span></span>
+          <small>${fmt(lv.into)} / ${fmt(lv.need)} XP</small></span>
+      </button>
+      <div class="money"><span class="coin">🪙</span><span><b>${fmt(d.stash.chips)}</b><small>chips · stash worth 🪙 ${fmt(stashValue)}</small></span></div>`;
   }
 
   itemCard(item, act, i, extra = '') {
@@ -115,7 +196,8 @@ export class Hub {
     const noGuns = !d.stash.items.some(isGun) && !lo.weapons.some(Boolean);
     const maps = Object.entries(MAPS).map(([id, m]) => `<button class="mapcard ${d.selectedMap === id ? 'on' : ''}" data-act="map" data-m="${id}">
         <span class="icon">${m.icon}</span><b>${m.name}</b><small>${m.size} · ${m.danger}</small><span class="blurb">${m.blurb}</span></button>`).join('');
-    return `<h3>Choose a map</h3><div class="maps">${maps}</div>
+    return `<p class="howto">Pick a map, drop in, loot what you can, fight off the machines, and reach an open exit before time runs out. <b>Die and you lose everything you brought.</b> The best loot only drops in deadly zones.</p>
+      <h3>Choose a map</h3><div class="maps">${maps}</div>
       <div class="cols">
       <section><h3>Raid loadout</h3><p class="hint">Whatever you bring is lost if you die. Click to send it back to the stash.</p>
         <div class="wslots">${lo.weapons.map((g, i) => (g ? this.itemCard(g, 'unequip', i) : `<div class="item empty">Weapon ${i + 1}<br><small>empty</small></div>`)).join('')}</div>
@@ -132,23 +214,131 @@ export class Hub {
     const valuables = d.stash.items.filter((it) => !isGun(it) && ITEMS[it.id].kind === 'valuable');
     const total = valuables.reduce((n, it) => n + itemInfo(it).value, 0);
     return `<h3>The Fence</h3><p class="hint">Sells anything for its full value in chips. No questions asked.</p>
-      ${valuables.length ? `<button class="btn" data-act="sellvaluables">Sell all valuables · 🪙 ${total}</button>` : ''}
-      <div class="grid">${d.stash.items.map((it, i) => this.itemCard(it, 'sell', i, `<span class="price">Sell 🪙${itemInfo(it).value}</span>`)).join('') || '<p class="hint">Nothing to sell.</p>'}</div>`;
+      ${valuables.length ? `<button class="btn" data-act="sellvaluables">Sell all valuables · 🪙 ${fmt(total)}</button>` : ''}
+      <div class="grid">${d.stash.items.map((it, i) => this.itemCard(it, 'sell', i, `<span class="price">Sell 🪙${fmt(itemInfo(it).value)}</span>`)).join('') || '<p class="hint">Nothing to sell.</p>'}</div>`;
   }
 
+  // ---------- Look ----------
+
   renderLook() {
-    const { look } = this.data;
-    return `<h3>Your look</h3>
-      <input id="lookName" maxlength="14" placeholder="Your name" value="${escapeHtml(look.name || '')}">
-      <div class="label">Color</div>
-      <div class="swatches">${COLORS.map((c) => `<button class="swatch ${c === look.color ? 'on' : ''}" data-act="color" data-c="${c}" style="background:#${c.toString(16).padStart(6, '0')}" aria-label="Color"></button>`).join('')}</div>
-      <div class="label">Hat</div>
-      <div class="hats">${HATS.map((h) => {
-    const open = save.hatUnlocked(h);
-    const tip = open ? `${h} hat` : `Locked: ${HAT_UNLOCKS[h].text}`;
-    return `<button class="hat ${h === look.hat ? 'on' : ''} ${open ? '' : 'locked'}" data-act="hat" data-h="${h}" title="${tip}" aria-label="${tip}">${open ? HAT_ICONS[h] : '🔒'}</button>`;
-  }).join('')}</div>
-      <p class="hint">${HATS.filter((h) => !save.hatUnlocked(h)).map((h) => `🔒 ${h}: ${HAT_UNLOCKS[h].text}`).join(' · ') || 'Every hat unlocked. Fancy.'}</p>`;
+    const d = this.data;
+    const look = wornLook(d.look);
+    const opts = LOOKS[this.lookPart];
+    const tabs = LOOK_PARTS.map(([p, label]) => {
+      const total = LOOKS[p].length;
+      const open = LOOKS[p].filter((o) => lookUnlocked(o)).length;
+      return `<button class="subtab ${this.lookPart === p ? 'on' : ''}" data-act="lookpart" data-p="${p}">${label} <small>${open}/${total}</small></button>`;
+    }).join('');
+    const swatch = this.lookPart === 'color' || this.lookPart === 'shoes';
+    const grid = opts.map((o) => {
+      const open = lookUnlocked(o);
+      const on = look[this.lookPart] === o.id;
+      const face = swatch ? `<span class="sw" style="background:${hex(o.id)}"></span>` : `<span class="oi">${o.icon}</span>`;
+      return `<button class="lookopt ${on ? 'on' : ''} ${open ? '' : 'locked'}" data-act="lookopt" data-p="${this.lookPart}" data-id="${o.id}" title="${escapeHtml(open ? o.name : `🔒 ${unlockText(o)}`)}">
+        ${face}<b>${escapeHtml(o.name)}</b>${open ? '' : `<small>🔒 ${escapeHtml(unlockText(o))}</small>`}</button>`;
+    }).join('');
+    return `<div class="lookwrap">
+      <div class="lookstage"><div id="lookSlot" class="lookslot"></div>
+        <input id="lookName" maxlength="14" placeholder="Your name" value="${escapeHtml(d.look.name || '')}">
+        <div class="row"><button class="btn ghost" data-act="lookrandom">🎲 Randomize</button></div>
+        <p class="hint">Drag to spin. Level up and earn achievements to unlock more.</p></div>
+      <div class="lookopts"><div class="subtabs">${tabs}</div><div class="optgrid ${swatch ? 'swatches' : ''}">${grid}</div></div>
+    </div>`;
+  }
+
+  // ---------- Records: stats, achievements, collection ----------
+
+  renderRecords() {
+    const tabs = [['overview', '📊 Overview'], ['achievements', '🏆 Achievements'], ['collection', '📖 Collection']]
+      .map(([k, n]) => `<button class="subtab ${this.recTab === k ? 'on' : ''}" data-act="rectab" data-r="${k}">${n}</button>`).join('');
+    const body = { overview: () => this.renderOverview(), achievements: () => this.renderAchievements(), collection: () => this.renderCollection() }[this.recTab]();
+    return `<div class="subtabs">${tabs}</div>${body}`;
+  }
+
+  renderOverview() {
+    const d = this.data;
+    const s = d.stats;
+    const lv = levelInfo(d.xp);
+    const col = collectionProgress(d);
+    const achDone = ACHIEVEMENTS.filter((a) => d.achievements[a.id]).length;
+    const rate = s.extracts + s.deaths ? Math.round((s.extracts / (s.extracts + s.deaths)) * 100) : 0;
+    const mins = Math.round(s.timePlayed / 60);
+    // The rarest thing you've ever extracted.
+    const found = collectionEntries().filter((e) => d.collection[e.key]).sort((a, b) => b.rarity - a.rarity || (b.kind ? 1 : 0) - (a.kind ? 1 : 0));
+    const best = found[0];
+    const bestHtml = best ? `<span style="color:${best.css}">${best.kind ? `<img class="gicon" src="${gunIcon(best.kind, best.rarity) || ''}" alt="">` : best.icon} ${escapeHtml(best.name)}</span>` : 'Nothing yet';
+    // The next look you'll unlock by leveling.
+    const next = Object.values(LOOKS).flat().filter((o) => o.unlock && o.unlock.level > lv.level).sort((a, b) => a.unlock.level - b.unlock.level)[0];
+    const tile = (icon, label, value) => `<div class="stat-tile"><span>${icon}</span><b>${value}</b><small>${label}</small></div>`;
+    return `<div class="overview">
+      <div class="levelcard"><div class="biglvl">${lv.level}</div><div class="lvbody"><b>Level ${lv.level}</b>
+        <div class="xpbar big"><i style="width:${(lv.frac * 100).toFixed(1)}%"></i></div>
+        <small>${fmt(lv.into)} / ${fmt(lv.need)} XP to level ${lv.level + 1}${next ? ` · next unlock at level ${next.unlock.level}: ${next.icon || '🎨'} ${escapeHtml(next.name)}` : ''}</small>
+        <small>Earn XP by extracting (bigger hauls pay more), busting machines and raiders, and unlocking achievements.</small></div></div>
+      <div class="goalrow">
+        <button class="goal" data-act="rectab" data-r="collection"><b>📖 Collection</b><span class="xpbar"><i style="width:${((col.found / col.total) * 100).toFixed(1)}%"></i></span><small>${col.found} / ${col.total} found</small></button>
+        <button class="goal" data-act="rectab" data-r="achievements"><b>🏆 Achievements</b><span class="xpbar"><i style="width:${((achDone / ACHIEVEMENTS.length) * 100).toFixed(1)}%"></i></span><small>${achDone} / ${ACHIEVEMENTS.length} unlocked</small></button>
+        <div class="goal"><b>💎 Rarest find</b><div class="rarest">${bestHtml}</div></div>
+      </div>
+      <h3>Raiding</h3>
+      <div class="stat-tiles">
+        ${tile('🎲', 'Raids', fmt(s.raids))}${tile('🚁', 'Extracts', fmt(s.extracts))}${tile('💀', 'Deaths', fmt(s.deaths))}${tile('📈', 'Survival rate', `${rate}%`)}
+        ${tile('💰', 'Best haul', `🪙 ${fmt(s.bestHaul)}`)}${tile('🏦', 'Total extracted', `🪙 ${fmt(s.totalHaul)}`)}${tile('🔧', 'Machines busted', fmt(s.machines))}${tile('🤠', 'Raiders busted', fmt(s.raiders))}
+        ${tile('👑', 'Pit Bosses', fmt(s.bossKills))}${tile('🎯', 'Critical hits', fmt(s.crits))}${tile('🐊', 'Gators', fmt(s.gators))}${tile('💣', 'Throwables thrown', fmt(s.throws))}
+        ${tile('📦', 'Containers searched', fmt(s.containers))}${tile('🎰', 'Raid slots pulled', fmt(s.slotPulls))}${tile('⏱️', 'Time in raids', `${mins} min`)}${tile('🗺️', 'Maps escaped', `${Object.keys(s.extractsByMap).length} / 3`)}
+      </div>
+      <h3>The Back Room</h3>
+      <div class="stat-tiles">
+        ${tile('🪙', 'Chips wagered', fmt(s.wagered))}${tile('🤑', 'Chips won', fmt(s.gambleWon))}${tile('📊', 'Net', `${s.gambleWon - s.wagered >= 0 ? '+' : ''}${fmt(s.gambleWon - s.wagered)}`)}${tile('💸', 'Biggest win', `🪙 ${fmt(s.biggestWin)}`)}
+        ${tile('🎰', 'Reels pulled', fmt(s.reelsPulled))}${tile('🂡', 'Blackjacks', fmt(s.blackjacks))}${tile('🚀', 'Best Crash', `${s.crashBest.toFixed(2)}x`)}${tile('🟢', 'Green wins', fmt(s.rouletteGreens))}
+      </div></div>`;
+  }
+
+  renderAchievements() {
+    const d = this.data;
+    const groups = [...new Set(ACHIEVEMENTS.map((a) => a.group))];
+    const rewardsFor = (id) => Object.values(LOOKS).flat().filter((o) => o.unlock && o.unlock.ach === id);
+    return groups.map((g) => `<h3>${g}</h3><div class="achgrid">${ACHIEVEMENTS.filter((a) => a.group === g).map((a) => {
+      const done = !!d.achievements[a.id];
+      const [cur, goal] = a.prog(d);
+      const pct = Math.min(100, (cur / goal) * 100);
+      const rewards = rewardsFor(a.id);
+      return `<div class="ach t${a.tier} ${done ? 'done' : 'locked'}">
+        <span class="ic">${done ? a.icon : '🔒'}</span>
+        <div class="ab"><b>${escapeHtml(a.name)}</b><small class="tier">${TIER_NAMES[a.tier]}</small>
+          <p>${escapeHtml(a.desc)}</p>
+          ${done ? `<small class="when">✓ Unlocked ${new Date(d.achievements[a.id]).toLocaleDateString()}</small>`
+    : `<span class="xpbar"><i style="width:${pct.toFixed(1)}%"></i></span><small>${fmt(Math.min(cur, goal))} / ${fmt(goal)}</small>`}
+          ${rewards.length ? `<small class="reward">🎨 Unlocks: ${rewards.map((o) => escapeHtml(o.name)).join(', ')}</small>` : ''}
+        </div></div>`;
+    }).join('')}</div>`).join('');
+  }
+
+  renderCollection() {
+    const d = this.data;
+    const entries = collectionEntries();
+    const col = collectionProgress(d);
+    const rarities = ['Common', 'Rare', 'Epic', 'Legendary'];
+    const gunRows = GUN_KINDS.map((kind) => {
+      const cells = [0, 1, 2, 3].map((r) => {
+        const e = entries.find((x) => x.key === `gun:${kind}:${r}`);
+        const n = d.collection[e.key] || 0;
+        const src = gunIcon(kind, r);
+        return `<div class="colcell r${r} ${n ? 'found' : 'missing'}" title="${escapeHtml(`${e.name}\n${e.hint}`)}">
+          ${src ? `<img src="${src}" alt="">` : '🔫'}<small>${n ? `×${n}` : '???'}</small></div>`;
+      }).join('');
+      return `<div class="colrow"><b>${escapeHtml(entries.find((x) => x.key === `gun:${kind}:0`).name)}</b>${cells}</div>`;
+    }).join('');
+    const itemCells = (group) => entries.filter((e) => e.group === group).sort((a, b) => a.rarity - b.rarity).map((e) => {
+      const n = d.collection[e.key] || 0;
+      return `<div class="colitem r${e.rarity} ${n ? 'found' : 'missing'}" title="${escapeHtml(e.hint)}">
+        <span class="ic">${n ? e.icon : '❔'}</span><b style="${n ? `color:${e.css}` : ''}">${escapeHtml(e.name)}</b><small>${n ? `Found ×${n}` : escapeHtml(e.hint)}</small></div>`;
+    }).join('');
+    return `<div class="colhead"><div><b>${col.found} / ${col.total}</b> found</div><div class="xpbar big"><i style="width:${((col.found / col.total) * 100).toFixed(1)}%"></i></div>
+      <p class="hint">Everything you've ever extracted (or won in the Back Room). Legendaries only drop in deadly zones: the casinos, the vaults, Area 52, the Observatory and Marie's Mansion. Hover anything to see where to look.</p></div>
+      <h3>Guns</h3><div class="colguns"><div class="colrow head"><span></span>${rarities.map((r, i) => `<span class="r${i}">${r}</span>`).join('')}</div>${gunRows}</div>
+      <h3>Valuables</h3><div class="colitems">${itemCells('Valuables')}</div>
+      <h3>Gear</h3><div class="colitems">${itemCells('Gear')}</div>`;
   }
 
   renderSettings() {
@@ -162,58 +352,120 @@ export class Hub {
       <button class="btn ghost" data-act="reset">${this.armedReset ? 'Click again to wipe ALL progress' : 'Reset progress'}</button>`;
   }
 
+  // ---------- the Back Room ----------
+
   renderBackRoom() {
     const d = this.data;
-    const tabs = [['slots', '🎰 Loot Reels'], ['blackjack', '🃏 Blackjack'], ['roulette', '🎡 Roulette'], ['crash', '🚀 Crash']]
-      .map(([k, n]) => `<button class="subtab ${this.game === k ? 'on' : ''}" data-act="game" data-g="${k}">${n}</button>`).join('');
-    const bets = `<div class="bets">Bet: ${BETS.map((b) => `<button class="bet ${b === this.bet ? 'on' : ''}" data-act="bet" data-b="${b}">🪙${b}</button>`).join('')}</div>`;
-    let game = '';
-    if (this.game === 'slots') {
-      const s = this.slotSpin;
-      game = `<p class="hint">Spend stash chips on a mystery prize. Gold Reels are the only way to win a Legendary here.</p>
-        <div class="reels">${(s ? s.show : ['🎰', '🎰', '🎰']).map((x) => `<span>${x}</span>`).join('')}</div>
-        <div class="row">${HUB_SLOTS.map((m, i) => `<button class="btn" data-act="pull" data-i="${i}" ${s && s.running ? 'disabled' : ''}>${m.name}<br><small>🪙 ${m.cost}</small></button>`).join('')}</div>
-        ${s && s.prize ? `<p class="msg">${s.prize}</p>` : ''}`;
-    } else if (this.game === 'blackjack') {
-      const g = this.bj;
-      const playing = g && g.state === 'play';
-      game = `${bets}${g ? `<div class="hands"><div><span class="who">Dealer ${playing ? '' : handValue(g.dealer)}</span>${g.dealer.map((c, i) => cardHtml(c, playing && i === 1)).join('')}</div>
-        <div><span class="who">You ${handValue(g.hand)}</span>${g.hand.map((c) => cardHtml(c)).join('')}</div></div>` : ''}
-        <div class="row">${playing ? `<button class="btn" data-act="hit">Hit</button><button class="btn" data-act="stand">Stand</button>${g.hand.length === 2 ? '<button class="btn" data-act="double">Double</button>' : ''}`
-    : '<button class="btn" data-act="deal">Deal</button>'}</div>${g && g.msg ? `<p class="msg">${g.msg}</p>` : ''}`;
-    } else if (this.game === 'roulette') {
-      const r = this.roulette;
-      game = `${bets}<div class="wheel ${r && r.spinning ? 'spin' : ''} ${r && !r.spinning ? r.color : ''}">${r ? (r.spinning ? '…' : r.n) : '?'}</div>
-        <div class="row"><button class="btn red" data-act="spin" data-k="red">Red · 2x</button><button class="btn black" data-act="spin" data-k="black">Black · 2x</button><button class="btn green" data-act="spin" data-k="green">Green · 14x</button></div>
-        ${r && r.msg ? `<p class="msg">${r.msg}</p>` : ''}`;
-    } else {
-      const c = this.crash;
-      game = `${c && c.running ? '' : bets}<canvas id="crashGraph" class="crashgraph" width="520" height="200"></canvas>
-        <div id="crashMult" class="mult ${c && c.crashed ? 'crashed' : ''}">${c ? `${c.mult.toFixed(2)}x` : '1.00x'}</div>
-        <div class="row">${c && c.running
-    ? `<button id="crashBtn" class="btn big cashout" data-act="cashout">CASH OUT 🪙${Math.floor(c.bet * c.mult)}</button>`
-    : '<button class="btn big" data-act="launch">LAUNCH 🚀</button>'}</div>
-        <p class="hint">The multiplier climbs until the rocket blows up. Cash out before it does.</p>
-        ${c && c.msg ? `<p class="msg">${c.msg}</p>` : ''}`;
+    const rail = GAMES.map(([k, icon, name, tag]) => `<button class="gamecard ${this.game === k ? 'on' : ''}" data-act="game" data-g="${k}">
+      <span class="gi">${icon}</span><span><b>${name}</b><small>${tag}</small></span></button>`).join('');
+    const net = this.session;
+    const recent = this.history.slice(-8).reverse().map((h) => `<span class="${h.net > 0 ? 'win' : h.net < 0 ? 'loss' : ''}">${h.icon} ${h.net > 0 ? '+' : ''}${fmt(h.net)}</span>`).join('');
+    const stage = { slots: () => this.renderReels(), blackjack: () => this.renderBlackjack(), roulette: () => this.renderRoulette(), crash: () => this.renderCrash() }[this.game]();
+    return `<div class="backroom">
+      <aside class="gamerail">${rail}
+        <div class="session"><small>This session</small><b class="${net > 0 ? 'win' : net < 0 ? 'loss' : ''}">${net > 0 ? '+' : ''}${fmt(net)}</b><small>Stash 🪙 ${fmt(d.stash.chips)}</small></div>
+      </aside>
+      <section class="table">${stage}${recent ? `<div class="recent"><small>Recent</small>${recent}</div>` : ''}</section>
+    </div>`;
+  }
+
+  betChips(disabled = false) {
+    return `<div class="betchips"><small>BET</small>${BETS.map((b) => `<button class="cchip c${b} ${b === this.bet ? 'on' : ''}" data-act="bet" data-b="${b}" ${disabled ? 'disabled' : ''}>${b >= 1000 ? '1K' : b}</button>`).join('')}</div>`;
+  }
+
+  renderReels() {
+    const m = HUB_SLOTS[this.machine];
+    const r = this.reels;
+    const running = r && r.running;
+    const machines = HUB_SLOTS.map((mc, i) => {
+      const odds = reelOdds(mc.tier);
+      return `<button class="machine m${i} ${this.machine === i ? 'on' : ''}" data-act="machine" data-i="${i}" ${running ? 'disabled' : ''}>
+        <b>${mc.name}</b><span>🪙 ${fmt(mc.cost)}</span><small>Epic ${odds.epic.toFixed(1)}% · Legendary ${odds.legendary.toFixed(1)}%</small></button>`;
+    }).join('');
+    const strips = r ? r.strips : [0, 1, 2].map(() => this.randomStrip(3));
+    const reels = strips.map((strip, k) => `<div class="reel"><div class="strip" id="strip${k}" style="${r && r.animating ? '' : `transform:translateY(${-(strip.length - 3) * ROW}px)`}">${strip.map((s) => `<span>${s}</span>`).join('')}</div></div>`).join('');
+    let prize = '<div class="prize empty">Pull the lever. Every pull pays out something: chips, gear, or if you\'re lucky, a Legendary.</div>';
+    if (r && !r.running && r.prize) {
+      const p = r.prize;
+      prize = p.chips
+        ? `<div class="prize r0"><span class="pi">🪙</span><div><small>PAID OUT</small><b>🪙 ${fmt(p.chips)} chips</b></div></div>`
+        : `<div class="prize r${itemInfo(p).rarity}"><span class="pi">${iconHtml(p, 'gicon big')}</span><div><small>${['Common', 'Rare', 'Epic', 'LEGENDARY'][itemInfo(p).rarity]}${r.isNew ? ' · NEW TO YOUR COLLECTION!' : ''}</small><b style="color:${itemInfo(p).css}">${escapeHtml(itemInfo(p).name)}</b><small>Worth 🪙 ${fmt(itemInfo(p).value)} · sent to your stash</small></div></div>`;
     }
-    return `<h3>The Back Room</h3><div class="subtabs">${tabs}</div><div class="game">${game}</div>
-      <p class="hint">Stash chips: 🪙 ${d.stash.chips}. The house edge is real.</p>`;
+    const big = r && !running && r.prize && !r.prize.chips && itemInfo(r.prize).rarity >= 2;
+    return `<div class="machines">${machines}</div>
+      <div class="cabinet m${this.machine} ${running ? 'spinning' : ''} ${big ? 'bigwin' : ''}">
+        <div class="cabtop">${m.name.toUpperCase()}</div>
+        <div class="reelwin">${reels}<div class="payline"></div></div>
+        <button class="btn big spinbtn" data-act="pull" ${running ? 'disabled' : ''}>${running ? 'SPINNING…' : `PULL · 🪙 ${fmt(m.cost)}`}</button>
+      </div>${prize}`;
+  }
+
+  renderBlackjack() {
+    const g = this.bj;
+    const playing = g && g.state === 'play';
+    const dealerVal = g ? (playing ? handValue([g.dealer[0]]) : handValue(g.dealer)) : '';
+    const ghost = '<span class="pcard ghost"></span><span class="pcard ghost"></span>';
+    return `${this.betChips(playing)}
+      <div class="felt bjtable">
+        <div class="hand"><span class="who">DEALER ${g ? `<b>${dealerVal}${playing ? ' + ?' : ''}</b>` : ''}</span><div class="cards">${g ? g.dealer.map((c, i) => cardHtml(c, playing && i === 1, i)).join('') : ghost}</div></div>
+        <div class="felttext">BLACKJACK PAYS 3 TO 2 · DEALER STANDS ON 17</div>
+        <div class="hand"><span class="who">YOU ${g ? `<b>${handValue(g.hand)}</b>` : ''}</span><div class="cards">${g ? g.hand.map((c, i) => cardHtml(c, false, i)).join('') : ghost}</div></div>
+      </div>
+      <div class="row">${playing ? `<button class="btn" data-act="hit">Hit</button><button class="btn" data-act="stand">Stand</button>${g.hand.length === 2 ? `<button class="btn" data-act="double">Double · 🪙 ${fmt(g.bet)}</button>` : ''}`
+    : `<button class="btn big" data-act="deal">DEAL · 🪙 ${fmt(this.bet)}</button>`}</div>
+      ${g && g.msg ? `<p class="msg ${g.win ? 'win' : g.win === false ? 'loss' : ''}">${g.msg}</p>` : ''}`;
+  }
+
+  renderRoulette() {
+    const r = this.roulette;
+    const seg = 360 / 37;
+    const grad = WHEEL.map((n, i) => `${n === 0 ? '#16a34a' : RED.has(n) ? '#d62828' : '#1b0f2b'} ${(i * seg).toFixed(3)}deg ${((i + 1) * seg).toFixed(3)}deg`).join(', ');
+    const labels = WHEEL.map((n, i) => `<span style="transform:rotate(${((i + 0.5) * seg).toFixed(2)}deg)"><i>${n}</i></span>`).join('');
+    const angle = r ? r.angle : 0;
+    const choices = [['red', 'Red', '2x'], ['black', 'Black', '2x'], ['odd', 'Odd', '2x'], ['even', 'Even', '2x'], ['green', 'Green 0', '14x']];
+    return `${this.betChips(r && r.spinning)}
+      <div class="roulette">
+        <div class="wheelwrap"><div class="pointer">▼</div>
+          <div class="rwheel" style="background:conic-gradient(${grad});transform:rotate(${angle}deg)">${labels}</div><div class="hubcap">${r && !r.spinning ? `<b class="${r.color}">${r.n}</b>` : '🎡'}</div></div>
+        <div class="rbets">${choices.map(([k, n, x]) => `<button class="rbet ${k}" data-act="spin" data-k="${k}" ${r && r.spinning ? 'disabled' : ''}><b>${n}</b><small>pays ${x}</small></button>`).join('')}</div>
+      </div>
+      ${r && r.msg ? `<p class="msg ${r.won ? 'win' : 'loss'}">${r.msg}</p>` : '<p class="hint">Pick what to bet on. The wheel does the rest.</p>'}`;
+  }
+
+  renderCrash() {
+    const c = this.crash;
+    return `${c && c.running ? '' : this.betChips()}
+      <div class="crashbox"><canvas id="crashGraph" class="crashgraph" width="640" height="240"></canvas>
+        <div id="crashMult" class="mult ${c && c.crashed ? 'crashed' : ''}">${c ? `${c.mult.toFixed(2)}x` : '1.00x'}</div></div>
+      <div class="row">${c && c.running
+    ? `<button id="crashBtn" class="btn big cashout" data-act="cashout">CASH OUT 🪙${fmt(Math.floor(c.bet * c.mult))}</button>`
+    : `<button class="btn big" data-act="launch">LAUNCH 🚀 · 🪙 ${fmt(this.bet)}</button>`}</div>
+      ${c && c.msg ? `<p class="msg ${c.crashed ? 'loss' : 'win'}">${c.msg}</p>` : '<p class="hint">The multiplier climbs until the rocket blows up. Cash out before it does.</p>'}`;
   }
 
   // ---------- actions ----------
 
+  // Chips out for a bet.
   spend(amount) {
     if (this.data.stash.chips < amount) {
-      this.toast(`You need 🪙 ${amount} in your stash.`);
+      this.toast(`You need 🪙 ${fmt(amount)} in your stash.`);
       sfx.deny();
       return false;
     }
-    save.update((d) => { d.stash.chips -= amount; });
+    save.update((d) => { d.stash.chips -= amount; d.stats.wagered += amount; });
     return true;
   }
 
+  // Chips back from a bet (stake included).
   earn(amount) {
-    save.update((d) => { d.stash.chips += amount; });
+    save.update((d) => { d.stash.chips += amount; d.stats.gambleWon += amount; d.stats.biggestWin = Math.max(d.stats.biggestWin, amount); });
+  }
+
+  // Log a finished bet: session total, recent results, achievements.
+  settleBet(icon, wager, payout, statChange = null) {
+    this.session += payout - wager;
+    this.history.push({ icon, net: payout - wager });
+    this.announce(progress((d) => { if (statChange) statChange(d.stats); }));
   }
 
   onInput(e) {
@@ -221,7 +473,7 @@ export class Hub {
     if (e.target.id === 'sens') { save.update((d) => { d.settings.sensitivity = Number(e.target.value); }); $('sensVal').textContent = `${s.sensitivity.toFixed(2)}x`; }
     if (e.target.id === 'fov') { save.update((d) => { d.settings.fov = Number(e.target.value); }); $('fovVal').textContent = `${s.fov}°`; }
     if (e.target.id === 'vol') { save.update((d) => { d.settings.volume = Number(e.target.value); }); setVolume(s.volume); $('volVal').textContent = `${Math.round(s.volume * 100)}%`; }
-    if (e.target.id === 'lookName') save.update((d) => { d.look.name = e.target.value.slice(0, 14); });
+    if (e.target.id === 'lookName') { save.update((d) => { d.look.name = e.target.value.slice(0, 14); }); this.renderHeader(); }
   }
 
   onClick(e) {
@@ -269,7 +521,7 @@ export class Hub {
         const v = itemInfo(it).value;
         save.update((x) => { x.stash.items.splice(i, 1); x.stash.chips += v; });
         sfx.pickup();
-        this.toast(`Sold for 🪙 ${v}`);
+        this.toast(`Sold for 🪙 ${fmt(v)}`);
         break;
       }
       case 'sellvaluables': {
@@ -283,19 +535,33 @@ export class Hub {
           x.stash.chips += total;
         });
         sfx.win();
-        this.toast(`Sold everything for 🪙 ${total}`);
+        this.toast(`Sold everything for 🪙 ${fmt(total)}`);
         break;
       }
-      case 'color': save.update((x) => { x.look.color = Number(b.dataset.c); }); break;
-      case 'hat':
-        if (!save.hatUnlocked(b.dataset.h)) { this.toast(`🔒 ${HAT_UNLOCKS[b.dataset.h].text} to unlock.`); return; }
-        save.update((x) => { x.look.hat = b.dataset.h; });
+      case 'lookpart': this.lookPart = b.dataset.p; break;
+      case 'lookopt': {
+        const part = b.dataset.p;
+        const opt = LOOKS[part].find((o) => String(o.id) === b.dataset.id);
+        if (!opt) return;
+        if (!lookUnlocked(opt)) { this.toast(`🔒 ${unlockText(opt)}`); sfx.deny(); return; }
+        save.update((x) => { x.look[part] = opt.id; });
+        sfx.pickup();
         break;
+      }
+      case 'lookrandom':
+        save.update((x) => {
+          for (const [part] of LOOK_PARTS) {
+            const open = LOOKS[part].filter((o) => lookUnlocked(o));
+            x.look[part] = open[Math.floor(Math.random() * open.length)].id;
+          }
+        });
+        break;
+      case 'rectab': this.recTab = b.dataset.r; break;
       case 'reset':
         if (!this.armedReset) { this.armedReset = true; break; }
         this.armedReset = false;
         save.reset();
-        save.update((x) => { x.loadout = { weapons: [null, null], items: [] }; x.look.color = COLORS[0]; });
+        save.update((x) => { x.loadout = { weapons: [null, null], items: [] }; x.look.color = LOOKS.color[0].id; x.collectionSeeded = true; });
         this.toast('Progress wiped. Fresh start.');
         break;
       case 'map':
@@ -306,9 +572,10 @@ export class Hub {
         break;
       case 'game': this.game = b.dataset.g; break;
       case 'bet': this.bet = Number(b.dataset.b); break;
-      case 'pull': this.pullSlot(HUB_SLOTS[i]); return;
+      case 'machine': if (!(this.reels && this.reels.running)) { this.machine = i; this.reels = null; } break;
+      case 'pull': this.pullReels(); return;
       case 'deal': this.deal(); break;
-      case 'hit': this.bj.hand.push(drawCard()); if (handValue(this.bj.hand) >= 21) this.settle(); break;
+      case 'hit': this.bj.hand.push(drawCard()); sfx.tick(); if (handValue(this.bj.hand) >= 21) this.settle(); break;
       case 'stand': this.settle(); break;
       case 'double':
         if (!this.spend(this.bj.bet)) return;
@@ -324,43 +591,77 @@ export class Hub {
     this.render();
   }
 
-  pullSlot(machine) {
-    if (this.slotSpin && this.slotSpin.running) return;
-    if (!this.spend(machine.cost)) return;
-    const symbols = ['🍒', '💎', '🔔', '7️⃣', '🎲', '🔫', '💰'];
-    const spin = { running: true, show: ['❔', '❔', '❔'], prize: '' };
-    this.slotSpin = spin;
-    sfx.lever();
-    let ticks = 0;
-    const timer = setInterval(() => {
-      ticks++;
-      spin.show = spin.show.map((s, k) => (ticks > 8 + k * 4 ? s : symbols[Math.floor(Math.random() * symbols.length)]));
-      if (ticks % 2 === 0) sfx.tick();
-      if (ticks > 18) {
-        clearInterval(timer);
-        spin.running = false;
-        let loot = rollLoot(machine.tier);
-        if (loot.chips) loot = { chips: loot.chips * 3 };
-        if (loot.chips) {
-          this.earn(loot.chips);
-          spin.prize = `Paid out 🪙 ${loot.chips}.`;
-          sfx.win();
-        } else {
-          save.update((x) => addToStash(x.stash.items, loot));
-          const info = itemInfo(loot);
-          spin.prize = `You won: <b style="color:${info.css}">${itemTitle(loot)}</b> (worth 🪙${info.value})`;
-          if (info.rarity >= 3) sfx.jackpot(); else sfx.win();
-        }
-      }
-      if (this.tab === 'backroom' && this.game === 'slots') this.render();
-    }, 80);
-    this.render();
+  // ---------- Loot Reels ----------
+
+  randomStrip(n) {
+    return Array.from({ length: n }, () => REEL_SYMBOLS[Math.floor(Math.random() * REEL_SYMBOLS.length)]);
   }
+
+  pullReels() {
+    if (this.reels && this.reels.running) return;
+    const m = HUB_SLOTS[this.machine];
+    if (!this.spend(m.cost)) return;
+    let prize = rollLoot(m.tier);
+    if (prize.chips) prize = { chips: prize.chips * 3 };
+    // What the reels land on: a triple for anything Rare or better, a near miss otherwise.
+    const rarity = prize.chips ? -1 : itemInfo(prize).rarity;
+    let finals;
+    if (rarity >= 1) finals = Array(3).fill(PRIZE_SYMBOL[rarity]);
+    else if (prize.chips) finals = ['🪙', '🪙', REEL_SYMBOLS[Math.floor(Math.random() * 3)]];
+    else {
+      const a = REEL_SYMBOLS[Math.floor(Math.random() * REEL_SYMBOLS.length)];
+      finals = [a, a, a === '🍒' ? '🍋' : '🍒'];
+    }
+    // Each strip ends [..., above, final, below]; it scrolls so `final` sits on the payline.
+    const strips = finals.map((f, k) => [...this.randomStrip(24 + k * 6), f, ...this.randomStrip(1)]);
+    const r = { running: true, animating: true, strips, prize, isNew: false };
+    this.reels = r;
+    sfx.lever();
+    this.render();
+    // Start the scroll on the next frame so the transition runs.
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      strips.forEach((s, k) => {
+        const el = document.getElementById(`strip${k}`);
+        if (!el) return;
+        el.style.transition = `transform ${1.3 + k * 0.45}s cubic-bezier(0.12, 0.8, 0.22, 1.04)`;
+        el.style.transform = `translateY(${-(s.length - 3) * ROW}px)`;
+      });
+    }));
+    // Tick sounds while spinning, a clunk as each reel stops.
+    let ticks = 0;
+    const tick = setInterval(() => { if (++ticks < 22) sfx.tick(); else clearInterval(tick); }, 90);
+    [0, 1, 2].forEach((k) => setTimeout(() => sfx.reelStop(), (1.3 + k * 0.45) * 1000));
+    setTimeout(() => {
+      r.running = false;
+      r.animating = false;
+      let out = null;
+      let payout = 0;
+      if (prize.chips) {
+        payout = prize.chips;
+        this.earn(prize.chips);
+        sfx.win();
+      } else {
+        const key = itemKey(prize);
+        r.isNew = !this.data.collection[key];
+        save.update((x) => addToStash(x.stash.items, prize));
+        out = progress((x) => { x.collection[key] = (x.collection[key] || 0) + 1; });
+        payout = itemInfo(prize).value;
+        if (itemInfo(prize).rarity >= 3) sfx.jackpot(); else sfx.win();
+      }
+      this.settleBet('🎰', m.cost, payout, (s) => { s.reelsPulled++; });
+      if (out) this.announce(out);
+      if (this.tab === 'backroom' && this.game === 'slots') this.render();
+      else this.renderHeader();
+    }, (1.3 + 2 * 0.45) * 1000 + 150);
+  }
+
+  // ---------- Blackjack ----------
 
   deal() {
     if (this.bj && this.bj.state === 'play') return;
     if (!this.spend(this.bet)) return;
     this.bj = { bet: this.bet, hand: [drawCard(), drawCard()], dealer: [drawCard(), drawCard()], state: 'play', msg: '' };
+    sfx.tick();
     if (handValue(this.bj.hand) === 21) this.settle();
   }
 
@@ -370,32 +671,55 @@ export class Hub {
     if (p <= 21) while (handValue(g.dealer) < 17) g.dealer.push(drawCard());
     const dv = handValue(g.dealer);
     let pay = 0;
-    if (p > 21) g.msg = `Bust with ${p}. Lost 🪙 ${g.bet}.`;
-    else if (p === 21 && g.hand.length === 2 && !(dv === 21 && g.dealer.length === 2)) { pay = Math.floor(g.bet * 2.5); g.msg = `BLACKJACK! Won 🪙 ${pay}.`; }
-    else if (dv > 21 || p > dv) { pay = g.bet * 2; g.msg = `${dv > 21 ? `Dealer busts (${dv})` : `${p} beats ${dv}`}. Won 🪙 ${pay}.`; }
+    let natural = false;
+    if (p > 21) g.msg = `Bust with ${p}. Lost 🪙 ${fmt(g.bet)}.`;
+    else if (p === 21 && g.hand.length === 2 && !(dv === 21 && g.dealer.length === 2)) { pay = Math.floor(g.bet * 2.5); natural = true; g.msg = `🂡 BLACKJACK! Won 🪙 ${fmt(pay)}.`; }
+    else if (dv > 21 || p > dv) { pay = g.bet * 2; g.msg = `${dv > 21 ? `Dealer busts with ${dv}` : `${p} beats ${dv}`}. Won 🪙 ${fmt(pay)}.`; }
     else if (p === dv) { pay = g.bet; g.msg = `Push at ${p}. Bet returned.`; }
-    else g.msg = `Dealer has ${dv}. Lost 🪙 ${g.bet}.`;
+    else g.msg = `Dealer has ${dv}. Lost 🪙 ${fmt(g.bet)}.`;
+    g.win = pay > g.bet ? true : pay === g.bet ? null : false;
     if (pay) { this.earn(pay); sfx.win(); } else sfx.deny();
     g.state = 'done';
+    this.settleBet('🃏', g.bet, pay, (s) => { if (natural) s.blackjacks++; });
   }
+
+  // ---------- Roulette ----------
 
   spinRoulette(kind) {
     if (this.roulette && this.roulette.spinning) return;
     if (!this.spend(this.bet)) return;
     const bet = this.bet;
-    this.roulette = { spinning: true };
+    const n = Math.floor(Math.random() * 37);
+    const idx = WHEEL.indexOf(n);
+    const seg = 360 / 37;
+    const prev = this.roulette ? this.roulette.angle : 0;
+    // A few full turns, then stop with n under the pointer.
+    const angle = prev - (((prev % 360) + 360) % 360) - 360 * 5 - (idx + 0.5) * seg;
+    this.roulette = { spinning: true, angle: prev };
     sfx.lever();
     this.render();
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      const el = document.querySelector('.rwheel');
+      if (el) {
+        el.style.transition = 'transform 3s cubic-bezier(0.15, 0.75, 0.2, 1)';
+        el.style.transform = `rotate(${angle}deg)`;
+      }
+    }));
+    const ticks = setInterval(() => sfx.tick(), 140);
     setTimeout(() => {
-      const n = Math.floor(Math.random() * 37);
+      clearInterval(ticks);
       const color = n === 0 ? 'green' : RED.has(n) ? 'red' : 'black';
+      const won = kind === color || (n !== 0 && ((kind === 'odd' && n % 2 === 1) || (kind === 'even' && n % 2 === 0)));
       const pays = kind === 'green' ? 14 : 2;
-      const won = color === kind;
       if (won) { this.earn(bet * pays); sfx.win(); } else sfx.deny();
-      this.roulette = { spinning: false, n, color, msg: `${n} ${color.toUpperCase()}. ${won ? `Won 🪙 ${bet * pays}!` : `Lost 🪙 ${bet}.`}` };
+      this.roulette = { spinning: false, angle, n, color, won, msg: `${n} ${color.toUpperCase()}. ${won ? `Won 🪙 ${fmt(bet * pays)}!` : `Lost 🪙 ${fmt(bet)}.`}` };
+      this.settleBet('🎡', bet, won ? bet * pays : 0, (s) => { if (won && kind === 'green') s.rouletteGreens++; });
       if (this.tab === 'backroom') this.render();
-    }, 1600);
+      else this.renderHeader();
+    }, 3100);
   }
+
+  // ---------- Crash ----------
 
   launchCrash() {
     if (this.crash && this.crash.running) return;
@@ -417,8 +741,9 @@ export class Hub {
         c.mult = c.crashAt;
         c.running = false;
         c.crashed = true;
-        c.msg = `💥 CRASHED at ${c.crashAt.toFixed(2)}x. Lost 🪙 ${c.bet}.`;
+        c.msg = `💥 CRASHED at ${c.crashAt.toFixed(2)}x. Lost 🪙 ${fmt(c.bet)}.`;
         sfx.boom();
+        this.settleBet('🚀', c.bet, 0);
         if (this.tab === 'backroom' && this.game === 'crash') this.render();
         this.drawCrash();
         return;
@@ -427,7 +752,7 @@ export class Hub {
       const mult = document.getElementById('crashMult');
       const btn = document.getElementById('crashBtn');
       if (mult) mult.textContent = `${c.mult.toFixed(2)}x`;
-      if (btn) btn.textContent = `CASH OUT 🪙${Math.floor(c.bet * c.mult)}`;
+      if (btn) btn.textContent = `CASH OUT 🪙${fmt(Math.floor(c.bet * c.mult))}`;
       this.drawCrash();
       requestAnimationFrame(tick);
     };
@@ -442,19 +767,19 @@ export class Hub {
     const w = canvas.width;
     const h = canvas.height;
     ctx.clearRect(0, 0, w, h);
-    ctx.fillStyle = 'rgba(27,15,43,0.85)';
+    ctx.fillStyle = 'rgba(16,9,28,0.9)';
     ctx.fillRect(0, 0, w, h);
-    ctx.strokeStyle = 'rgba(255,255,255,0.07)';
+    ctx.strokeStyle = 'rgba(255,255,255,0.06)';
     ctx.lineWidth = 1;
-    for (let i = 1; i < 5; i++) {
+    for (let i = 1; i < 6; i++) {
       ctx.beginPath();
-      ctx.moveTo(0, (h / 5) * i);
-      ctx.lineTo(w, (h / 5) * i);
+      ctx.moveTo(0, (h / 6) * i);
+      ctx.lineTo(w, (h / 6) * i);
       ctx.stroke();
     }
     if (!c || !c.points.length) {
-      ctx.fillStyle = '#fff6e0';
-      ctx.font = "28px 'Luckiest Guy', sans-serif";
+      ctx.fillStyle = 'rgba(255,246,224,0.8)';
+      ctx.font = "30px 'Luckiest Guy', sans-serif";
       ctx.textAlign = 'center';
       ctx.fillText('🚀 Ready for launch', w / 2, h / 2 + 10);
       return;
@@ -489,8 +814,9 @@ export class Hub {
     c.running = false;
     const win = Math.floor(c.bet * c.mult);
     this.earn(win);
-    c.msg = `✅ Cashed out at ${c.mult.toFixed(2)}x: won 🪙 ${win}!`;
+    c.msg = `✅ Cashed out at ${c.mult.toFixed(2)}x: won 🪙 ${fmt(win)}!`;
     sfx.win();
+    this.settleBet('🚀', c.bet, win, (s) => { s.crashBest = Math.max(s.crashBest, c.mult); });
     this.render();
     this.drawCrash();
   }
@@ -511,11 +837,8 @@ export class Hub {
     this.onDeploy({
       mapId: d.selectedMap,
       name: (d.look.name || '').trim() || 'High Roller',
-      color: d.look.color,
-      hat: save.hatUnlocked(d.look.hat) ? d.look.hat : 'top',
+      look: wornLook(d.look),
       loadout,
     });
   }
 }
-
-export { weightedIndex };

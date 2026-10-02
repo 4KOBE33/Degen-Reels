@@ -2,7 +2,7 @@
 // then reach an extraction point before time runs out. Die and you lose everything you carried.
 import * as THREE from 'three';
 import {
-  WEAPONS, RARITIES, RAID_TIME, EXTRACT_TIME, BOSS_TIME, RAIDERS, RAIDER_NAMES, COLORS, HATS, ENEMIES, ITEMS,
+  PLAYER, WEAPONS, RARITIES, RAID_TIME, EXTRACT_TIME, BOSS_TIME, RAIDERS, RAIDER_NAMES, COLORS, HATS, ENEMIES, ITEMS,
 } from './config.js';
 import { buildMap, drawMinimap, neonSign } from './map.js';
 import { SlotMachine } from './slots.js';
@@ -22,9 +22,13 @@ import { part } from './toon.js';
 import { save } from './save.js';
 import { sfx } from './audio.js';
 import { keyName } from './keys.js';
+import { recordRaid } from './progress.js';
+import { randomLook } from './looks.js';
 
 const raycaster = new THREE.Raycaster();
 const tmp = new THREE.Vector3();
+
+const escapeHtmlLite = (t) => String(t).replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
 
 export class Raid {
   constructor(hud, mapId = 'vegas') {
@@ -156,13 +160,14 @@ export class Raid {
   spawnRaider() {
     const taken = new Set(this.combatants.map((c) => c.name));
     const name = pick(RAIDER_NAMES.filter((n) => !taken.has(n))) || 'Some Raider';
-    const c = new Combatant(this, { name, color: pick(COLORS), hat: pick(HATS) });
+    const c = new Combatant(this, { name, look: randomLook() });
     const [sx, sz] = pick(this.map.spawns);
     const [x, z] = this.openSpot(sx + (Math.random() - 0.5) * 10, sz + (Math.random() - 0.5) * 10);
     c.pos.set(x, 0, z);
     c.equip(makeGun(pick(['pistol', 'pistol', 'smg', 'shotgun']), rollRarity(1)));
     c.backpack.push(makeItem('bandage', 2));
     if (Math.random() < 0.4) c.backpack.push(makeItem(pick(['grenade', 'grenade', 'dice', 'flash', 'sauce']), randInt(1, 2)));
+    if (Math.random() < 0.15) c.backpack.push(makeItem('token', 1));
     if (Math.random() < 0.5) c.backpack.push(rollLoot(2).chips ? makeItem('cards') : rollLoot(2));
     c.chips = randInt(20, 120);
     this.combatants.push(c);
@@ -172,7 +177,7 @@ export class Raid {
 
   // ---------- raid lifecycle ----------
 
-  deploy({ name, color, hat, loadout }) {
+  deploy({ name, look, loadout }) {
     // Reset the map.
     for (const p of this.pickups) p.remove();
     this.pickups = [];
@@ -199,7 +204,7 @@ export class Raid {
       e.sign.visible = e.active;
     });
 
-    const p = new Combatant(this, { name, color, hat, isPlayer: true });
+    const p = new Combatant(this, { name, look, isPlayer: true });
     const [sx, sz] = pick(this.map.spawns);
     const [x, z] = this.openSpot(sx, sz);
     p.pos.set(x, 0, z);
@@ -220,7 +225,11 @@ export class Raid {
     this.bossSpawned = false;
     this.boss = null;
     this.warned = {};
-    this.run = { kills: 0, machines: 0, raiders: 0, boss: false, started: performance.now() };
+    this.hurtBy = {};
+    this.killcam = null;
+    this.run = {
+      kills: 0, machines: 0, raiders: 0, gators: 0, boss: false, crits: 0, throws: 0, containers: 0, slotPulls: 0, diceSixes: 0, bestStun: 0, started: performance.now(),
+    };
     this.active = true;
     this.frozen = false;
     this.result = null;
@@ -235,9 +244,7 @@ export class Raid {
     const items = [...p.weapons.filter(Boolean), ...p.backpack];
     const value = items.reduce((n, it) => n + itemInfo(it).value, 0) + p.chips;
     sfx.extract();
-    const newHats = save.update((d) => {
-      d.stats.extracts++;
-      d.stats.bestHaul = Math.max(d.stats.bestHaul, value);
+    save.update((d) => {
       d.stash.chips += p.chips;
       for (const it of items) {
         if (!isGun(it)) {
@@ -247,7 +254,7 @@ export class Raid {
         d.stash.items.push({ ...it });
       }
     });
-    this.finish({ success: true, where, items, chips: p.chips, value, newHats });
+    this.finish({ success: true, where, items, chips: p.chips, value });
     // The player escapes: pull them out of the world.
     p.alive = false;
     p.char.root.visible = false;
@@ -258,14 +265,48 @@ export class Raid {
     const p = this.player;
     const items = [...p.weapons.filter(Boolean), ...p.backpack];
     const value = items.reduce((n, it) => n + itemInfo(it).value, 0) + p.chips;
-    const newHats = save.update((d) => { d.stats.deaths++; });
-    this.finish({ success: false, reason, by, items, chips: p.chips, value, newHats });
+    this.finish({ success: false, reason, by, items, chips: p.chips, value });
+  }
+
+  // ---------- kill cam ----------
+
+  // You died: swing the camera over to whoever did it before the results come up.
+  startKillcam(victim, killer) {
+    const real = killer && killer !== victim && killer.pos && killer.alive !== undefined ? killer : null;
+    const weapon = !killer ? 'something'
+      : killer.team === 'machine' ? ({ shark: 'its blade', gator: 'its jaws', boss: 'the jackpot cannon', dicer: 'dice bullets' }[killer.type] || 'a burst of bullets')
+        : killer.team === 'env' ? '' : killer.weaponName || 'their fists';
+    this.killcam = {
+      t: 0, dur: 4, killer: real, victimPos: victim.pos.clone(), name: killer ? killer.name : 'Something',
+      weapon, dealt: Math.round(killer ? this.hurtBy[killer.name] || 0 : 0), angle: Math.atan2(victim.pos.x - (real ? real.pos.x : victim.pos.x), victim.pos.z - (real ? real.pos.z : victim.pos.z + 1)),
+    };
+  }
+
+  skipKillcam() {
+    if (this.killcam && this.killcam.t > 0.4) this.killcam.t = this.killcam.dur;
+  }
+
+  // Where the kill cam's camera sits and what it looks at.
+  killcamView(dt, camera) {
+    const k = this.killcam;
+    const target = k.killer ? k.killer.pos : k.victimPos;
+    const big = k.killer && k.killer.isBoss;
+    k.angle += dt * 0.35;
+    const dist = big ? 14 : 5.5;
+    const ease = Math.min(1, k.t / 0.8);
+    const want = new THREE.Vector3(target.x + Math.sin(k.angle) * dist, target.y + (big ? 7 : 2.4), target.z + Math.cos(k.angle) * dist);
+    camera.position.lerp(want, ease < 1 ? 0.12 : 0.25);
+    camera.lookAt(target.x, target.y + (big ? 4 : 1.2), target.z);
+    if (Math.abs(camera.fov - 55) > 0.1) { camera.fov = 55; camera.updateProjectionMatrix(); }
   }
 
   finish(result) {
     this.active = false;
-    this.result = { ...result, run: this.run, time: RAID_TIME - this.timeLeft };
-    this.hud.raidOver(this.result);
+    this.result = { ...result, run: this.run, time: RAID_TIME - this.timeLeft, newFinds: [] };
+    // Stats, collection log, XP and achievements.
+    this.result.progress = recordRaid(this.result, this.mapId);
+    if (this.killcam) this.hud.killcam(this.killcam);
+    else this.hud.raidOver(this.result);
   }
 
   // ---------- interaction ----------
@@ -273,12 +314,75 @@ export class Raid {
   get interactables() {
     const list = [...this.slots, ...this.pickups, this.vaultLock];
     for (const k of this.containers) if (!k.opened) list.push(k);
+    for (const c of this.combatants) if (c.downed && c.alive && c.reviveSpot) list.push(c.reviveSpot);
     return list;
+  }
+
+  // ---------- downed and revives ----------
+
+  // Lethal damage on a raider or you: go down instead of dying.
+  down(target, attacker) {
+    target.downed = true;
+    target.hp = 0;
+    target.downHp = PLAYER.downHp;
+    target.bleed = PLAYER.bleedTime;
+    target.using = null;
+    target.lastAttacker = attacker && attacker !== target ? attacker : target.lastAttacker;
+    // Anyone nearby can hold the use key on you to get you back up.
+    const raid = this;
+    target.reviveSpot = {
+      spot: target.pos,
+      range: 2.2,
+      searchTime: PLAYER.reviveTime,
+      searchLabel: 'Reviving…',
+      prompt: () => (target.downed ? `<b>Hold ${keyName('use')}</b> Revive ${escapeHtmlLite(target.name)}` : null),
+      open: (by) => raid.revive(target, by),
+    };
+    // Machines lose interest in someone who's down.
+    for (const m of this.machines) if (m.target === target) m.target = null;
+    this.feed(`${attacker ? attacker.name : 'Something'} downed ${target.name}`);
+    if (target.isPlayer) sfx.hurt();
+  }
+
+  revive(target, by) {
+    if (!target.downed || !target.alive) return null;
+    target.downed = false;
+    target.reviveSpot = null;
+    target.hp = PLAYER.reviveHp;
+    target.downHp = 0;
+    target.lastAttacker = null;
+    this.fx.number(target.center(new THREE.Vector3()).setY(target.pos.y + 2), '❤️ UP!', '#5ee27a', 1.4);
+    sfx.heal();
+    if (by === target && target.isPlayer) this.run.selfRevives = (this.run.selfRevives || 0) + 1;
+    if (by === target) this.feed(`🎟️ ${target.name} used a Second Chance Token`);
+    else this.feed(`🤝 ${by ? by.name : 'Someone'} revived ${target.name}`);
+    if (by && by.isPlayer && by !== target) {
+      this.run.revives = (this.run.revives || 0) + 1;
+      // A raider you pick up won't forget it.
+      if (target.brain) { target.brain.hostile = false; target.brain.friend = by; }
+      if (target.lastAttacker === by) target.lastAttacker = null;
+    }
+    if (target.isPlayer) this.hud.toast(by === target ? '🎟️ Second chance! Back on your feet.' : `🤝 ${by ? by.name : 'Someone'} picked you up!`, 'big');
+    return null;
+  }
+
+  // While you're down, the use key is your Second Chance Token.
+  selfReviveFor(c) {
+    if (!c.count('token')) return null;
+    if (!c.selfRevive) {
+      c.selfRevive = {
+        spot: c.pos, range: 99, searchTime: PLAYER.selfReviveTime, searchLabel: 'Second chance…',
+        prompt: () => `<b>Hold ${keyName('use')}</b> Use 🎟️ Second Chance Token (${c.count('token')})`,
+        open: (by) => { if (by.takeOne('token')) this.revive(by, by); },
+      };
+    }
+    return c.selfRevive;
   }
 
   // What E does right now. Loot on the floor always beats the machine or crate next to it,
   // so you can never get stuck re-pulling a lever when you meant to grab the prize.
   nearbyInteractable(c) {
+    if (c.downed) return this.selfReviveFor(c);
     let best = null;
     let bestScore = Infinity;
     for (const it of this.interactables) {
@@ -427,7 +531,7 @@ export class Raid {
   // Fire whatever `c` is holding. `origin`/`dir` is the aim ray (camera for you, head for bots).
   fire(c, origin, dir) {
     const w = WEAPONS[c.weapon];
-    if (!c.alive || c.cooldown > 0 || c.using || this.frozen) return false;
+    if (!c.alive || c.downed || c.cooldown > 0 || c.using || this.frozen) return false;
     if (Number.isFinite(c.ammo) && c.ammo <= 0) {
       const refusal = c.reload();
       if (c.isPlayer) {
@@ -588,6 +692,16 @@ export class Raid {
     if (attacker && attacker !== target && attacker.team === 'machine' && target.team === 'machine') return;
     amount = Math.round(amount);
     if (amount <= 0) return;
+    // Already down: hits chew through what's left, armor or not.
+    if (target.downed) {
+      target.downHp -= amount;
+      this.fx.number(at, `${amount}`, '#ff5d5d', attacker && attacker.isPlayer ? 1.1 : 0.8);
+      target.hurt(attacker);
+      if (attacker && attacker.isPlayer && target !== attacker) { this.hud.hitmarker(target.downHp <= 0, false); sfx.hit(); }
+      if (target.isPlayer) this.hud.hurt();
+      if (target.downHp <= 0) this.kill(target, attacker);
+      return;
+    }
     // Armor soaks up most of a hit until it breaks.
     const absorbed = Math.min(target.armor || 0, Math.round(amount * 0.7));
     target.armor = (target.armor || 0) - absorbed;
@@ -596,20 +710,32 @@ export class Raid {
     else this.fx.number(at, `${amount}`, absorbed ? '#7dd3fc' : '#ff5d5d', attacker && attacker.isPlayer ? 1.1 : 0.8);
     target.hurt(attacker);
     if (attacker && attacker.isPlayer && target !== attacker) {
+      if (crit) this.run.crits++;
       this.hud.hitmarker(target.hp <= 0, crit);
       if (crit) sfx.crit(); else sfx.hit();
     }
     if (target.isPlayer) {
+      // Remember who's been hurting you, for the kill cam.
+      if (attacker && attacker !== target) {
+        const k = attacker.name;
+        this.hurtBy[k] = (this.hurtBy[k] || 0) + amount;
+      }
       this.hud.hurt();
       this.shake = Math.max(this.shake, 0.2);
       sfx.hurt();
     }
     // Shooting a raider makes them (and their friends' tempers) hostile to you.
     if (target.brain && attacker && attacker.isPlayer) target.brain.hostile = true;
-    if (target.hp <= 0) this.kill(target, attacker);
+    if (target.hp <= 0) {
+      // Raiders and you go down first; machines just blow up.
+      if (target.team !== 'machine' && !target.isBoss) this.down(target, attacker);
+      else this.kill(target, attacker);
+    }
   }
 
   kill(target, attacker) {
+    if (!target.alive) return;
+    target.downed = false;
     target.alive = false;
     target.hp = 0;
     const at = target.pos.clone();
@@ -628,15 +754,18 @@ export class Raid {
         this.feed('👑 The Pit Boss is DOWN!');
         if (attacker && attacker.isPlayer) {
           this.run.boss = true;
-          const hats = save.update((d) => { d.stats.bossKills++; });
-          for (const h of hats) this.hud.toast(`🔓 UNLOCKED: the ${h} hat!`, 'big');
+          save.update((d) => { d.stats.bossKills++; });
         }
       } else if (target.type === 'gator') {
         if (Math.random() < def.loot) this.dropAround(at, makeItem('tooth'), 1.5);
       } else if (Math.random() < def.loot) {
         this.dropAround(at, rollLoot(tier), 1.5);
       }
-      if (attacker && attacker.isPlayer) { this.run.kills++; this.run.machines++; }
+      if (attacker && attacker.isPlayer) {
+        this.run.kills++;
+        this.run.machines++;
+        if (target.type === 'gator') this.run.gators++;
+      }
       return;
     }
     // A bean went down: everything they carried spills out.
@@ -645,6 +774,7 @@ export class Raid {
     if (target.using) target.using = null;
     if (target.isPlayer) {
       this.feed(`${attacker ? attacker.name : 'Something'} got you`);
+      this.startKillcam(target, attacker);
       this.fail('dead', attacker ? attacker.name : null);
       return;
     }
@@ -690,6 +820,14 @@ export class Raid {
 
   update(dt) {
     const p = this.player;
+    const kc = this.killcam;
+    if (kc && kc.t < kc.dur) {
+      // Slow motion while the kill cam plays.
+      kc.t += dt;
+      dt *= 0.35;
+      this.focus.copy(kc.killer ? kc.killer.pos : kc.victimPos);
+      if (kc.t >= kc.dur) { this.hud.killcam(null); if (this.result) this.hud.raidOver(this.result); }
+    }
     if (p && p.alive) this.focus.copy(p.pos);
     this.listener.copy(this.focus).setY(1.5);
 

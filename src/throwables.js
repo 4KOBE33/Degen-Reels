@@ -185,6 +185,7 @@ export class Throwables {
       // The higher the roll, the bigger the boom. Snake eyes barely pops.
       const r = g.roll;
       const jackpot = r === 6;
+      if (jackpot && g.owner && g.owner.isPlayer) raid.run.diceSixes++;
       const label = r === 1 ? '🎲 1 · snake eyes' : jackpot ? '🎲 6 · JACKPOT!' : `🎲 ${r}`;
       raid.fx.number(at.clone().setY(at.y + 1.2), label, jackpot ? '#ffd23f' : r === 1 ? '#9ca3af' : '#fff6e0', jackpot ? 1.6 : 1.1);
       if (r === 1) {
@@ -224,6 +225,10 @@ export class Throwables {
       a.stunned = def.stun * (a.isBoss ? 0.4 : 1) * (0.5 + 0.5 * k);
       if (g.owner && a.target !== undefined && !a.target) a.target = g.owner;
       raid.fx.number(eye.clone().setY(eye.y + 1), '💫', '#fff6e0', 1);
+    }
+    if (g.owner && g.owner.isPlayer) {
+      const n = raid.actors.filter((a) => a.alive && a.stunned > 0 && !a.isPlayer).length;
+      raid.run.bestStun = Math.max(raid.run.bestStun, n);
     }
     // You get blinded too if you're looking its way.
     const p = raid.player;

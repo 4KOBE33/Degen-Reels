@@ -68,6 +68,9 @@ controller.onLockChange = (locked) => {
   $('paused').hidden = locked || !inRaid || !!overlay;
   if (locked && overlay) setOverlay(null);
 };
+// Skip the kill cam.
+window.addEventListener('keydown', (e) => { if (e.code === 'Space' || e.code === 'Escape' || e.code === 'Enter') raid.skipKillcam(); });
+window.addEventListener('mousedown', () => raid.skipKillcam());
 window.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && overlay) {
     overlay = null;
@@ -224,7 +227,12 @@ function frame(now) {
   }
   wasActive = raid.active;
 
-  if (raid.player && $('hub').hidden) {
+  const kc = raid.killcam && raid.killcam.t < raid.killcam.dur ? raid.killcam : null;
+  document.body.classList.toggle('killcam', !!kc);
+  if (kc && $('hub').hidden) {
+    raid.killcamView(dt, camera);
+    if (raid.player) raid.player.char.firstPerson(false);
+  } else if (raid.player && $('hub').hidden) {
     controller.updateCamera(dt);
     hud.update(dt, raid);
   } else {

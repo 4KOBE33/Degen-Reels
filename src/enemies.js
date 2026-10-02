@@ -309,12 +309,12 @@ export class Machine {
   think() {
     const raid = this.raid;
     // Keep chasing a valid target; otherwise look for the nearest visible non-machine.
-    if (this.target && (!this.target.alive || this.target.pos.distanceTo(this.pos) > this.def.aggro * 2.2)) this.target = null;
+    if (this.target && (!this.target.alive || this.target.downed || this.target.pos.distanceTo(this.pos) > this.def.aggro * 2.2)) this.target = null;
     if (!this.target) {
       let best = null;
       let bestD = this.def.aggro;
       for (const a of raid.combatants) {
-        if (!a.alive) continue;
+        if (!a.alive || a.downed) continue;
         const d = a.pos.distanceTo(this.pos);
         if (d < bestD && this.canSee(a)) { bestD = d; best = a; }
       }

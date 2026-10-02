@@ -7,12 +7,12 @@ import { fullAmmo, itemInfo } from './items.js';
 import { sfx } from './audio.js';
 
 export class Combatant {
-  constructor(raid, { name, color, hat, isPlayer = false, team = 'raider' }) {
+  constructor(raid, { name, look, isPlayer = false, team = 'raider' }) {
     this.raid = raid;
     this.name = name;
     this.isPlayer = isPlayer;
     this.team = isPlayer ? 'player' : team;
-    this.char = createCharacter({ color, hat });
+    this.char = createCharacter(look);
     this.char.body.userData.actor = this;
     this.hitMesh = this.char.body;
     this.critMesh = this.char.headHit;
@@ -96,6 +96,7 @@ export class Combatant {
   // Start using a heal or armor plate. Slows you down while it works.
   startUsing(id) {
     if (this.using || !this.alive) return 'Busy';
+    if (this.downed) return 'You\'re down. Hold the use key for a Second Chance Token, or wait for help';
     const def = ITEMS[id];
     if (!this.count(id)) return `No ${def.name}`;
     if (def.kind === 'heal' && this.hp >= this.maxHp) return 'Already at full health';
@@ -108,6 +109,7 @@ export class Combatant {
 
   // Ammo boxes refill half a gun's ammo.
   reload() {
+    if (this.downed) return 'You\'re down';
     const g = this.gun;
     if (!g || !Number.isFinite(g.ammo)) return null;
     const full = fullAmmo(g.kind, g.rarity);
@@ -144,10 +146,12 @@ export class Combatant {
   throwGrenade(origin, dir, id = this.currentThrowable()) {
     if (!this.alive || this.using) return 'Busy';
     if (this.stunned > 0) return 'Seeing stars…';
+    if (this.downed) return 'You\'re down';
     if (this.throwCooldown > 0) return 'Still winding up';
     if (!id || !this.takeOne(id)) return 'Nothing to throw';
     this.throwCooldown = 0.9;
     this.raid.spawnGrenade(this, origin, dir, id);
+    if (this.isPlayer) this.raid.run.throws++;
     this.char.recoil(1.5);
     return null;
   }
@@ -157,11 +161,11 @@ export class Combatant {
   }
 
   head(out = new THREE.Vector3()) {
-    return out.set(this.pos.x, this.pos.y + PLAYER.headHeight, this.pos.z);
+    return out.set(this.pos.x, this.pos.y + (this.downed ? 0.55 : PLAYER.headHeight), this.pos.z);
   }
 
   center(out = new THREE.Vector3()) {
-    return out.set(this.pos.x, this.pos.y + 1.0, this.pos.z);
+    return out.set(this.pos.x, this.pos.y + (this.downed ? 0.4 : 1.0), this.pos.z);
   }
 
   // How much worse your aim is right now: running, jumping and moving all throw it off.
@@ -205,13 +209,19 @@ export class Combatant {
     if (this.using) speed *= 0.45;
     if (this.boost > 0) speed *= 1.25;
     if (this.stunned > 0) speed *= 0.3;
+    // Downed: a slow crawl, no sprinting.
+    if (this.downed) { speed = 1.4; this.isSprinting = false; }
     const tx = canMove ? this.move.x * speed : 0;
     const tz = canMove ? this.move.y * speed : 0;
     const accel = Math.min(1, dt * (this.onGround ? 14 : 3.5));
     this.vel.x += (tx - this.vel.x) * accel;
     this.vel.z += (tz - this.vel.z) * accel;
 
-    if (this.wantJump && this.onGround && canMove && this.stamina >= PLAYER.jumpCost * 0.5) {
+    if (this.downed) {
+      this.bleed -= dt;
+      if (this.bleed <= 0 && this.alive) this.raid.kill(this, this.lastAttacker && this.lastAttacker.alive !== undefined ? this.lastAttacker : null);
+    }
+    if (this.wantJump && !this.downed && this.onGround && canMove && this.stamina >= PLAYER.jumpCost * 0.5) {
       this.stamina = Math.max(0, this.stamina - PLAYER.jumpCost);
       this.staminaWait = PLAYER.staminaDelay;
       this.vel.y = PLAYER.jump;
@@ -261,6 +271,7 @@ export class Combatant {
       onGround: this.onGround,
       pitch: this.pitch,
       dead: !this.alive,
+      downed: this.downed,
       showTag: !this.isPlayer,
     });
     if (!this.isPlayer) this.char.setTag(this.name, `${Math.ceil(this.hp)}`, Math.ceil(this.armor));

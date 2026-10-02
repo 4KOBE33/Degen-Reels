@@ -33,7 +33,13 @@ Every enemy has a small weak spot that takes extra damage. A crit pops a yellow 
 
 ## The loop
 
-1. **The Hub.** Pack a loadout from your stash: two guns plus up to 8 items. Gamble stash chips in the **Back Room** (Loot Reels, Blackjack, Roulette, Crash), sell loot to **the Fence**, and pick your look. Broke? Grab a free kit.
+1. **The Hub.** Pack a loadout from your stash: two guns plus up to 8 items. Gamble stash chips in the **Back Room**:
+   - **Loot Reels:** three machines with real spinning reels, and the odds shown on each.
+   - **Blackjack** on a felt table.
+   - **Roulette:** a 37-number wheel.
+   - **Crash.**
+
+   Sell loot to **the Fence**, dress up in **Look**, and check your **Records**. Broke? Grab a free kit.
 2. **Deploy.** You spawn at the edge of the map with an 18-minute clock. Two of the four exits are open each raid.
 3. **Loot.** Hold **E** to search registers, crates, lockers and safes. Pull **loot slots** with chips you found. You're free to walk away and fight while the reels spin, and the prize pops out of the tray.
 4. **Fight.** The town is run by machines:
@@ -53,6 +59,30 @@ Every enemy has a small weak spot that takes extra damage. A crit pops a yellow 
      Explosions and fire hurt you too. You start with 2 Cherry Bombs, and all of them drop from crates, slots and raiders. Some raiders throw them at you.
    - **🧃 Rocket Fuel Energy (Z):** 15 seconds of running 25% faster, and sprinting costs no stamina.
 5. **Extract.** Stand in an open exit's green circle for 8 seconds, and everything you're carrying goes to your stash.
+
+## Getting downed
+
+Lethal damage doesn't kill you outright: you go **down**. You crawl slowly, can't shoot, and bleed out after 45 seconds (or sooner if someone keeps shooting you). Machines lose interest in you once you're down.
+
+- **🎟️ Second Chance Token:** a rare drop. Hold the use key while down to pick yourself up.
+- **Revives:** hold the use key on a downed raider to revive them, and they'll stay friendly. Friendly raiders come pick *you* up too. Hostile ones finish the job.
+- **Give up:** hold jump while down.
+- Built to carry over to multiplayer: squadmates (or enemies you sweet-talk over proxy chat) will be able to revive you the same way.
+
+When you die, a **kill cam** swings over to whoever got you. It shows what they hit you with, how much damage they did and how much health they had left.
+
+## Progress: levels, achievements and the collection log
+
+There's no "winning" a raid. The goal is finding the best loot, and the **🏆 Records** tab keeps score:
+
+- **Levels and XP:** earned by extracting (bigger hauls pay more), busting machines and raiders, and unlocking achievements.
+- **Achievements:** 35 of them, from Common to Legendary, across survival, combat, loot, gambling and levels. Many unlock looks.
+- **Collection log:** every gun in every rarity, plus every item. It fills in when you extract with something (or win it in the Back Room). Each entry tells you where to hunt for it. The House's Crown is the rarest thing in the game.
+- **Lifetime stats** for raiding and the Back Room.
+
+## Your look
+
+The **🎨 Look** tab has a 3D preview you can spin. You can change your color, hat, eyes, mouth, glasses, neckwear and shoes. There are 12 hats, including a crown, a viking helmet and a halo. Many options unlock with levels or achievements.
 
 ## Risk and reward
 
@@ -113,7 +143,9 @@ Then open http://localhost:3000. `npm run build:artifact` packs the whole game i
 | `src/keys.js` | Rebindable controls and the rebinding panel |
 | `src/throwables.js` | Cherry Bombs, Loaded Dice, Flash Chips, Ghost Pepper Sauce |
 | `src/icons.js` | Gun pictures rendered from the 3D models |
-| `src/save.js` | Stash, settings, stats and unlocks (saved in the browser) |
+| `src/save.js` | Stash, settings, stats, XP, collection and achievements (saved in the browser) |
+| `src/progress.js` | Levels, achievements, the collection log and recording raids |
+| `src/looks.js` / `src/preview.js` | Customization options and their unlocks; the spinning 3D preview |
 
 ## Roadmap
 

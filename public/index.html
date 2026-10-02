@@ -15,18 +15,18 @@
   <div id="hub">
     <header class="hubhead">
       <h1 class="logo small">DEGEN<br>REELS</h1>
-      <div id="hubWallet" class="wallet"></div>
+      <div id="hubWallet" class="walletbar"></div>
     </header>
     <nav id="hubTabs" class="tabs">
       <button data-tab="loadout">🎒 Loadout</button>
       <button data-tab="backroom">🎰 Back Room</button>
       <button data-tab="fence">💰 Fence</button>
-      <button data-tab="look">🎩 Look</button>
+      <button data-tab="look">🎨 Look</button>
+      <button data-tab="records">🏆 Records</button>
       <button data-tab="settings">⚙️ Settings</button>
     </nav>
     <main id="hubBody" class="hubbody"></main>
     <footer class="hubfoot">
-      <p class="howto">Pick a map, drop in, loot what you can, fight off the machines, and reach an open exit before time runs out. <b>Die and you lose everything you brought.</b> The casino is deadly, but it's the only place Legendaries drop.</p>
       <button id="deploy" class="btn big">DEPLOY</button>
     </footer>
     <div id="hubToast"></div>
@@ -88,6 +88,8 @@
   </div>
 
   <div id="flashbang"></div>
+  <div id="killcam" hidden></div>
+  <div id="downed" hidden></div>
 
   <div id="paused" class="screen dim" hidden>
     <div class="card">

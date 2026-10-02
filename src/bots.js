@@ -1,7 +1,12 @@
 // Raider bots: other "players" looting Lost Vegas. They fight machines, grab loot, and leave
 // through an exit eventually. Most leave you alone unless you shoot them or get in their face.
 import * as THREE from 'three';
-import { WEAPONS, RAIDERS } from './config.js';
+import { WEAPONS, RAIDERS, PLAYER } from './config.js';
+
+const RESCUE_LINES = ['Hang on, I got you!', "Don't bleed on my shoes.", 'Coming! Stay down!', 'You owe me one.', 'Nobody gets left in Lost Vegas.'];
+const REVIVED_LINES = ['Up you get, high roller.', "The House isn't done with you yet.", 'Try not to do that again.', 'Back in the game!', 'That one was free.'];
+const FINISH_LINES = ['Nothing personal.', 'House rules.', 'Should have stayed home.', 'Your loot looks better on me.'];
+const say = (raid, c, lines) => raid.feed(`💬 ${c.name}: "${lines[Math.floor(Math.random() * lines.length)]}"`);
 
 function angleDiff(a, b) {
   let d = b - a;
@@ -29,6 +34,25 @@ export class RaiderBrain {
     this.atExit = 0;
   }
 
+  // Down: crawl away from whoever did it, and maybe use a Second Chance Token.
+  crawl(dt) {
+    const { c, raid } = this;
+    this.rescue = null;
+    this.target = null;
+    const from = c.lastAttacker && c.lastAttacker.pos ? c.lastAttacker.pos : null;
+    if (from) {
+      const dx = c.pos.x - from.x;
+      const dz = c.pos.z - from.z;
+      const d = Math.hypot(dx, dz) || 1;
+      c.move.set(dx / d, dz / d);
+      c.yaw += angleDiff(c.yaw, Math.atan2(-dx, -dz)) * Math.min(1, dt * 3);
+    }
+    if (c.count('token') && c.bleed < PLAYER.bleedTime - 3) {
+      this.selfRez = (this.selfRez || 0) + dt;
+      if (this.selfRez > PLAYER.selfReviveTime && c.takeOne('token')) { this.selfRez = 0; raid.revive(c, c); }
+    }
+  }
+
   canSee(a) {
     const from = this.c.head(new THREE.Vector3());
     const to = a.center(new THREE.Vector3());
@@ -48,12 +72,28 @@ export class RaiderBrain {
     let bestD = 24;
     for (const a of raid.actors) {
       if (!a.alive || a === c) continue;
+      if (a === this.friend) continue;
+      // Someone's down: friendly raiders don't shoot them, hostile ones finish the job.
+      if (a.downed && !(a.isPlayer && this.hostile)) continue;
       const enemy = a.team === 'machine' || (a.isPlayer && (this.hostile || c.lastAttacker === a)) || a === c.lastAttacker;
       if (!enemy) continue;
       const d = a.pos.distanceTo(c.pos);
       if (d < bestD) { bestD = d; best = a; }
     }
-    if (best && best !== this.target) this.reaction = RAIDERS.reaction + Math.random() * 0.6;
+    if (best && best !== this.target) {
+      this.reaction = RAIDERS.reaction + Math.random() * 0.6;
+      if (best.downed && best.isPlayer) say(raid, c, FINISH_LINES);
+    }
+    // Friendly raiders come pick up anyone who's down (you included), once the shooting stops.
+    if (!this.rescue && !this.hostile) {
+      for (const a of raid.combatants) {
+        if (a === c || !a.alive || !a.downed) continue;
+        if (a.isPlayer && c.lastAttacker === a) continue;
+        const d = a.pos.distanceTo(c.pos);
+        if (d < 45 && (d < 15 || this.canSee(a))) { this.rescue = a; this.reviveT = 0; say(raid, c, RESCUE_LINES); break; }
+      }
+    }
+    if (this.rescue && (!this.rescue.alive || !this.rescue.downed)) this.rescue = null;
     this.target = best;
     this.los = best ? this.canSee(best) : false;
 
@@ -88,6 +128,7 @@ export class RaiderBrain {
     c.sprint = false;
     if (!c.alive) return;
     if (c.stunned > 0) return;
+    if (c.downed) { this.crawl(dt); return; }
     // Far from the player, raiders just drift toward their goal without thinking hard.
     this.age += dt;
     this.thinkIn -= dt;
@@ -136,6 +177,19 @@ export class RaiderBrain {
       }
       if (Number.isFinite(c.ammo) && c.ammo <= 0) {
         if (c.reload()) c.switchTo(c.active ? 0 : 1);
+      }
+    } else if (this.rescue) {
+      // Kneel by them and hold the use key.
+      const r = this.rescue;
+      const d = Math.hypot(r.pos.x - c.pos.x, r.pos.z - c.pos.z);
+      if (d > 1.6) { goal = r.pos; this.reviveT = 0; } else {
+        this.reviveT += dt;
+        c.yaw += angleDiff(c.yaw, Math.atan2(-(r.pos.x - c.pos.x), -(r.pos.z - c.pos.z))) * Math.min(1, dt * 6);
+        if (this.reviveT >= PLAYER.reviveTime) {
+          raid.revive(r, c);
+          say(raid, c, REVIVED_LINES);
+          this.rescue = null;
+        }
       }
     } else if (this.loot && raid.pickups.includes(this.loot)) {
       goal = this.loot.spot;

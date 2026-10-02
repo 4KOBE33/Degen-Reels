@@ -1,13 +1,14 @@
 // Your keyboard/mouse controls and the over-the-shoulder camera.
 // Which key or button does what lives in keys.js, and players can rebind all of it.
 import * as THREE from 'three';
-import { WEAPONS, ITEMS } from './config.js';
+import { WEAPONS, ITEMS, PLAYER } from './config.js';
 import { actionsFor, capturing } from './keys.js';
 
 const BASE_SENSITIVITY = 0.0016;
 const AUTO = new Set(['smg', 'fists', 'spoon']);
 const CAM_OFFSET = new THREE.Vector3(1.15, 0.6, 4.3);
 const AIM_OFFSET = new THREE.Vector3(0.9, 0.45, 2.4);
+const DOWN_OFFSET = new THREE.Vector3(0.8, 2.6, 3.2);
 
 export class PlayerController {
   constructor(raid, camera, canvas) {
@@ -197,7 +198,14 @@ export class PlayerController {
     }
     hud.prompt(it && !this.search ? it.prompt(c) : null);
     hud.progress(this.search ? this.search.t / this.search.target.searchTime : c.using ? c.using.t / c.using.total : null,
-      this.search ? 'Searching…' : c.using ? 'Using…' : '');
+      this.search ? this.search.target.searchLabel || 'Searching…' : c.using ? 'Using…' : '');
+
+    // Downed: hold jump to give up instead of waiting to bleed out.
+    if (c.downed && c.alive && raid.active && h.has('jump')) {
+      this.giveUp = (this.giveUp || 0) + dt;
+      if (!this.search) hud.progress(this.giveUp / PLAYER.giveUpTime, 'Giving up…');
+      if (this.giveUp >= PLAYER.giveUpTime) { this.giveUp = 0; raid.kill(c, c.lastAttacker || null); }
+    } else this.giveUp = 0;
 
     // Cherry Bomb aiming arc.
     const throwing = this.throwHeld && c.alive && raid.active ? c.currentThrowable() : null;
@@ -234,9 +242,11 @@ export class PlayerController {
 
     const head = c.head(new THREE.Vector3());
     const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(c.pitch, c.yaw, 0, 'YXZ'));
-    c.char.firstPerson(this.firstPerson && c.alive);
+    // Downed: always third person, from a bit higher up so you can see yourself crawl.
+    const fp = this.firstPerson && c.alive && !c.downed;
+    c.char.firstPerson(fp);
 
-    if (this.firstPerson && c.alive) {
+    if (fp) {
       // Eyes just in front of the face, with a little bob while you move.
       const speed = Math.hypot(c.vel.x, c.vel.z);
       this.bob += dt * speed * (c.isSprinting ? 1.6 : 1.3);
@@ -254,7 +264,7 @@ export class PlayerController {
       return;
     }
 
-    const offset = CAM_OFFSET.clone().lerp(AIM_OFFSET, this.zoom).applyQuaternion(q);
+    const offset = (c.downed ? DOWN_OFFSET.clone() : CAM_OFFSET.clone().lerp(AIM_OFFSET, this.zoom)).applyQuaternion(q);
     const want = offset.length();
 
     // Pull the camera in if a wall is in the way.

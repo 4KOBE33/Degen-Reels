@@ -3,6 +3,7 @@ import { WEAPONS, PLAYER, EXTRACT_TIME, ITEMS } from './config.js';
 import { itemInfo, itemTitle, isGun, fullAmmo } from './items.js';
 import { iconHtml } from './icons.js';
 import { keyName } from './keys.js';
+import { levelInfo, TIER_NAMES, lookName } from './progress.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -86,6 +87,16 @@ export class Hud {
     this.set('hpText', `❤️ ${Math.ceil(Math.max(0, p.hp))}${p.armor > 0 ? ` · 🛡️ ${Math.ceil(p.armor)}` : ''}`);
     this.set('raidChips', `🪙 ${p.chips}`);
     this.set('keyhint', `${keyName('bag')} backpack · ${keyName('map')} map · ${keyName('pov')} camera · ${keyName('heal')} heal · ${keyName('armor')} armor · ${keyName('reload')} reload · ${keyName('throw')} throw · ${keyName('aim')} aim · Esc controls`);
+    // Downed banner: bleed-out timer and what you can do about it.
+    const dn = $('downed');
+    dn.hidden = !(p.downed && p.alive);
+    document.body.classList.toggle('isdowned', !dn.hidden);
+    if (!dn.hidden) {
+      const tok = p.count('token');
+      this.set('downed', `<b>YOU'RE DOWN</b><div class="bleed"><i style="width:${Math.max(0, (p.bleed / PLAYER.bleedTime) * 100).toFixed(1)}%"></i></div>
+        <small>Bleeding out in ${Math.ceil(p.bleed)}s · ${Math.max(0, Math.ceil(p.downHp))} hits left in you</small>
+        <p>${tok ? `<kbd>${keyName('use')}</kbd> hold to use a 🎟️ Second Chance Token (${tok})` : 'Crawl to cover. A friendly raider might come pick you up.'} · <kbd>${keyName('jump')}</kbd> hold to give up</p>`);
+    }
     const thr = p.currentThrowable();
     this.set('quick', [
       [keyName('heal'), '🩹', p.count('bandage') + p.count('soda')],
@@ -510,7 +521,22 @@ export class Hud {
     el.classList.add('show');
   }
 
+  // The "you got busted" banner during the kill cam. Pass null to hide it.
+  killcam(k) {
+    $('downed').hidden = true;
+    document.body.classList.remove('isdowned');
+    const el = $('killcam');
+    el.hidden = !k;
+    if (!k) return;
+    const hp = k.killer && k.killer.alive ? `<span>${k.killer.isBoss || k.killer.team === 'machine' ? '⚙️' : '❤️'} ${Math.max(0, Math.ceil(k.killer.hp))} health left</span>` : '';
+    el.innerHTML = `<div class="kctag">💀 BUSTED BY</div><div class="kcname">${escapeHtml(k.name)}</div>
+      <div class="kcinfo">${k.weapon ? `<span>with ${escapeHtml(k.weapon)}</span>` : ''}${k.dealt ? `<span>💥 ${k.dealt} damage to you</span>` : ''}${hp}</div>
+      <div class="kcskip">Click or press Space to skip</div>`;
+  }
+
   raidOver(r) {
+    $('downed').hidden = true;
+    document.body.classList.remove('isdowned');
     const el = $('results');
     let title;
     let line;
@@ -533,7 +559,15 @@ export class Hud {
       ? `${r.chips ? `<span class="chip">🪙 ${r.chips} chips</span>` : ''}${r.items.map((it) => `<span class="chip ${r.success ? '' : 'lost'}" style="color:${itemInfo(it).css}">${iconHtml(it)} ${escapeHtml(itemTitle(it).slice(itemInfo(it).icon.length + 1))}</span>`).join('')}`
       : '<span class="chip">Nothing</span>';
     $('resultsItems').classList.toggle('lost', !r.success);
-    $('resultsUnlocks').innerHTML = r.newHats && r.newHats.length ? `🔓 Unlocked: ${r.newHats.map((h) => `<b>${h} hat</b>`).join(', ')}` : '';
+    // XP, level, new finds and anything unlocked.
+    const pr = r.progress || { xp: 0, achievements: [], looks: [], levelUp: 0 };
+    const lv = levelInfo();
+    const finds = r.newFinds && r.newFinds.length
+      ? `<div class="rnew"><b>📖 New in your collection:</b> ${r.newFinds.map((it) => `<span class="chip" style="color:${itemInfo(it).css}">${iconHtml(it)} ${escapeHtml(itemInfo(it).name)}</span>`).join('')}</div>` : '';
+    const achs = pr.achievements.map((a) => `<div class="rach t${a.tier}"><span class="ic">${a.icon}</span><div><b>${escapeHtml(a.name)}</b><small>${TIER_NAMES[a.tier]} achievement · ${escapeHtml(a.desc)}</small></div></div>`).join('');
+    const looks = pr.looks.length ? `<div class="rnew">🎨 <b>New look unlocked:</b> ${pr.looks.map((k) => escapeHtml(lookName(k))).join(', ')}</div>` : '';
+    $('resultsUnlocks').innerHTML = `<div class="rxp"><span class="lvl">LV ${lv.level}</span><div class="xpbar"><i style="width:${(lv.frac * 100).toFixed(1)}%"></i></div><b>+${pr.xp} XP</b></div>
+      ${pr.levelUp ? `<div class="rlevel">⭐ LEVEL UP! You're level ${pr.levelUp}</div>` : ''}${finds}${achs}${looks}`;
     el.hidden = false;
     this.prompt(null);
     this.progress(null);

@@ -22,6 +22,13 @@ export const PLAYER = {
   warmGain: 9,
   freezeDamage: 3,
   fireRadius: 6,
+  // Getting downed: you go down instead of dying, crawl, and bleed out unless someone revives you.
+  downHp: 80,
+  bleedTime: 45,
+  reviveTime: 4,
+  selfReviveTime: 3,
+  reviveHp: 35,
+  giveUpTime: 2,
 };
 
 // Lost Vegas: the raid map. Half-size in meters.
@@ -79,6 +86,7 @@ export const ITEMS = {
   trophy: { name: 'Jackpot Trophy', icon: '🏆', desc: 'Worth a fortune to the Fence.', kind: 'valuable', value: 1800 },
   cocoa: { name: 'Hot Cocoa', icon: '☕', desc: 'Warms you right up (+70 warmth) and heals 10. Lifesaver in the snow.', kind: 'warm', warmth: 70, heal: 10, useTime: 1.6, value: 80, stack: 3 },
   tooth: { name: 'Gator Tooth', icon: '🦷', desc: 'Pulled from a bayou gator. The Fence loves these.', kind: 'valuable', value: 220, stack: 5 },
+  token: { name: 'Second Chance Token', icon: '🎟️', desc: 'When you go down, hold the use key to pick yourself back up. Used up on the spot. The House hates these.', kind: 'revive', value: 650, stack: 2 },
   keycard: { name: 'Vault Keycard', icon: '💳', desc: 'Opens the casino vault. Used up on swipe.', kind: 'key', value: 700 },
   clover: { name: 'Four-Leaf Clover', icon: '🍀', desc: 'Legendary. Almost nobody finds one.', kind: 'valuable', value: 6000, legendary: true },
   crown: { name: "The House's Crown", icon: '👑', desc: 'Legendary. Taken from the Pit Boss himself.', kind: 'valuable', value: 25000, legendary: true },
@@ -88,9 +96,9 @@ export const ITEMS = {
 // Each entry is [weight, what]. 'gun' rolls a gun from GUN_TIERS with a rarity boost.
 export const LOOT = {
   1: [[30, 'chips'], [18, 'bandage'], [14, 'ammo'], [16, 'cards'], [10, 'dice'], [8, 'gun'], [4, 'plate'], [6, 'cocoa'], [6, 'grenade'], [4, 'flash'], [4, 'sauce'], [5, 'fuel']],
-  2: [[22, 'chips'], [12, 'bandage'], [8, 'soda'], [12, 'ammo'], [10, 'dice'], [10, 'hat'], [6, 'watch'], [12, 'gun'], [8, 'plate'], [5, 'cocoa'], [8, 'grenade'], [6, 'flash'], [6, 'sauce'], [6, 'fuel']],
-  3: [[18, 'chips'], [8, 'soda'], [10, 'ammo'], [10, 'watch'], [8, 'ring'], [2, 'trophy'], [3, 'keycard'], [18, 'gun'], [10, 'plate'], [8, 'grenade'], [8, 'dice'], [6, 'flash'], [6, 'sauce'], [5, 'fuel'], [0.5, 'clover']],
-  4: [[14, 'chips'], [10, 'ring'], [8, 'trophy'], [24, 'gun'], [10, 'soda'], [10, 'plate'], [6, 'grenade'], [8, 'dice'], [5, 'sauce'], [2, 'clover']],
+  2: [[22, 'chips'], [12, 'bandage'], [8, 'soda'], [12, 'ammo'], [10, 'dice'], [10, 'hat'], [6, 'watch'], [12, 'gun'], [8, 'plate'], [5, 'cocoa'], [8, 'grenade'], [6, 'flash'], [6, 'sauce'], [6, 'fuel'], [1.5, 'token']],
+  3: [[18, 'chips'], [8, 'soda'], [10, 'ammo'], [10, 'watch'], [8, 'ring'], [2, 'trophy'], [3, 'keycard'], [18, 'gun'], [10, 'plate'], [8, 'grenade'], [8, 'dice'], [6, 'flash'], [6, 'sauce'], [5, 'fuel'], [3, 'token'], [0.5, 'clover']],
+  4: [[14, 'chips'], [10, 'ring'], [8, 'trophy'], [24, 'gun'], [10, 'soda'], [10, 'plate'], [6, 'grenade'], [8, 'dice'], [5, 'sauce'], [5, 'token'], [2, 'clover']],
 };
 export const CHIPS_BY_TIER = { 1: [15, 40], 2: [30, 80], 3: [60, 160], 4: [150, 400] };
 

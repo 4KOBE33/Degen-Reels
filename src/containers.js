@@ -76,6 +76,7 @@ export class Container {
   open(c) {
     if (this.opened) return;
     this.opened = true;
+    if (c && c.isPlayer && this.raid.run) this.raid.run.containers++;
     this.lid.position.y = this.h + 0.5;
     this.lid.rotation.x = -0.9;
     sfx.open(this.spot, this.raid.listener);
