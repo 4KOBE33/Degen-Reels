@@ -247,7 +247,7 @@ export class Hud {
     if (showBoss) {
       $('bossFill').style.width = `${(b.hp / b.maxHp) * 100}%`;
       const ph = b.bossPhase || 1;
-      this.set('bossName', `👑 THE PIT BOSS · ${['', 'PHASE 1: HIT THE SCREEN', 'PHASE 2: OVERCLOCKED · HIT HIS BACK', 'PHASE 3: TILT · HIT THE CROWN SOCKET'][ph]}${b.invuln > 0 ? ' · 🛡️' : ''}`);
+      this.set('bossName', `👑 ${b.name.toUpperCase()} · ${['', 'PHASE 1: HIT THE SCREEN', 'PHASE 2: OVERCLOCKED · HIT HIS BACK', 'PHASE 3: TILT · HIT THE CROWN SOCKET'][ph]}${b.invuln > 0 ? ' · 🛡️' : ''}`);
       $('bossbar').dataset.phase = ph;
     }
 

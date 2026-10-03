@@ -2,7 +2,7 @@
 // then reach an extraction point before time runs out. Die and you lose everything you carried.
 import * as THREE from 'three';
 import {
-  PLAYER, WEAPONS, bagBonus, RARITIES, RAID_TIME, EXTRACT_TIME, EXTRACT_RADIUS, EXTRACT_COOLDOWN, BOSS_TIME, RAIDERS, RAIDER_NAMES, COLORS, HATS, ENEMIES, ITEMS,
+  PLAYER, WEAPONS, bagBonus, bossTheme, RARITIES, RAID_TIME, EXTRACT_TIME, EXTRACT_RADIUS, EXTRACT_COOLDOWN, BOSS_TIME, RAIDERS, RAIDER_NAMES, COLORS, HATS, ENEMIES, ITEMS,
 } from './config.js';
 import { buildMap, drawMinimap, neonSign } from './map.js';
 import { SlotMachine } from './slots.js';
@@ -183,9 +183,9 @@ export class Raid {
     const inside = p && p.alive && this.inCasino(p.pos);
     if (on) {
       sfx.alert(this.focus, this.listener);
-      this.feed('🔒 The casino doors slammed shut. Nobody leaves until the Pit Boss is busted.');
+      this.feed(`🔒 The casino doors slammed shut. Nobody leaves until ${this.bossName} is busted.`);
       if (inside) this.hud.toast('🔒 LOCKED IN WITH THE PIT BOSS. Bust him to get out!', 'big');
-      else if (p && p.alive && Math.hypot(p.pos.x - this.map.casino.x, p.pos.z - this.map.casino.z) < 120) this.hud.toast('🔒 The casino just locked down. Someone\'s fighting the Pit Boss in there.');
+      else if (p && p.alive && Math.hypot(p.pos.x - this.map.casino.x, p.pos.z - this.map.casino.z) < 120) this.hud.toast(`🔒 The casino just locked down. Someone's fighting ${this.bossName} in there.`);
     } else {
       this.feed('🔓 The casino doors are open again.');
       if (inside) this.hud.toast('🔓 The doors are open. Get out of here!', 'big');
@@ -210,7 +210,7 @@ export class Raid {
       boss.hp = boss.maxHp;
       boss.setBossPhase(1);
       this.setBossLock(false);
-      this.feed('💼 The Pit Boss straightens his tie. Fully healed.');
+      this.feed(`💼 ${this.bossName} shakes it off. Fully healed.`);
     }
   }
 
@@ -1157,7 +1157,7 @@ export class Raid {
     if (target.isBoss && attacker && attacker.pos && !this.inCasino(attacker.pos)) {
       if (attacker.isPlayer) {
         this.fx.number(at || target.center(new THREE.Vector3()), 'IMMUNE', '#9ca3af', 1.1);
-        if (!this.bossHint || this.elapsed - this.bossHint > 6) { this.bossHint = this.elapsed; this.hud.toast('🛡️ The Pit Boss can\'t be hurt from outside. Go in and fight him!'); }
+        if (!this.bossHint || this.elapsed - this.bossHint > 6) { this.bossHint = this.elapsed; this.hud.toast(`🛡️ ${this.bossName} can't be hurt from outside. Go in and fight!`); }
       }
       return;
     }
@@ -1265,7 +1265,7 @@ export class Raid {
         this.dropAround(at, makeItem('keycard'), 4);
         if (Math.random() < 0.2) this.dropAround(at, makeItem('clover'), 4);
         if (Math.random() < 0.01) this.dropAround(at, makeItem('crown'), 4);
-        this.feed('👑 The Pit Boss is DOWN!');
+        this.feed(`👑 ${this.bossName} is DOWN!`);
         if (attacker && attacker.isPlayer) {
           this.run.boss = true;
           save.update((d) => { d.stats.bossKills++; });
@@ -1317,6 +1317,8 @@ export class Raid {
     this.bots = this.bots.filter((b) => b.c !== c);
   }
 
+  get bossName() { return bossTheme(this.mapId).name; }
+
   feed(text) {
     this.hud.feed(text);
   }
@@ -1327,8 +1329,8 @@ export class Raid {
     this.bossSpawned = true;
     const { casino } = this.map;
     this.boss = this.spawnMachine('boss', casino.x, casino.z + 10);
-    this.feed('🚨 THE PIT BOSS HAS HIT THE CASINO FLOOR');
-    this.hud.toast('🚨 The Pit Boss is on the casino floor. Big risk, bigger loot.', 'big');
+    this.feed(`🚨 ${this.bossName.toUpperCase()} HAS HIT THE CASINO FLOOR`);
+    this.hud.toast(`🚨 ${this.bossName} is on the casino floor. Big risk, bigger loot.`, 'big');
     sfx.alert(this.focus, this.listener);
   }
 

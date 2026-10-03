@@ -1,7 +1,7 @@
 // The Hub between raids: stash and loadout, the Back Room (gambling), the Fence (selling),
 // your look, your records (stats, achievements, collection log) and settings.
 // Everything here is plain HTML on top of the 3D backdrop.
-import { BACKPACK_SLOTS, BAG_UPGRADES, HUB_SLOTS, ITEMS, LOOT, QUALITY, RARITY_BY_TIER, WEAPONS, bagBonus } from './config.js';
+import { bossTheme, BACKPACK_SLOTS, BAG_UPGRADES, HUB_SLOTS, ITEMS, LOOT, QUALITY, RARITY_BY_TIER, WEAPONS, bagBonus } from './config.js';
 import {
   itemInfo, isGun, rollLoot, addToList, addToStash, makeGun, makeItem, fullAmmo,
 } from './items.js';
@@ -336,7 +336,7 @@ export class Hub {
     }).join('');
     const selId = MAPS[d.selectedMap] ? d.selectedMap : 'vegas';
     const sel = MAPS[selId];
-    const facts = sel.safe ? ['🛡️ No machines, no raiders', '🥊 1v1s in The Pit', '🎲 Every casino game'] : [`⏱️ ${Math.round((sel.raidTime || 1080) / 60)} min raids`, `📏 ${sel.size} map`, sel.indoor ? '🏚️ All indoors' : '👑 Pit Boss at 4:00'];
+    const facts = sel.safe ? ['🛡️ No machines, no raiders', '🥊 1v1s in The Pit', '🎲 Every casino game'] : [`⏱️ ${Math.round((sel.raidTime || 1080) / 60)} min raids`, `📏 ${sel.size} map`, sel.indoor ? `🏚️ All indoors · 👑 ${bossTheme(selId).name}` : `👑 ${bossTheme(selId).name} at 4:00`];
     const newbie = (d.stats.raids || 0) === 0;
     const guide = newbie ? `<section class="newbie"><b>👋 New to Beat the House? Here's the deal:</b>
       <ol><li><b>Pack a gun.</b> No gear? Grab the 🎁 FREE LOADOUT below.</li>

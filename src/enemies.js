@@ -8,7 +8,7 @@
 //   The Dealer – a tall elite in a green visor; keeps its distance and flings fans of razor cards
 //   Pit Boss  – a giant golden slot mech: bullet sweeps, rockets, summons, ground slams
 import * as THREE from 'three';
-import { ENEMIES } from './config.js';
+import { ENEMIES, bossTheme } from './config.js';
 import { part, toon, canvasTexture } from './toon.js';
 import { resolve } from './physics.js';
 import { smoothMove } from './netsmooth.js';
@@ -110,21 +110,21 @@ function hpBar() {
   return sprite;
 }
 
-function buildModel(type) {
+function buildModel(type, theme = bossTheme('vegas')) {
   const g = new THREE.Group();
   const parts = {};
   if (type === 'slotbot' || type === 'boss') {
     const boss = type === 'boss';
     const s = boss ? 3.2 : 1;
-    const bodyMat = toon(boss ? 0xffc83d : 0xe63946, { unique: true, emissive: 0xffffff, emissiveIntensity: 0 });
+    const bodyMat = toon(boss ? theme.body : 0xe63946, { unique: true, emissive: 0xffffff, emissiveIntensity: 0 });
     const body = part(new THREE.BoxGeometry(1.6, 1.9, 1.2), bodyMat);
     body.position.y = 1.75;
-    const top = part(new THREE.BoxGeometry(1.8, 0.55, 1.3), 0x1b0f2b);
+    const top = part(new THREE.BoxGeometry(1.8, 0.55, 1.3), boss ? theme.top : 0x1b0f2b);
     top.position.y = 2.95;
     const screen = new THREE.Mesh(new THREE.PlaneGeometry(1.25, 0.5), new THREE.MeshBasicMaterial({ map: reels() }));
     screen.position.set(0, 2.1, -0.61);
     screen.rotation.y = Math.PI;
-    const eye = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.14, 0.05), new THREE.MeshBasicMaterial({ color: 0xff3fa4 }));
+    const eye = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.14, 0.05), new THREE.MeshBasicMaterial({ color: boss ? theme.eye : 0xff3fa4 }));
     eye.position.set(0, 2.95, -0.66);
     const cannon = part(new THREE.CylinderGeometry(0.16, 0.2, 1.1, 10), 0x374151);
     cannon.rotation.x = Math.PI / 2;
@@ -140,8 +140,88 @@ function buildModel(type) {
       legs.push(leg);
     }
     if (boss) {
-      const crown = part(new THREE.CylinderGeometry(0.6, 0.55, 0.35, 8, 1, true), toon(0xffd23f, { unique: true, side: THREE.DoubleSide }));
+      // The crown (whatever it is on this map) blows off in phase 3, so its extras hang off it.
+      const crown = new THREE.Group();
       crown.position.y = 3.4;
+      const crownMat = toon(theme.crown, { unique: true, side: THREE.DoubleSide });
+      if (theme.look === 'ice') {
+        // A ring of icicle spikes.
+        for (let i = 0; i < 7; i++) {
+          const a = (i / 7) * Math.PI * 2;
+          const spike = part(new THREE.ConeGeometry(0.12, 0.55 + (i % 2) * 0.3, 5), crownMat, { ink: 0.01 });
+          spike.position.set(Math.cos(a) * 0.45, 0.25, Math.sin(a) * 0.45);
+          crown.add(spike);
+        }
+        // Frost on the shoulders, a scarf.
+        const scarf = part(new THREE.BoxGeometry(1.7, 0.22, 1.3), 0xe63946, { ink: 0.01 });
+        scarf.position.y = 2.62;
+        g.add(scarf);
+        for (const side of [-1, 1]) {
+          const ice = part(new THREE.DodecahedronGeometry(0.28, 0), 0xe0f2fe, { ink: 0.01 });
+          ice.position.set(side * 0.75, 2.75, 0);
+          g.add(ice);
+        }
+      } else if (theme.look === 'gator') {
+        // A gator head for a hat: snout, teeth and yellow eyes; a tail out the back.
+        const head = part(new THREE.BoxGeometry(0.75, 0.32, 0.7), crownMat, { ink: 0.01 });
+        head.position.set(0, 0.1, 0);
+        const snout = part(new THREE.BoxGeometry(0.55, 0.22, 0.75), crownMat, { ink: 0.01 });
+        snout.position.set(0, 0.04, -0.68);
+        crown.add(head, snout);
+        for (let i = 0; i < 4; i++) {
+          const tooth = part(new THREE.ConeGeometry(0.04, 0.12, 4), 0xfff6e0, { ink: 0 });
+          tooth.rotation.x = Math.PI;
+          tooth.position.set(-0.18 + i * 0.12, -0.1, -0.95);
+          crown.add(tooth);
+        }
+        for (const side of [-1, 1]) {
+          const ey = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 6), new THREE.MeshBasicMaterial({ color: 0xfacc15 }));
+          ey.position.set(side * 0.22, 0.3, -0.25);
+          crown.add(ey);
+        }
+        const tail = part(new THREE.ConeGeometry(0.35, 1.6, 6), 0x3f6212, { ink: 0.02 });
+        tail.rotation.x = -Math.PI / 2 - 0.3;
+        tail.position.set(0, 1.0, 1.2);
+        g.add(tail);
+      } else if (theme.look === 'wine') {
+        // A crown of grapes and vine leaves, barrel hoops round the belly.
+        for (let i = 0; i < 9; i++) {
+          const a = (i / 9) * Math.PI * 2;
+          const grape = new THREE.Mesh(new THREE.SphereGeometry(0.14, 8, 6), crownMat);
+          grape.position.set(Math.cos(a) * 0.45, 0.05 + (i % 2) * 0.12, Math.sin(a) * 0.45);
+          crown.add(grape);
+        }
+        for (const side of [-1, 1]) {
+          const leafM = part(new THREE.ConeGeometry(0.2, 0.5, 4), 0x4d7c0f, { ink: 0.01 });
+          leafM.rotation.z = side * 1.1;
+          leafM.position.set(side * 0.6, 0.2, 0);
+          crown.add(leafM);
+        }
+        for (const y of [1.1, 2.4]) {
+          const hoop = part(new THREE.BoxGeometry(1.66, 0.12, 1.26), 0x2b2140, { ink: 0 });
+          hoop.position.y = y;
+          g.add(hoop);
+        }
+      } else if (theme.look === 'suit') {
+        // Shirt front, red tie, shades and a gold-banded fedora.
+        const shirt = part(new THREE.BoxGeometry(0.55, 0.85, 0.05), 0xfff6e0, { ink: 0 });
+        shirt.position.set(0, 1.2, -0.62);
+        const tie = part(new THREE.BoxGeometry(0.18, 0.75, 0.06), 0xe63946, { ink: 0 });
+        tie.position.set(0, 1.18, -0.66);
+        const shades = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.2, 0.06), new THREE.MeshBasicMaterial({ color: 0x111111 }));
+        shades.position.set(0, 2.95, -0.69);
+        g.add(shirt, tie, shades);
+        const brim = part(new THREE.CylinderGeometry(0.85, 0.85, 0.06, 18), 0x111827, { ink: 0.01 });
+        const hatTop = part(new THREE.CylinderGeometry(0.5, 0.55, 0.45, 16), 0x111827, { ink: 0.01 });
+        hatTop.position.y = 0.25;
+        const band = part(new THREE.CylinderGeometry(0.56, 0.56, 0.1, 16), crownMat, { ink: 0 });
+        band.position.y = 0.08;
+        crown.add(brim, hatTop, band);
+      } else {
+        const ring = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.55, 0.35, 8, 1, true), crownMat);
+        ring.castShadow = true;
+        crown.add(ring);
+      }
       g.add(crown);
       const cannon2 = cannon.clone();
       cannon2.position.x = -0.95;
@@ -422,7 +502,7 @@ export class Machine {
     this.raid = raid;
     this.type = type;
     this.def = ENEMIES[type];
-    this.name = this.def.name;
+    this.name = type === 'boss' ? bossTheme(raid.mapId).name : this.def.name;
     this.team = 'machine';
     this.isBoss = type === 'boss';
     this.maxHp = Math.round(this.def.hp * (raid.map.toughness || 1));
@@ -451,7 +531,8 @@ export class Machine {
     this.rage = { speed: 1, rate: 1, dmg: 1 };
     this.invuln = 0;
 
-    const { group, parts } = buildModel(type);
+    this.theme = type === 'boss' ? bossTheme(raid.mapId) : null;
+    const { group, parts } = buildModel(type, this.theme || undefined);
     this.group = group;
     this.parts = parts;
     parts.hit.userData.actor = this;
@@ -747,7 +828,7 @@ export class Machine {
       p.core.visible = false;
       p.socket.visible = false;
       p.crown.visible = true;
-      p.bodyMat.color.setHex(0xffc83d);
+      p.bodyMat.color.setHex(this.theme.body);
       this.rage = { speed: 1, rate: 1, dmg: 1 };
       p.critMult = 2.5;
       p.crit.userData.crit = p.critMult;
@@ -781,13 +862,13 @@ export class Machine {
     sfx.alert(this.pos, raid.listener);
     if (!this.puppet) raid.slam(this, 12, 20);
     const msg = n === 2
-      ? '🔥 PHASE 2: The Pit Boss is OVERCLOCKED! His screen is armored: shoot the glowing core on his BACK.'
-      : '💥 PHASE 3: TILT! His crown blew off. Hit the socket on TOP of his head, and don\'t stand still.';
+      ? `🔥 PHASE 2: ${this.name} is OVERCLOCKED! The screen is armored: shoot the glowing core on the BACK.`
+      : `💥 PHASE 3: TILT! The ${this.theme.look === 'suit' ? 'hat' : this.theme.look === 'gator' ? 'gator head' : 'crown'} blew off. Hit the socket on TOP, and don't stand still.`;
     raid.feed(msg);
     if (raid.player && raid.player.alive && raid.player.pos.distanceTo(this.pos) < 90) raid.hud.toast(msg, 'big');
     if (this.puppet) return;
     // Backup arrives.
-    const call = n === 2 ? ['roller', 'roller'] : ['bouncer', 'dicer', 'dicer'];
+    const call = n === 2 ? this.theme.adds2 : this.theme.adds3;
     for (const type of call) {
       const m = raid.spawnMachine(type, this.pos.x + (Math.random() - 0.5) * 12, this.pos.z + (Math.random() - 0.5) * 12);
       m.summoned = true;
@@ -816,7 +897,7 @@ export class Machine {
         this.raid.spawnRocket(origin, aim.sub(origin).normalize(), this, 0, 34);
       }, i * 220);
     }
-    this.raid.feed('🎰 JACKPOT RAIN!');
+    this.raid.feed(this.theme.rain);
   }
 
   // The Pit Boss's special attacks, cycling every few seconds. More of them, faster, each phase.
@@ -831,13 +912,13 @@ export class Machine {
       if (d < (ph === 3 ? 9 : 7)) raid.slam(this, ph === 3 ? 12 : 9, ph === 3 ? 42 : 34);
       else if (roll < 0.3) this.coinRing(ph === 3 ? 26 : 18, Math.round(6 * this.rage.dmg));
       else if (roll < 0.55 && ph === 3) this.jackpotRain(t, 7);
-      else if (roll < 0.55 && raid.machines.filter((m) => m.alive && m.type === 'roller' && m.summoned).length < 3) {
+      else if (roll < 0.55 && raid.machines.filter((m) => m.alive && m.type === this.theme.summon[0] && m.summoned).length < 3) {
         for (let i = 0; i < 2; i++) {
-          const m = raid.spawnMachine('roller', this.pos.x + (Math.random() - 0.5) * 8, this.pos.z + (Math.random() - 0.5) * 8);
+          const m = raid.spawnMachine(this.theme.summon[0], this.pos.x + (Math.random() - 0.5) * 8, this.pos.z + (Math.random() - 0.5) * 8);
           m.summoned = true;
           m.target = t;
         }
-        raid.feed('🎡 The Pit Boss spun up Roulette Rollers!');
+        raid.feed(`📣 ${this.name} called in backup!`);
       } else {
         for (let i = 0; i < (ph === 3 ? 5 : 4); i++) {
           setTimeout(() => {
@@ -864,13 +945,13 @@ export class Machine {
           raid.spawnRocket(origin, aim.sub(origin).normalize(), this, 0, 40);
         }, i * 350);
       }
-    } else if (roll < 0.65 && raid.machines.filter((m) => m.alive && m.type === 'dicer' && m.summoned).length < 4) {
+    } else if (roll < 0.65 && raid.machines.filter((m) => m.alive && m.type === this.theme.summon[1] && m.summoned).length < 4) {
       for (let i = 0; i < 2; i++) {
-        const m = raid.spawnMachine('dicer', this.pos.x + (Math.random() - 0.5) * 8, this.pos.z + (Math.random() - 0.5) * 8);
+        const m = raid.spawnMachine(this.theme.summon[1], this.pos.x + (Math.random() - 0.5) * 8, this.pos.z + (Math.random() - 0.5) * 8);
         m.summoned = true;
         m.target = t;
       }
-      raid.feed('🎲 The Pit Boss rolled out more Dicers!');
+      raid.feed(`📣 ${this.name} whistled for more help!`);
     }
   }
 }

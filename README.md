@@ -14,7 +14,9 @@ A 3D cartoon **extraction shooter** set in a casino town gone wrong. Gear up, ra
 
 Each map has one **deadly outer area** (in bold) with tier-3 loot and heavy guards, so the casino isn't the only place worth risking it.
 
-Every map has a casino with a vault, a Pit Boss event, and four exits (two open per raid). Each outdoor map also has a giant monument, climbable towers, its own extra landmarks (Lost Vegas has the High Roller Ferris wheel, Frostbite has a working ski lift, and so on) and three **🎡 Gun Wheels**: hold a gun, bet it, and spin for a better one (or lose it). Each also has its own hazard:
+Every map has a casino with a vault, a Pit Boss event, and four exits (two open per raid). Each outdoor map also has a giant monument, climbable towers, its own extra landmarks (Lost Vegas has the High Roller Ferris wheel, Frostbite has a working ski lift, and so on) and three **🎡 Gun Wheels**: hold a gun, bet it, and spin for a better one (or lose it). Each casino has its own boss with the same three-phase fight but its own look, backup and signature rain: **The Pit Boss** (Lost Vegas), **The Snow Baron** (Frostbite Peaks), **Boss Gator** (Bayou Royale), **Baron Vino** (Temakilla) and **The Enforcer** (The Bunker).
+
+Each also has its own hazard:
 
 - **Lost Vegas: traffic.** Cars cruise the strip and the cross street, and getting hit hurts. They honk if you're standing in the lane.
 - **Frostbite Peaks: cold.** Your warmth drains outdoors. Stand by a burning barrel 🔥 or get indoors to warm up, or drink ☕ Hot Cocoa (G). At zero warmth you freeze, and frostbite goes straight through armor.
