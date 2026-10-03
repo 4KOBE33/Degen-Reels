@@ -1,7 +1,7 @@
 // The raid HUD: health, armor, weapons, quick items, minimap, exits, boss bar, bag and map screens.
 import { TIER_COLORS } from './containers.js';
 import { WEAPONS, PLAYER, EXTRACT_TIME, ITEMS } from './config.js';
-import { itemInfo, itemTitle, isGun, fullAmmo } from './items.js';
+import { itemInfo, itemTitle, isGun, fullAmmo, isBelt } from './items.js';
 import { iconHtml } from './icons.js';
 import { keyName } from './keys.js';
 import { save } from './save.js';
@@ -197,15 +197,18 @@ export class Hud {
       const grew = this.lastPack !== undefined && p.backpack.length > (this.lastPackLen || 0);
       this.lastPack = pack;
       this.lastPackLen = p.backpack.length;
+      // The bar shows loot; consumables are on the belt (the H/F/R/T counts below).
+      const loot = p.backpack.filter((it) => !isBelt(it));
+      const newest = p.backpack[p.backpack.length - 1];
       const slots = [];
       for (let i = 0; i < p.capacity; i++) {
-        const it = p.backpack[i];
+        const it = loot[i];
         if (!it) { slots.push('<span class="s"></span>'); continue; }
         const info = itemInfo(it);
-        const isNew = grew && i === p.backpack.length - 1;
+        const isNew = grew && it === newest;
         slots.push(`<span class="s ${isNew ? 'new' : ''}" style="border-color:${info.css}" title="${escapeHtml(info.name)}">${iconHtml(it)}${!isGun(it) && it.qty > 1 ? `<i>${it.qty}</i>` : ''}</span>`);
       }
-      $('packbar').innerHTML = `<div class="t">🎒 Backpack ${p.backpack.length}/${p.capacity} · <kbd>Q</kbd> to open</div><div class="slots">${slots.join('')}</div>`;
+      $('packbar').innerHTML = `<div class="t">🎒 Backpack ${loot.length}/${p.capacity} · 🩹 Belt ${p.beltUsed}/${p.room.belt} · <kbd>Q</kbd> to open</div><div class="slots">${slots.join('')}</div>`;
     }
 
     // Timer, zone and exits.
@@ -530,12 +533,17 @@ export class Hud {
     </section>`;
 
     // Middle: the backpack grid.
+    // Loot in the backpack grid, consumables on the belt below it (both point at the same list).
     const cells = [];
-    for (let i = 0; i < p.capacity; i++) cells.push(slotCard(p.backpack[i], 'pack', i));
-    const full = p.backpack.length / p.capacity;
-    const mid = `<section class="invcol pack"><div class="packhead"><h3>Backpack</h3><span class="cap ${full >= 1 ? 'full' : full >= 0.75 ? 'near' : ''}">${p.backpack.length}/${p.capacity}</span></div>
+    const belt = [];
+    p.backpack.forEach((it, i) => (isBelt(it) ? belt : cells).push(slotCard(it, 'pack', i)));
+    const empty = (n) => Array(Math.max(0, n)).fill('<div class="islot empty" data-drop="slot" data-where="pack" data-i="999"></div>').join('');
+    const full = p.packUsed / p.capacity;
+    const mid = `<section class="invcol pack"><div class="packhead"><h3>Backpack</h3><span class="cap ${full >= 1 ? 'full' : full >= 0.75 ? 'near' : ''}">${p.packUsed}/${p.capacity}</span></div>
       <div class="capbar"><div style="width:${Math.min(1, full) * 100}%"></div></div>
-      <div class="igrid">${cells.join('')}</div>
+      <div class="igrid">${cells.join('')}${empty(p.capacity - cells.length)}</div>
+      <div class="packhead belthead"><h4 class="ilabel">🩹 Belt <em>heals, plates, throwables, ammo</em></h4><span class="cap small ${belt.length >= p.room.belt ? 'full' : ''}">${belt.length}/${p.room.belt}</span></div>
+      <div class="igrid belt">${belt.join('')}${empty(p.room.belt - belt.length)}</div>
       <p class="hint small">Drag to move · right-click to equip / use · lost if you die${pocket.length ? ' (except your Safe Pocket)' : ''}</p></section>`;
 
     // Right: details for the selected item.

@@ -76,6 +76,25 @@ export function rollLoot(tier) {
 }
 
 // Adds an item to a list, stacking where possible. Returns false if there's no room.
+// Consumables (heals, plates, throwables, ammo, cocoa, fuel, tokens) ride on your belt, which has
+// its own slots, so they don't eat the backpack space you want for loot.
+const BELT_KINDS = new Set(['heal', 'armor', 'throw', 'ammo', 'warm', 'boost', 'revive']);
+export function isBelt(item) {
+  return !!item && !isGun(item) && !!ITEMS[item.id] && BELT_KINDS.has(ITEMS[item.id].kind);
+}
+// How many slots of one kind (belt or backpack) a list is using.
+export function slotsUsed(list, belt) {
+  let n = 0;
+  for (const it of list) if (isBelt(it) === belt) n++;
+  return n;
+}
+// `capacity` is a number (one shared limit) or { pack, belt } (separate limits).
+const limitFor = (list, item, capacity) => {
+  if (typeof capacity === 'number') return [list.length, capacity];
+  const belt = isBelt(item);
+  return [slotsUsed(list, belt), belt ? capacity.belt : capacity.pack];
+};
+
 export function addToList(list, item, capacity = Infinity) {
   const info = itemInfo(item);
   if (!isGun(item) && info.stack > 1) {
@@ -89,7 +108,7 @@ export function addToList(list, item, capacity = Infinity) {
       left -= n;
       if (!left) return true;
     }
-    while (left > 0 && list.length < capacity) {
+    while (left > 0 && limitFor(list, item, capacity)[0] < limitFor(list, item, capacity)[1]) {
       const n = Math.min(info.stack, left);
       list.push(makeItem(item.id, n));
       left -= n;
@@ -97,7 +116,8 @@ export function addToList(list, item, capacity = Infinity) {
     item.qty = left;
     return left === 0;
   }
-  if (list.length >= capacity) return false;
+  const [used, cap] = limitFor(list, item, capacity);
+  if (used >= cap) return false;
   list.push(item);
   return true;
 }

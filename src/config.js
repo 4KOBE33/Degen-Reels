@@ -43,6 +43,7 @@ export const EXTRACT_COOLDOWN = 40;
 // The Pit Boss shows up this many seconds into a raid.
 export const BOSS_TIME = 4 * 60;
 export const BACKPACK_SLOTS = 12;
+export const BELT_SLOTS = 6; // consumables have their own belt
 // Permanent backpack upgrades, bought in the hub. Each adds slots.
 export const BAG_UPGRADES = [
   { name: 'Fanny Pack', icon: '👝', slots: 3, cost: 2500 },

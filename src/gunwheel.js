@@ -222,7 +222,7 @@ export class GunWheel {
       p.refreshWeapon();
       return;
     }
-    if (p.equip(gun) || addToList(p.backpack, gun, p.capacity)) return;
+    if (p.equip(gun) || addToList(p.backpack, gun, p.room)) return;
     this.raid.dropItem(p.pos.clone(), gun, p.pos);
   }
 

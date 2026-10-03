@@ -172,7 +172,7 @@ export class RaiderBrain {
       let lootD = 18;
       for (const p of raid.pickups) {
         const d = p.spot.distanceTo(c.pos);
-        if (d < lootD && c.backpack.length < c.capacity) { lootD = d; this.loot = p; }
+        if (d < lootD && c.hasRoom(p.item)) { lootD = d; this.loot = p; }
       }
     }
 

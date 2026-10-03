@@ -1014,3 +1014,8 @@ h3 small.bank { color: var(--gold); opacity: 1; font-weight: 900; }
 .raidpick .mapcard b { white-space: normal; line-height: 1.05; }
 #keyhint { transition: opacity 1.2s; } #keyhint.gone { opacity: 0; }
 #cloudPin { width: 170px; }
+.belthead { margin-top: 12px; }
+.belthead .ilabel { margin: 0; }
+.packhead .cap.small { font-size: 16px; }
+.igrid.belt { grid-template-columns: repeat(6, 1fr); }
+.igrid.belt .islot:not(.empty) { border-color: #2ee6d6; }

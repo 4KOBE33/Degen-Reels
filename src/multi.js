@@ -561,7 +561,7 @@ export class Session {
       }
       case 'give': {
         if (!p) return;
-        if (!addToList(p.backpack, d.item, p.capacity)) {
+        if (!addToList(p.backpack, d.item, p.room)) {
           raid.hud.toast('Backpack full');
           this.send({ k: 'drop', item: d.item, at: arr(p.pos), from: arr(p.pos) });
           return;

@@ -20,7 +20,7 @@ import { RaiderBrain } from './bots.js';
 import { ItemPickup } from './pickups.js';
 import {
   makeGun, makeItem, rollLoot, randInt, pick, addToList, itemInfo, isGun, rollRarity, fullAmmo,
-  addToStash,
+  addToStash, isBelt,
 } from './items.js';
 import { part } from './toon.js';
 import { save } from './save.js';
@@ -383,7 +383,7 @@ export class Raid {
       if (!Number.isFinite(g.ammo)) g.ammo = fullAmmo(g.kind, g.rarity);
       p.equip(g);
     }
-    for (const it of loadout.items) addToList(p.backpack, { ...it }, p.capacity);
+    for (const it of loadout.items) addToList(p.backpack, { ...it }, p.room);
     // The Safe Pocket (comes with a bought backpack): whatever's in it survives your death.
     p.pocket = Array(loadout.pocket || 0).fill(null);
     // Back from a refresh or crash: what you were carrying.
@@ -749,15 +749,15 @@ export class Raid {
     const item = pickup.item;
     // Multiplayer client: ask the host for it (first come, first served).
     if (this.isClient && c.isPlayer) {
-      if (!isGun(item) && !c.backpack.some((x) => x.id === item.id) && c.backpack.length >= c.capacity) return `Backpack full. Press ${keyName('bag')} and drop something.`;
+      if (!isGun(item) && !c.hasRoom(item)) return isBelt(item) ? `Belt full. Press ${keyName('bag')} and drop something.` : `Backpack full. Press ${keyName('bag')} and drop something.`;
       if (pickup.requested && performance.now() - pickup.requested < 800) return null;
       pickup.requested = performance.now();
       this.net.send({ k: 'take', id: pickup.netId });
       return null;
     }
     let ok;
-    if (isGun(item)) ok = c.equip(item) || addToList(c.backpack, item, c.capacity);
-    else ok = addToList(c.backpack, item, c.capacity);
+    if (isGun(item)) ok = c.equip(item) || addToList(c.backpack, item, c.room);
+    else ok = addToList(c.backpack, item, c.room);
     if (!ok) return c.isPlayer ? `Backpack full. Press ${keyName('bag')} and drop something.` : 'full';
     pickup.remove();
     this.pickups = this.pickups.filter((p) => p !== pickup);
@@ -878,7 +878,7 @@ export class Raid {
   unequipToPack(c, slot) {
     const gun = c.weapons[slot];
     if (!gun) return null;
-    if (c.backpack.length >= c.capacity) return 'Backpack is full';
+    if (c.packUsed >= c.capacity) return 'Backpack is full';
     c.backpack.push(gun);
     c.weapons[slot] = null;
     c.refreshWeapon();
@@ -901,7 +901,7 @@ export class Raid {
       list(from.where)[from.i] = b;
       list(to.where)[to.i] = a;
     } else {
-      if (to.where === 'pack' && from.where !== 'pack' && c.backpack.length >= c.capacity) return 'Backpack is full';
+      if (to.where === 'pack' && from.where !== 'pack' && !c.hasRoom(a)) return isBelt(a) ? 'Belt is full' : 'Backpack is full';
       if (from.where === 'pack') c.backpack.splice(from.i, 1); else list(from.where)[from.i] = null;
       if (to.where === 'pack') c.backpack.push(a); else list(to.where)[to.i] = a;
     }
