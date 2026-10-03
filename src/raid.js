@@ -22,7 +22,7 @@ import {
   makeGun, makeItem, rollLoot, randInt, pick, addToList, itemInfo, isGun, rollRarity, fullAmmo,
   addToStash, isConsumable,
 } from './items.js';
-import { part } from './toon.js';
+import { part, toon } from './toon.js';
 import { save } from './save.js';
 import { sfx } from './audio.js';
 import { keyName } from './keys.js';
@@ -408,7 +408,7 @@ export class Raid {
     this.raidTime = this.map.raidTime || RAID_TIME;
     this.timeLeft = this.raidTime;
     this.elapsed = 0;
-    for (const e of this.extracts) { e.call = null; e.cooldown = 0; }
+    for (const e of this.extracts) { e.call = null; e.cooldown = 0; if (e.ride) e.ride.visible = false; }
     this.bossSpawned = false;
     this.boss = null;
     this.setBossLock(false);
@@ -442,6 +442,93 @@ export class Raid {
     this.feed(`📣 ${by.name} called the ${e.name} extraction!`);
     if (by.isPlayer) this.hud.toast(`📣 Extraction called! The ride lands in ${EXTRACT_TIME}s. Everything nearby heard that…`, 'big');
     else if (this.player && this.player.alive) this.hud.toast(`📣 ${by.name} called the ${e.name} extraction. Get there in ${EXTRACT_TIME}s to ride out too!`, 'big');
+  }
+
+  // The ride itself: it shows up over the last few seconds of the countdown, hovers over the
+  // circle, and takes off when it leaves. Purely for show (everyone's game draws its own).
+  makeRide(e) {
+    const g = new THREE.Group();
+    if (/balloon/i.test(e.name)) {
+      const colors = [0xe63946, 0xffd23f];
+      for (let k = 0; k < 8; k++) {
+        const gore = new THREE.Mesh(new THREE.SphereGeometry(5, 6, 12, (k / 8) * Math.PI * 2, Math.PI / 4), toon(colors[k % 2]));
+        gore.scale.y = 1.2;
+        gore.position.y = 9;
+        g.add(gore);
+      }
+      const basket = part(new THREE.BoxGeometry(2.6, 1.6, 2.6), 0x8b5a2b, { ink: 0.03 });
+      basket.position.y = 0.8;
+      const burner = new THREE.Mesh(new THREE.ConeGeometry(0.5, 1.4, 8), new THREE.MeshBasicMaterial({ color: 0xff9f1c }));
+      burner.position.y = 3.2;
+      burner.rotation.x = Math.PI;
+      g.add(basket, burner);
+      g.userData = { kind: 'balloon', hover: 0.2 };
+    } else {
+      // A gold-and-purple casino chopper.
+      const body = part(new THREE.CapsuleGeometry(1.6, 3.2, 6, 14), 0x6a2c91, { ink: 0.04 });
+      body.rotation.z = Math.PI / 2;
+      body.position.y = 2.6;
+      const glass = new THREE.Mesh(new THREE.SphereGeometry(1.35, 14, 10, 0, Math.PI), new THREE.MeshBasicMaterial({ color: 0x7dd3fc, transparent: true, opacity: 0.85 }));
+      glass.rotation.y = -Math.PI / 2;
+      glass.position.set(2.3, 2.9, 0);
+      const boom = part(new THREE.CylinderGeometry(0.35, 0.6, 5.5, 10), 0x6a2c91, { ink: 0.03 });
+      boom.rotation.z = Math.PI / 2;
+      boom.position.set(-4.8, 3.0, 0);
+      const fin = part(new THREE.BoxGeometry(1.2, 1.8, 0.2), 0xffd23f, { ink: 0.02 });
+      fin.position.set(-7.3, 3.8, 0);
+      const stripe = part(new THREE.BoxGeometry(3.6, 0.4, 3.3), 0xffd23f, { ink: 0 });
+      stripe.position.set(0, 2.6, 0);
+      g.add(body, glass, boom, fin, stripe);
+      for (const side of [-1, 1]) {
+        const skid = part(new THREE.BoxGeometry(5, 0.2, 0.25), 0x1b0f2b, { ink: 0.01 });
+        skid.position.set(0, 0.15, side * 1.4);
+        const strut = part(new THREE.BoxGeometry(0.15, 1.0, 0.15), 0x1b0f2b, { ink: 0 });
+        strut.position.set(0, 0.7, side * 1.2);
+        g.add(skid, strut);
+      }
+      const rotor = new THREE.Group();
+      rotor.position.y = 4.7;
+      for (let k = 0; k < 2; k++) {
+        const blade = new THREE.Mesh(new THREE.BoxGeometry(11, 0.08, 0.5), new THREE.MeshBasicMaterial({ color: 0x1b0f2b }));
+        blade.rotation.y = (k * Math.PI) / 2;
+        rotor.add(blade);
+      }
+      const hub = part(new THREE.CylinderGeometry(0.3, 0.3, 0.7, 10), 0x9ca3af, { ink: 0 });
+      hub.position.y = 4.4;
+      g.add(rotor, hub);
+      g.userData = { kind: 'heli', rotor, hover: 0.4 };
+    }
+    g.rotation.y = Math.random() * Math.PI * 2;
+    g.visible = false;
+    this.scene.add(g);
+    return g;
+  }
+
+  updateRides(dt) {
+    if (this.map.indoor) return; // underground exits are doors and hatches
+    const ARRIVE = 7; // seconds before pickup it starts coming in
+    for (const e of this.extracts) {
+      if (!e.active) continue;
+      const t = e.call ? e.call.t : null;
+      if (t !== null && t >= EXTRACT_TIME - ARRIVE) {
+        if (!e.ride) e.ride = this.makeRide(e);
+        const k = Math.min(1, (t - (EXTRACT_TIME - ARRIVE)) / (ARRIVE - 1));
+        const ease = 1 - (1 - k) ** 3;
+        e.ride.visible = true;
+        e.ride.position.set(e.x - (1 - ease) * 60, 70 - ease * (70 - e.ride.userData.hover), e.z);
+        e.leaving = 0;
+      } else if (e.ride && e.ride.visible) {
+        // Gone: lift off and fly away.
+        e.leaving = (e.leaving || 0) + dt;
+        e.ride.position.y += dt * (8 + e.leaving * 14);
+        e.ride.position.x += dt * e.leaving * 18;
+        if (e.leaving > 5) e.ride.visible = false;
+      }
+      if (e.ride && e.ride.visible) {
+        if (e.ride.userData.rotor) e.ride.userData.rotor.rotation.y += dt * 25;
+        e.ride.rotation.z = e.ride.userData.kind === 'balloon' ? Math.sin(performance.now() / 900) * 0.04 : 0;
+      }
+    }
   }
 
   updateExtracts(dt) {
@@ -1458,6 +1545,7 @@ export class Raid {
       return;
     }
 
+    this.updateRides(dt);
     if (this.isClient) {
       // The host runs the rides; we just need to know if we're standing in one.
       this.extractAt = p && p.alive ? this.extracts.find((e) => e.active && this.inCircle(e, p)) || null : null;

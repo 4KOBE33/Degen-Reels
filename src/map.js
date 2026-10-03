@@ -1838,7 +1838,7 @@ export function buildMap(scene, mapId = 'vegas') {
 
 // The overhead map, drawn once into a canvas. The HUD draws live markers on top.
 // `labels` adds building names (for the full map; the minimap stays uncluttered).
-const SKIP_LABELS = new Set(['Trailer', 'Ski Cabin', 'Stilt Shack', 'Ice Hut', 'Vault', 'Snack Bar', 'Farm Office', 'Bait Shed', 'Buried Cabin']);
+const SKIP_LABELS = new Set(['Barrel Cellar', 'Lift Shack', 'Trailer', 'Ski Cabin', 'Stilt Shack', 'Ice Hut', 'Vault', 'Snack Bar', 'Farm Office', 'Bait Shed', 'Buried Cabin']);
 
 function roundRect(c, x, y, w, h, r) {
   r = Math.min(r, w / 2, h / 2);
@@ -1936,6 +1936,15 @@ export function drawMinimap(map, size = 512, labels = false) {
   if (labels) {
     const seen = new Set();
     const placed = [];
+    // The exits get drawn on top later (marker plus a name tag above or below it): keep clear of them.
+    const hudK = size / 800;
+    c.font = `900 ${Math.round(15 * hudK)}px Nunito, system-ui, sans-serif`;
+    for (const e of map.extracts || []) {
+      const w = c.measureText(`${e.name} (closed)`).width + 14 * hudK;
+      const x = Math.max(w / 2 + 4, Math.min(size - w / 2 - 4, tx(e.x)));
+      placed.push({ x: tx(e.x), y: tx(e.z), w: 30 * hudK });
+      placed.push({ x, y: tx(e.z) + (e.z > 0 ? -26 : 26) * hudK, w });
+    }
     c.font = `900 ${Math.round(13 * k)}px Nunito, system-ui, sans-serif`;
     c.textAlign = 'center';
     c.textBaseline = 'middle';
@@ -3466,7 +3475,7 @@ function wineCountry(k) {
   function winery({ name, sign, x, z, color, tier = 2, deadly = false }) {
     building({ name, x, z, w: 26, d: 18, h: 6, color, trim: 0x3e2716, tier, sign, signColor: '#ff7eb6', mapColor: '#9c6644', doors: [{ side: 's', at: 0, width: 4 }, { side: 'e', at: 0, width: 3 }] });
     // Barrel room out back and a tasting patio out front.
-    building({ name: `${name} Cellar`, x: x - 4, z: z - 18, w: 18, d: 12, h: 4, color: 0x6b4423, trim: 0x2b1a0e, tier: tier + (deadly ? 0 : 0), mapColor: '#5b3a1e', doors: [{ side: 'e', at: 0, width: 3 }] });
+    building({ name: 'Barrel Cellar', x: x - 4, z: z - 18, w: 18, d: 12, h: 4, color: 0x6b4423, trim: 0x2b1a0e, tier: tier + (deadly ? 0 : 0), mapColor: '#5b3a1e', doors: [{ side: 'e', at: 0, width: 3 }] });
     for (let b = 0; b < 3; b++) barrel(x - 10 + b * 3.4, z - 21.5, true);
     for (const [dx, dz] of [[-8, 13], [0, 13], [8, 13]]) {
       const table = part(new THREE.CylinderGeometry(1.1, 1.1, 0.12, 12), 0xfff6e0, { ink: 0.02 });

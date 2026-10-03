@@ -1031,3 +1031,8 @@ h3 small.bank { color: var(--gold); opacity: 1; font-weight: 900; }
 .mapnav .dots i.on { background: var(--gold); box-shadow: 0 0 0 2px rgba(255, 210, 63, 0.3); }
 .btn.small { padding: 5px 12px; font-size: 13px; margin: 0; }
 .lcol { display: grid; gap: 14px; align-content: start; min-width: 0; } .lcol .stashsec { margin: 0; } .lcol .stashsec .grid { max-height: 260px; overflow-y: auto; }
+/* A bigger map screen: the map gets most of the height. */
+#bigmap .card.wide { padding-top: 14px; padding-bottom: 14px; gap: 8px; }
+#bigmap h2 { font-size: 30px; margin: 0; }
+#bigmapCanvas { width: min(820px, 100%, calc(100vh - 170px)); }
+#bigmap .legend { margin: 4px 0; }

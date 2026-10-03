@@ -432,6 +432,7 @@ export class Hud {
 
   drawBigMap(raid) {
     $('bigmapTitle').textContent = raid.map.name.toUpperCase();
+    $('bigmapBoss').textContent = `👑 ${raid.bossName || 'Boss'}`;
     const canvas = $('bigmapCanvas');
     const ctx = canvas.getContext('2d');
     const size = canvas.width;
@@ -713,7 +714,7 @@ export class Hud {
       line = `${r.by ? `${escapeHtml(r.by)} got you.` : 'You died.'} Everything you carried is gone.`;
     }
     $('resultsTitle').textContent = title;
-    $('resultsLine').innerHTML = `${line}${insuredNote}<br><small>Machines destroyed: ${r.run.machines} · Raiders busted: ${r.run.raiders}${r.run.boss ? ' · 👑 Took down the Pit Boss!' : ''}</small>`;
+    $('resultsLine').innerHTML = `${line}${insuredNote}<br><small>Machines destroyed: ${r.run.machines} · Raiders busted: ${r.run.raiders}${r.run.boss ? ` · 👑 Took down ${this.raid && this.raid.bossName ? this.raid.bossName : 'the boss'}!` : ''}</small>`;
     $('resultsItems').innerHTML = r.items.length || r.chips
       ? `${r.chips ? `<span class="chip">🪙 ${r.chips} chips</span>` : ''}${r.items.map((it) => `<span class="chip ${r.success ? '' : 'lost'}" style="color:${itemInfo(it).css}">${iconHtml(it)} ${escapeHtml(itemTitle(it).slice(itemInfo(it).icon.length + 1))}</span>`).join('')}`
       : '<span class="chip">Nothing</span>';
