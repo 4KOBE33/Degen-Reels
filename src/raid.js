@@ -713,6 +713,9 @@ export class Raid {
 
   finish(result) {
     this.active = false;
+    if (this.kidnap && this.kidnap.phase !== 'wait') this.kidnap.cleanup();
+    // Sitting at a Lounge table when it ended (the leader left, say): get up.
+    if (this.duel && this.duel.tables.seat) this.duel.tables.leave();
     this.result = { ...result, run: this.run, time: this.raidTime - this.timeLeft, newFinds: [] };
     // Stats, collection log, XP and achievements.
     // The Lounge is for hanging out and dueling: no raid XP or stats for walking in and out.

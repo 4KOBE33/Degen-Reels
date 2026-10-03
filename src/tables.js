@@ -442,9 +442,10 @@ const Blackjack = {
   },
   panel(t, T) {
     const b = t.bj;
-    const animating = b.anims.length > 0 || b.wait > 0;
+    const animating = b.anims.length > 0 || b.wait > 0 || b.peek;
     const shoeNote = `<small class="tpnote">${t.shoe.decks}-deck shoe · ${t.shoe.left} cards left${t.shoe.reshuffle ? ' · shuffle next hand' : ''}</small>`;
-    if (b.phase === 'play') {
+    // Only the player who dealt the hand can play it.
+    if (b.phase === 'play' && b.mine) {
       const canDouble = b.p.length === 2 && !b.doubled;
       return `<div class="tpscore">You <b>${handValue(b.p)}</b> · Dealer <b>${handValue([b.d[0]])}</b> + ?</div>
         <div class="tprow"><button class="btn" data-act="hit" ${animating ? 'disabled' : ''}>Hit</button><button class="btn" data-act="stand" ${animating ? 'disabled' : ''}>Stand</button>${canDouble ? `<button class="btn" data-act="double" ${animating ? 'disabled' : ''}>Double · 🪙 ${fmt(b.bet)}</button>` : ''}</div>${shoeNote}`;
@@ -455,14 +456,16 @@ const Blackjack = {
   act(t, a, arg, T) {
     const b = t.bj;
     if (b.anims.length || b.wait > 0) return null;
-    if (a === 'deal' && b.phase !== 'play' && b.phase !== 'dealer') {
+    // A new hand: when the table's free, or when a hand somebody else left behind is stuck.
+    if (a === 'deal' && (b.phase === 'idle' || b.phase === 'done' || (b.phase === 'play' && !b.mine))) {
       if (!T.spend(T.bet)) return null;
       const shuffled = t.shoe.ready();
       const s = t.shoe;
       const p0 = s.draw(); const d0 = s.draw(); const p1 = s.draw(); const d1 = s.draw();
       return { a: 'deal', bet: T.bet, p: [p0, p1], d: [d0, d1], sh: shuffled ? 1 : 0 };
     }
-    if (b.phase !== 'play') return null;
+    if (b.phase !== 'play' || !b.mine) return null;
+    if (b.peek && a !== 'stand') return null;
     if (a === 'hit') return { a: 'hit', c: t.shoe.draw() };
     if (a === 'double' && b.p.length === 2 && !b.doubled) {
       if (!T.spend(b.bet)) return null;
@@ -484,7 +487,7 @@ const Blackjack = {
     const b = t.bj;
     if (e.a === 'deal') {
       Blackjack.clear(t);
-      Object.assign(b, { phase: 'play', p: [], d: [], bet: e.bet, doubled: false, mine: e.mine, who: e.n, anims: [], wait: 0, hole: null });
+      Object.assign(b, { phase: 'play', p: [], d: [], bet: e.bet, doubled: false, mine: e.mine, who: e.n, anims: [], wait: 0, hole: null, peek: false });
       Blackjack.deal(t, e.p[0], 'p');
       Blackjack.deal(t, e.d[0], 'd');
       Blackjack.deal(t, e.p[1], 'p');
@@ -559,6 +562,7 @@ const Blackjack = {
       // The dealer peeks: a dealer blackjack is shown straight away. And our hand is over by
       // itself on 21, a bust or a double: stand for us.
       const dealerBJ = b.d.length === 2 && handValue(b.d) === 21;
+      b.peek = dealerBJ; // no buttons while the dealer turns over their blackjack
       if (b.mine && (v >= 21 || b.doubled || dealerBJ)) setTimeout(() => t.T.act(t, 'stand'), dealerBJ ? 150 : 350);
     } else if (b.phase === 'dealer') Blackjack.dealerStep(t);
   },
@@ -823,7 +827,8 @@ const Mines = {
   act(t, a, arg, T) {
     const run = t.mn.run;
     if (a === 'bombs') { t.mineCount = Number(arg); return null; }
-    if (a === 'start' && !(run && run.live)) {
+    // A new round when the board's free (or a round somebody else left behind is stuck).
+    if (a === 'start' && !(run && run.live && run.mine)) {
       if (!T.spend(T.bet)) return null;
       const bombsAt = new Set();
       while (bombsAt.size < t.mineCount) bombsAt.add(Math.floor(Math.random() * 25));
@@ -1138,7 +1143,7 @@ export class LoungeTables {
   canLeave() {
     const t = this.seat;
     if (!t) return true;
-    const busy = (t.bj && (t.bj.phase === 'play' || t.bj.phase === 'dealer'))
+    const busy = (t.bj && t.bj.mine && (t.bj.phase === 'play' || t.bj.phase === 'dealer'))
       || (t.mn && t.mn.run && t.mn.run.live && t.mn.run.mine)
       || (t.cr && t.cr.run && t.cr.run.mine && !t.cr.run.cashed && !t.cr.run.crashed);
     if (busy) this.raid.hud.toast('Finish this round first.');

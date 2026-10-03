@@ -105,6 +105,8 @@ applySettings();
 let overlay = null; // 'bag' | 'map' | null
 
 function setOverlay(name) {
+  // Seated at a Lounge table: the bag and map wait until you get up (Esc or the Leave button).
+  if (overlay === 'seat' && name && name !== 'seat') return;
   // Getting up from a Lounge table.
   if (overlay === 'seat' && name !== 'seat' && raid.duel) raid.duel.tables.leave();
   overlay = name;
@@ -622,6 +624,8 @@ function step(now, draw = true) {
   if (wasActive && !raid.active) {
     syncPauseSliders();
     setTimeout(() => { if (document.pointerLockElement) document.exitPointerLock(); }, 900);
+    // Ended while sitting at a Lounge table (the leader left, say): get up properly.
+    if (raid.duel && raid.duel.tables.seat) raid.duel.tables.leave();
     overlay = null;
     $('bag').hidden = true;
     $('bigmap').hidden = true;

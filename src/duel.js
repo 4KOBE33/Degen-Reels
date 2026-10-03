@@ -251,6 +251,11 @@ export class Duel {
 
   key(e) {
     if (!this.invite || /INPUT|TEXTAREA/.test(e.target.tagName)) return;
+    // At a table: get up first (if the round lets you), then answer.
+    if (this.tables.seat && (e.code === 'KeyY' || e.code === 'KeyN')) {
+      if (e.code === 'KeyY' && !this.tables.canLeave()) return;
+      if (e.code === 'KeyY') this.raid.setOverlay(null);
+    }
     if (e.code === 'KeyY') this.answer(true);
     if (e.code === 'KeyN') this.answer(false);
   }

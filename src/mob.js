@@ -100,7 +100,11 @@ export class Kidnap {
   update(dt) {
     const raid = this.raid;
     const p = raid.player;
-    if (!raid.active || !p || !p.alive) return;
+    if (!raid.active || !p || !p.alive) {
+      // The raid ended some other way mid-grab: clear the van and the dark screen.
+      if (this.phase !== 'wait' && this.phase !== 'over') { this.phase = 'over'; this.cleanup(); }
+      return;
+    }
     this.t += dt;
     if (this.phase === 'wait') { if (this.t >= VAN_AT) this.start(); return; }
     if (this.phase === 'drive') {
@@ -152,6 +156,7 @@ export class Kidnap {
     const raid = this.raid;
     // You're square with them now: they took everything you had on you.
     save.update((d) => { delete d.mobDebt; d.stats.kidnapped = (d.stats.kidnapped || 0) + 1; });
+    this.phase = 'over';
     raid.fail('kidnapped');
     this.cleanup();
   }
