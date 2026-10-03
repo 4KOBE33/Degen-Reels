@@ -1019,3 +1019,15 @@ h3 small.bank { color: var(--gold); opacity: 1; font-weight: 900; }
 .packhead .cap.small { font-size: 16px; }
 .igrid.belt { grid-template-columns: repeat(6, 1fr); }
 .igrid.belt .islot:not(.empty) { border-color: #2ee6d6; }
+/* One map at a time: arrows on the hero card, the full list on demand. */
+.hero { position: relative; padding-left: 52px; padding-right: 52px; }
+.mapstep { position: absolute; top: 50%; transform: translateY(-50%); z-index: 2; width: 36px; height: 52px; border-radius: 12px; border: 3px solid var(--ink); background: rgba(27, 15, 43, 0.75); color: var(--gold); font-size: 18px; cursor: pointer; }
+.mapstep:hover { background: var(--gold); color: var(--ink); }
+.mapstep.prev { left: 8px; }
+.mapstep.next { right: 8px; }
+.mapnav { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.mapnav .dots { display: flex; gap: 6px; }
+.mapnav .dots i { width: 9px; height: 9px; border-radius: 50%; background: rgba(255, 255, 255, 0.2); }
+.mapnav .dots i.on { background: var(--gold); box-shadow: 0 0 0 2px rgba(255, 210, 63, 0.3); }
+.btn.small { padding: 5px 12px; font-size: 13px; margin: 0; }
+.lcol { display: grid; gap: 14px; align-content: start; min-width: 0; } .lcol .stashsec { margin: 0; } .lcol .stashsec .grid { max-height: 260px; overflow-y: auto; }

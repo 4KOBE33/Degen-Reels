@@ -347,14 +347,23 @@ export class Hub {
     const packed = lo.weapons.filter(Boolean).length + lo.items.length;
     return `${guide}${this.renderParty()}
       <div class="lotop">
+      <div class="lcol">
       <section class="raidpick">
         <div class="hero m-${selId}">
+          <button class="mapstep prev" data-act="mapstep" data-d="-1" title="Previous map">◀</button>
+          <button class="mapstep next" data-act="mapstep" data-d="1" title="Next map">▶</button>
           <span class="heroicon">${sel.icon}</span>
           <div class="herotxt"><span class="tag d-${sel.danger.toLowerCase()}">${sel.danger}</span><h2>${sel.name}</h2><p>${sel.blurb}</p>
           <div class="facts">${facts.map((f) => `<span>${f}</span>`).join('')}</div></div>
         </div>
-        <div class="maps">${maps}</div>
+        <div class="mapnav"><span class="dots">${order.map((id) => `<i class="${id === selId ? 'on' : ''}" title="${MAPS[id].name}"></i>`).join('')}</span>
+          <button class="btn ghost small" data-act="allmaps">${this.showMaps ? 'Hide map list' : `🗺️ All ${order.length} maps`}</button></div>
+        ${this.showMaps ? `<div class="maps">${maps}</div>` : ''}
       </section>
+      <section class="stashsec"><h3>📦 Stash <small>${d.stash.items.length} items · click to pack it for the raid</small></h3>
+        <div class="grid">${d.stash.items.map((it, i) => this.itemCard(it, 'pack', i)).join('') || '<p class="hint">Empty. Go raid!</p>'}</div>
+      </section>
+      </div>
       <section class="kit"><h3>🎒 Raid Loadout <small>${packed} packed · lost if you die</small></h3>
         ${freeKit ? '<p class="hint freelock">🔒 Free loadout is locked in: nothing goes in or out until you raid with it.</p>' : noGuns ? '<button class="btn freekit" data-act="freekit">🎁 FREE LOADOUT<small>A random gun, bandages, an Ammo Box, a Chip Plate and a throwable. Lose it and grab another.</small></button>' : ''}
         <div class="wslots">${lo.weapons.map((g, i) => (g ? this.itemCard(g, 'unequip', i) : `<div class="item empty">Weapon ${i + 1}<br><small>empty</small></div>`)).join('')}</div>
@@ -369,9 +378,7 @@ export class Hub {
   })()}
       </section>
       </div>
-      <section class="stashsec"><h3>📦 Stash <small>${d.stash.items.length} items · click to pack it for the raid</small></h3>
-        <div class="grid">${d.stash.items.map((it, i) => this.itemCard(it, 'pack', i)).join('') || '<p class="hint">Empty. Go raid!</p>'}</div>
-      </section>`;
+`;
   }
 
   // Today's guns: six offers that change every day (the same for everyone on that day).
@@ -1198,7 +1205,18 @@ export class Hub {
         save.update((x) => { x.loadout = { weapons: [null, null], items: [] }; x.look.color = LOOKS.color[0].id; x.collectionSeeded = true; });
         this.toast('Progress wiped. Fresh start.');
         break;
+      case 'allmaps': this.showMaps = !this.showMaps; break;
+      case 'mapstep': {
+        if (this.net && this.net.inParty && !this.net.isHost) { this.toast('The party leader picks the map.'); return; }
+        const order = ['lounge', 'vegas', 'bayou', 'frost', 'tequila', 'bunker'].filter((id) => MAPS[id]);
+        const at = Math.max(0, order.indexOf(d.selectedMap));
+        const next = order[(at + Number(b.dataset.d) + order.length) % order.length];
+        save.update((x) => { x.selectedMap = next; });
+        this.onMapChange(next);
+        break;
+      }
       case 'map':
+        this.showMaps = false;
         if (this.net && this.net.inParty && !this.net.isHost) { this.toast('The party leader picks the map.'); return; }
         if (d.selectedMap !== b.dataset.m) {
           save.update((x) => { x.selectedMap = b.dataset.m; });
