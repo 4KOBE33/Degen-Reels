@@ -1161,3 +1161,9 @@ body.seated #crosshair, body.seated #prompt, body.seated #keyhint { display: non
 /* Kidnapped: the screen goes dark while the goons close in. */
 body.kidnapfade::after { content: '🤌'; position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; font-size: 120px; background: radial-gradient(circle, rgba(0, 0, 0, 0.35), rgba(0, 0, 0, 0.92)); animation: kidnapIn 3s ease-in forwards; pointer-events: none; }
 @keyframes kidnapIn { from { opacity: 0; } to { opacity: 1; } }
+
+/* Pages inside a top tab (Shop: Buy / Sell, Profile: Look / Records / Leaders / Settings). */
+.groupbar { display: flex; gap: 4px; margin: -4px 0 12px; padding: 4px; border-radius: 12px; background: rgba(10, 4, 22, 0.45); width: max-content; max-width: 100%; flex-wrap: wrap; }
+.groupbar button { border: none; background: transparent; color: var(--cream); font: 400 16px var(--display); letter-spacing: 1px; padding: 6px 14px; border-radius: 9px; cursor: pointer; opacity: 0.75; }
+.groupbar button:hover { opacity: 1; background: rgba(255, 255, 255, 0.06); }
+.groupbar button.on { opacity: 1; background: var(--gold); color: var(--ink); }

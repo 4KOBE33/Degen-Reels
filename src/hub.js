@@ -8,7 +8,7 @@ import {
 import { save } from './save.js';
 import { cloud, net as cloudNet } from './cloud.js';
 import { iconHtml, gunIcon } from './icons.js';
-import { keyName, renderBinds, wireBinds } from './keys.js';
+import { keyName, renderBinds, wireBinds, actionsFor } from './keys.js';
 import { MAPS } from './map.js';
 import { escapeHtml } from './hud.js';
 import { sfx, initAudio, setVolume } from './audio.js';
@@ -122,6 +122,15 @@ function shopLookLock(o, d) {
   return '';
 }
 
+// The top tabs, and the pages inside each one (a row of sub-tabs when there's more than one).
+const TAB_GROUPS = {
+  loadout: [['loadout', '🎒 Loadout']],
+  backroom: [['backroom', '🎰 Back Room']],
+  shop: [['shop', '🛒 Buy'], ['fence', '💰 Sell (Fence)']],
+  profile: [['look', '🎨 Look'], ['records', '🏆 Records'], ['leaders', '👑 Leaders'], ['settings', '⚙️ Account & Settings']],
+};
+const groupOf = (tab) => Object.keys(TAB_GROUPS).find((g) => TAB_GROUPS[g].some(([t]) => t === tab)) || 'loadout';
+
 const FREE_LOCKED = 'The free loadout is locked in. Raid with it as is.';
 const hasFreeKit = (lo) => lo.weapons.some((g) => g && g.free) || lo.items.some((it) => it.free);
 
@@ -162,10 +171,12 @@ export class Hub {
       for (const it of x.stash.items) { const k = itemKey(it); x.collection[k] = (x.collection[k] || 0) + (it.qty || 1); }
     });
 
+    this.lastIn = {}; // the page you were last on in each top tab
     $('hubTabs').addEventListener('click', (e) => {
       const b = e.target.closest('[data-tab]');
       if (!b) return;
-      this.tab = b.dataset.tab;
+      const g = b.dataset.tab;
+      this.tab = this.lastIn[g] || TAB_GROUPS[g][0][0];
       initAudio();
       this.render();
     });
@@ -182,6 +193,8 @@ export class Hub {
     window.addEventListener('pointerup', () => this.mobHold(false));
     window.addEventListener('keydown', (e) => {
       if (e.code !== 'KeyB' || e.repeat || $('hub').hidden || (document.activeElement && document.activeElement.tagName === 'INPUT')) return;
+      // B is also push-to-talk: then only the button borrows.
+      if (this.data.settings.voice === 'ptt' && actionsFor(e.code).includes('talk')) return;
       initAudio();
       this.mobHold(true);
     });
@@ -250,7 +263,9 @@ export class Hub {
   render() {
     const d = this.data;
     this.renderHeader();
-    document.querySelectorAll('#hubTabs [data-tab]').forEach((b) => b.classList.toggle('on', b.dataset.tab === this.tab));
+    const group = groupOf(this.tab);
+    this.lastIn[group] = this.tab;
+    document.querySelectorAll('#hubTabs [data-tab]').forEach((b) => b.classList.toggle('on', b.dataset.tab === group));
     const body = {
       loadout: () => this.renderLoadout(),
       backroom: () => this.renderBackRoom(),
@@ -261,7 +276,9 @@ export class Hub {
       leaders: () => this.renderLeaders(),
       shop: () => this.renderShop(),
     }[this.tab]();
-    $('hubBody').innerHTML = body;
+    const pages = TAB_GROUPS[group];
+    const bar = pages.length > 1 ? `<nav class="groupbar">${pages.map(([t, n]) => `<button class="${t === this.tab ? 'on' : ''}" data-act="hubpage" data-t="${t}">${n}</button>`).join('')}</nav>` : '';
+    $('hubBody').innerHTML = bar + body;
     $('hubBody').dataset.tab = this.tab;
     if (this.tab === 'backroom' && this.game === 'crash') this.drawCrash();
     if (this.tab === 'backroom' && this.game === 'plinko') this.drawPlinko();
@@ -1266,6 +1283,7 @@ export class Hub {
         });
         break;
       case 'rectab': this.recTab = b.dataset.r; break;
+      case 'hubpage': this.tab = b.dataset.t; break;
       case 'reset':
         if (!this.armedReset) { this.armedReset = true; break; }
         this.armedReset = false;

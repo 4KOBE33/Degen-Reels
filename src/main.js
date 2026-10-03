@@ -380,6 +380,7 @@ const hub = new Hub({
       raid.deploy(opts);
     }
     controller.c = raid.player;
+    labelLeave();
     tutorial.start(raid);
     hub.hide();
     $('hud').hidden = false;
@@ -428,10 +429,25 @@ $('openBag').addEventListener('click', () => {
 });
 $('abandon').addEventListener('click', () => {
   if (!raid.active) return;
+  // The Lounge is safe: walking out from the menu is the same as the Cash Out door.
+  if (raid.map.safe) {
+    const d = raid.duel;
+    const me = raid.player && raid.player.name;
+    if (d && d.view && d.view.ph !== 'over' && (d.view.a === me || d.view.b === me)) { hud.toast('Finish your fight in The Pit first.'); return; }
+    if (d && d.tables.seat && !d.tables.canLeave()) return;
+    if (d && d.tables.seat) setOverlay(null);
+    raid.extract('Lounge door');
+    $('paused').hidden = true;
+    return;
+  }
   raid.player.alive = false;
   raid.fail('abandon');
   $('paused').hidden = true;
 });
+// Say what the pause menu's leave button does on this map.
+function labelLeave() {
+  $('abandon').textContent = raid.map.safe ? '🚪 Leave the Lounge (keep everything)' : 'Abandon raid (lose everything)';
+}
 
 // The controls cheat sheet on the pause screen, built from your current bindings.
 function pauseKeys() {
