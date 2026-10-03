@@ -1,7 +1,7 @@
 // The raid HUD: health, armor, weapons, quick items, minimap, exits, boss bar, bag and map screens.
 import { TIER_COLORS } from './containers.js';
 import { WEAPONS, PLAYER, EXTRACT_TIME, ITEMS } from './config.js';
-import { itemInfo, itemTitle, isGun, fullAmmo, isBelt } from './items.js';
+import { itemInfo, itemTitle, isGun, fullAmmo, isBelt, isConsumable } from './items.js';
 import { iconHtml } from './icons.js';
 import { keyName } from './keys.js';
 import { save } from './save.js';
@@ -57,6 +57,8 @@ export class Hud {
       if (act === 'use') this.onUse(b.dataset.id);
       if (act === 'reload') this.onReload();
       if (act === 'pickthrow') this.onPickThrow(b.dataset.id);
+      if (act === 'movepack') { this.onMove({ where, i }, { where: 'pack', i: 999 }); this.selected = null; }
+      if (act === 'movebelt') { this.onMove({ where, i }, { where: 'belt', i: 999 }); this.selected = null; }
       if (act === 'topack') { this.onMove({ where: 'pocket', i }, { where: 'pack', i: 999 }); this.selected = null; }
       if (act === 'topocket') {
         const p = this.raid && this.raid.player;
@@ -247,7 +249,7 @@ export class Hud {
     if (showBoss) {
       $('bossFill').style.width = `${(b.hp / b.maxHp) * 100}%`;
       const ph = b.bossPhase || 1;
-      this.set('bossName', `👑 ${b.name.toUpperCase()} · ${['', 'PHASE 1: HIT THE SCREEN', 'PHASE 2: OVERCLOCKED · HIT HIS BACK', 'PHASE 3: TILT · HIT THE CROWN SOCKET'][ph]}${b.invuln > 0 ? ' · 🛡️' : ''}`);
+      this.set('bossName', `👑 ${b.name.toUpperCase()} · ${['', `PHASE 1: HIT ${(b.theme && b.theme.weak) || 'THE SCREEN'}`, 'PHASE 2: OVERCLOCKED · HIT THE CORE ON HIS BACK', 'PHASE 3: TILT · HIT THE TOP OF HIS HEAD'][ph]}${b.invuln > 0 ? ' · 🛡️' : ''}`);
       $('bossbar').dataset.phase = ph;
     }
 
@@ -536,14 +538,14 @@ export class Hud {
     // Loot in the backpack grid, consumables on the belt below it (both point at the same list).
     const cells = [];
     const belt = [];
-    p.backpack.forEach((it, i) => (isBelt(it) ? belt : cells).push(slotCard(it, 'pack', i)));
-    const empty = (n) => Array(Math.max(0, n)).fill('<div class="islot empty" data-drop="slot" data-where="pack" data-i="999"></div>').join('');
+    p.backpack.forEach((it, i) => (isBelt(it) ? belt.push(slotCard(it, 'belt', i)) : cells.push(slotCard(it, 'pack', i))));
+    const empty = (n, where = 'pack') => Array(Math.max(0, n)).fill(`<div class="islot empty" data-drop="slot" data-where="${where}" data-i="999"></div>`).join('');
     const full = p.packUsed / p.capacity;
     const mid = `<section class="invcol pack"><div class="packhead"><h3>Backpack</h3><span class="cap ${full >= 1 ? 'full' : full >= 0.75 ? 'near' : ''}">${p.packUsed}/${p.capacity}</span></div>
       <div class="capbar"><div style="width:${Math.min(1, full) * 100}%"></div></div>
       <div class="igrid">${cells.join('')}${empty(p.capacity - cells.length)}</div>
-      <div class="packhead belthead"><h4 class="ilabel">🩹 Belt <em>heals, plates, throwables, ammo</em></h4><span class="cap small ${belt.length >= p.room.belt ? 'full' : ''}">${belt.length}/${p.room.belt}</span></div>
-      <div class="igrid belt">${belt.join('')}${empty(p.room.belt - belt.length)}</div>
+      <div class="packhead belthead"><h4 class="ilabel">🩹 Belt <em>consumables only · extras can go in the backpack</em></h4><span class="cap small ${belt.length >= p.room.belt ? 'full' : ''}">${belt.length}/${p.room.belt}</span></div>
+      <div class="igrid belt">${belt.join('')}${empty(p.room.belt - belt.length, 'belt')}</div>
       <p class="hint small">Drag to move · right-click to equip / use · lost if you die${pocket.length ? ' (except your Safe Pocket)' : ''}</p></section>`;
 
     // Right: details for the selected item.
@@ -579,6 +581,8 @@ export class Hud {
         if (key) stats += `<p class="keyhint">Shortcut in a raid: <kbd>${key}</kbd>${kind === 'throw' ? ` (hold, then let go · <kbd>${keyName('cycleThrow')}</kbd> switches)` : ''}</p>`;
       }
       const pocket = p.pocket || [];
+      if (sel.where === 'belt') actions += `<button class="btn ghost" data-act="movepack" data-where="belt" data-i="${sel.i}">To backpack</button>`;
+      if (sel.where === 'pack' && isConsumable(item)) actions += `<button class="btn ghost" data-act="movebelt" data-where="pack" data-i="${sel.i}">To belt</button>`;
       if (sel.where === 'pocket') actions = `<button class="btn" data-act="topack" data-i="${sel.i}">To backpack</button>`;
       else if (pocket.length) actions += `<button class="btn ghost" data-act="topocket" data-where="${sel.where}" data-i="${sel.i}">🔒 Safe Pocket</button>`;
       actions += `<button class="btn ghost" data-act="drop" data-where="${sel.where}" data-i="${sel.i}">Drop</button>`;

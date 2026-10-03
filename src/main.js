@@ -158,7 +158,7 @@ hud.onEquip = (i) => { const r = raid.equipFromPack(raid.player, i); if (r) hud.
 hud.onUnequip = (i) => { const r = raid.unequipToPack(raid.player, i); if (r) hud.toast(r); };
 hud.onMove = (from, to) => { const r = raid.moveItem(raid.player, from, to); if (r) hud.toast(r); };
 hud.onPickThrowFrom = (from) => {
-  const it = from.where === 'pack' ? raid.player.backpack[from.i] : null;
+  const it = from.where === 'pack' || from.where === 'belt' ? raid.player.backpack[from.i] : null;
   if (!it || !ITEMS[it.id] || ITEMS[it.id].kind !== 'throw') { hud.toast('Only throwables go there'); return; }
   hud.onPickThrow(it.id);
 };

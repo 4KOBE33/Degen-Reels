@@ -20,7 +20,7 @@ import { RaiderBrain } from './bots.js';
 import { ItemPickup } from './pickups.js';
 import {
   makeGun, makeItem, rollLoot, randInt, pick, addToList, itemInfo, isGun, rollRarity, fullAmmo,
-  addToStash, isBelt,
+  addToStash, isConsumable,
 } from './items.js';
 import { part } from './toon.js';
 import { save } from './save.js';
@@ -749,7 +749,7 @@ export class Raid {
     const item = pickup.item;
     // Multiplayer client: ask the host for it (first come, first served).
     if (this.isClient && c.isPlayer) {
-      if (!isGun(item) && !c.hasRoom(item)) return isBelt(item) ? `Belt full. Press ${keyName('bag')} and drop something.` : `Backpack full. Press ${keyName('bag')} and drop something.`;
+      if (!isGun(item) && !c.hasRoom(item)) return isConsumable(item) ? `Belt and backpack full. Press ${keyName('bag')} and drop something.` : `Backpack full. Press ${keyName('bag')} and drop something.`;
       if (pickup.requested && performance.now() - pickup.requested < 800) return null;
       pickup.requested = performance.now();
       this.net.send({ k: 'take', id: pickup.netId });
@@ -888,23 +888,46 @@ export class Raid {
 
   // Drag and drop in the backpack screen. `from`/`to` are { where: 'weapon' | 'pack', i }.
   // Guns swap into weapon slots, anything swaps places in the backpack.
+  // `where` is 'weapon', 'pocket', 'pack' (backpack grid) or 'belt' (consumables row). Pack and belt
+  // are the same list; an entry's `inPack` flag says which one it shows in.
   moveItem(c, from, to) {
     if (from.where === to.where && from.i === to.i) return null;
+    const inList = (w) => w === 'pack' || w === 'belt';
     const list = (w) => (w === 'weapon' ? c.weapons : w === 'pocket' ? c.pocket || [] : c.backpack);
     const a = list(from.where)[from.i];
-    const b = list(to.where)[to.i];
+    let b = list(to.where)[to.i];
     if (!a) return null;
     if (to.where === 'weapon' && !isGun(a)) return 'Only guns go in weapon slots';
-    if (from.where === 'weapon' && b && !isGun(b)) return 'Only guns go in weapon slots';
+    if (to.where === 'belt' && !isConsumable(a)) return 'Only consumables go on the belt';
     if (to.where === 'pocket' && to.i >= (c.pocket || []).length) return 'No Safe Pocket this raid';
-    if (b) {
-      // Swap places.
+    // Whatever's in the target slot would land where `a` was: only swap if it's allowed there.
+    if (b && from.where === 'weapon' && !isGun(b)) b = null;
+    if (b && from.where === 'belt' && !isConsumable(b)) b = null;
+    // Which side of the list (belt or pack) an entry will be on after the move.
+    const side = (item, where) => {
+      if (!isConsumable(item)) return;
+      if (where === 'belt') delete item.inPack;
+      else if (where === 'pack') item.inPack = true;
+    };
+    if (b && !(inList(from.where) && inList(to.where))) {
+      // Swap between two different containers.
       list(from.where)[from.i] = b;
       list(to.where)[to.i] = a;
+      side(a, to.where);
+      side(b, from.where);
+    } else if (b) {
+      // Both in the backpack list: swap positions and sides.
+      c.backpack[from.i] = b;
+      c.backpack[to.i] = a;
+      side(a, to.where);
+      side(b, from.where);
     } else {
-      if (to.where === 'pack' && from.where !== 'pack' && !c.hasRoom(a)) return isBelt(a) ? 'Belt is full' : 'Backpack is full';
-      if (from.where === 'pack') c.backpack.splice(from.i, 1); else list(from.where)[from.i] = null;
-      if (to.where === 'pack') c.backpack.push(a); else list(to.where)[to.i] = a;
+      // Into an empty slot: check there's room on that side.
+      if (to.where === 'belt' && !(from.where === 'belt') && c.beltUsed >= c.room.belt) return 'Belt is full';
+      if (to.where === 'pack' && from.where !== 'pack' && c.packUsed >= c.capacity) return 'Backpack is full';
+      if (inList(from.where)) c.backpack.splice(from.i, 1); else list(from.where)[from.i] = null;
+      side(a, to.where);
+      if (inList(to.where)) c.backpack.push(a); else list(to.where)[to.i] = a;
     }
     if (to.where === 'weapon' && from.where !== 'weapon') c.active = to.i;
     c.refreshWeapon();

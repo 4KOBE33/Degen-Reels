@@ -77,10 +77,15 @@ export function rollLoot(tier) {
 
 // Adds an item to a list, stacking where possible. Returns false if there's no room.
 // Consumables (heals, plates, throwables, ammo, cocoa, fuel, tokens) ride on your belt, which has
-// its own slots, so they don't eat the backpack space you want for loot.
+// its own slots, so they don't eat the backpack space you want for loot. When the belt is full,
+// extra consumables can go in the backpack (marked `inPack`); loot and guns never go on the belt.
 const BELT_KINDS = new Set(['heal', 'armor', 'throw', 'ammo', 'warm', 'boost', 'revive']);
-export function isBelt(item) {
+export function isConsumable(item) {
   return !!item && !isGun(item) && !!ITEMS[item.id] && BELT_KINDS.has(ITEMS[item.id].kind);
+}
+// Is this entry sitting on the belt (rather than in the backpack)?
+export function isBelt(item) {
+  return isConsumable(item) && !item.inPack;
 }
 // How many slots of one kind (belt or backpack) a list is using.
 export function slotsUsed(list, belt) {
@@ -88,15 +93,25 @@ export function slotsUsed(list, belt) {
   for (const it of list) if (isBelt(it) === belt) n++;
   return n;
 }
-// `capacity` is a number (one shared limit) or { pack, belt } (separate limits).
-const limitFor = (list, item, capacity) => {
-  if (typeof capacity === 'number') return [list.length, capacity];
-  const belt = isBelt(item);
-  return [slotsUsed(list, belt), belt ? capacity.belt : capacity.pack];
-};
 
+// `capacity` is a number (one shared limit) or { pack, belt } (separate limits).
 export function addToList(list, item, capacity = Infinity) {
   const info = itemInfo(item);
+  const split = typeof capacity === 'object';
+  const consumable = isConsumable(item);
+  // Where a new stack/slot can go: the belt first for consumables, then the backpack.
+  const place = () => {
+    if (!split) return list.length < capacity ? 'any' : null;
+    if (consumable && slotsUsed(list, true) < capacity.belt) return 'belt';
+    if (slotsUsed(list, false) < capacity.pack) return 'pack';
+    return null;
+  };
+  const put = (entry, where) => {
+    const e = { ...entry };
+    delete e.inPack;
+    if (where === 'pack' && consumable) e.inPack = true;
+    list.push(e);
+  };
   if (!isGun(item) && info.stack > 1) {
     let left = item.qty;
     for (const other of list) {
@@ -108,17 +123,17 @@ export function addToList(list, item, capacity = Infinity) {
       left -= n;
       if (!left) return true;
     }
-    while (left > 0 && limitFor(list, item, capacity)[0] < limitFor(list, item, capacity)[1]) {
+    for (let where = place(); left > 0 && where; where = place()) {
       const n = Math.min(info.stack, left);
-      list.push(makeItem(item.id, n));
+      put({ ...makeItem(item.id, n), ...(item.free ? { free: true } : {}) }, where);
       left -= n;
     }
     item.qty = left;
     return left === 0;
   }
-  const [used, cap] = limitFor(list, item, capacity);
-  if (used >= cap) return false;
-  list.push(item);
+  const where = place();
+  if (!where) return false;
+  if (split) put(item, where); else list.push(item);
   return true;
 }
 

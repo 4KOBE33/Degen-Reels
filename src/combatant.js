@@ -3,7 +3,7 @@ import * as THREE from 'three';
 import { PLAYER, WEAPONS, RARITIES, ITEMS, BACKPACK_SLOTS, BELT_SLOTS } from './config.js';
 import { createCharacter } from './character.js';
 import { resolve } from './physics.js';
-import { fullAmmo, itemInfo, isBelt, slotsUsed } from './items.js';
+import { fullAmmo, itemInfo, isConsumable, slotsUsed } from './items.js';
 import { smoothMove } from './netsmooth.js';
 import { sfx } from './audio.js';
 
@@ -65,12 +65,12 @@ export class Combatant {
   get beltUsed() { return slotsUsed(this.backpack, true); }
   // Is there space for this item (a free slot, or a stack it can top up)?
   hasRoom(item) {
-    const belt = isBelt(item);
-    if (!belt && item.id === 'gun') return this.packUsed < this.capacity;
     const def = ITEMS[item.id];
-    if (def && def.stack > 1 && this.backpack.some((x) => x.id === item.id && !!x.free === !!item.free && x.qty < def.stack)) return true;
-    return belt ? this.beltUsed < BELT_SLOTS : this.packUsed < this.capacity;
+    if (def && item.id !== 'gun' && def.stack > 1 && this.backpack.some((x) => x.id === item.id && !!x.free === !!item.free && x.qty < def.stack)) return true;
+    if (isConsumable(item) && this.beltUsed < BELT_SLOTS) return true;
+    return this.packUsed < this.capacity;
   }
+
 
   refreshWeapon() {
     this.char.setWeapon(this.weapon, RARITIES[this.rarity].color);

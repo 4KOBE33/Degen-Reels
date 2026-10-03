@@ -110,7 +110,302 @@ function hpBar() {
   return sprite;
 }
 
+// ---------- bosses ----------
+// Every boss shares the same fight: a weak spot on the front (phase 1), a glowing core on the back
+// (phase 2), and headgear that blows off to show a socket on top (phase 3). The weak spots sit in
+// the same places on every body (before the 3.2x scale): front (0, 2.1, -0.62), back (0, 2.0, 0.63),
+// top (0, 3.3, 0), headgear at y 3.4.
+
+// The headgear for each boss (it blows off in phase 3).
+function bossCrown(theme) {
+  const crown = new THREE.Group();
+  crown.position.y = 3.4;
+  const mat = toon(theme.crown, { unique: true, side: THREE.DoubleSide });
+  if (theme.look === 'ice') {
+    // A battered top hat with an icicle band.
+    const brim = part(new THREE.CylinderGeometry(0.62, 0.62, 0.06, 18), 0x111827, { ink: 0.01 });
+    const top = part(new THREE.CylinderGeometry(0.42, 0.42, 0.7, 16), 0x111827, { ink: 0.01 });
+    top.position.y = 0.38;
+    crown.add(brim, top);
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      const ic = part(new THREE.ConeGeometry(0.07, 0.3, 5), mat, { ink: 0 });
+      ic.rotation.x = Math.PI;
+      ic.position.set(Math.cos(a) * 0.62, -0.12, Math.sin(a) * 0.62);
+      crown.add(ic);
+    }
+  } else if (theme.look === 'gator') {
+    // A gold crown with green gems, perched on the gator's head.
+    const ring = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.38, 0.32, 8, 1, true), toon(0xffd23f, { side: THREE.DoubleSide }));
+    crown.add(ring);
+    for (let i = 0; i < 8; i++) {
+      const a = (i / 8) * Math.PI * 2;
+      const pt = part(new THREE.ConeGeometry(0.07, 0.22, 4), 0xffd23f, { ink: 0 });
+      pt.position.set(Math.cos(a) * 0.4, 0.26, Math.sin(a) * 0.4);
+      crown.add(pt);
+    }
+    const gem = new THREE.Mesh(new THREE.OctahedronGeometry(0.1), new THREE.MeshBasicMaterial({ color: 0x5ee27a }));
+    gem.position.set(0, 0.02, -0.42);
+    crown.add(gem);
+  } else if (theme.look === 'wine') {
+    // A big cork with a crown of grapes and vine leaves.
+    const cork = part(new THREE.CylinderGeometry(0.32, 0.36, 0.5, 14), 0xc8a26e, { ink: 0.01 });
+    cork.position.y = 0.05;
+    crown.add(cork);
+    for (let i = 0; i < 10; i++) {
+      const a = (i / 10) * Math.PI * 2;
+      const grape = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 6), mat);
+      grape.position.set(Math.cos(a) * 0.42, 0.25 + (i % 2) * 0.1, Math.sin(a) * 0.42);
+      crown.add(grape);
+    }
+    for (const side of [-1, 1]) {
+      const leaf = part(new THREE.ConeGeometry(0.2, 0.5, 4), 0x4d7c0f, { ink: 0.01 });
+      leaf.rotation.z = side * 1.1;
+      leaf.position.set(side * 0.55, 0.35, 0);
+      crown.add(leaf);
+    }
+  } else if (theme.look === 'suit') {
+    // A black fedora with a gold band.
+    const brim = part(new THREE.CylinderGeometry(0.75, 0.75, 0.06, 18), 0x111827, { ink: 0.01 });
+    const top = part(new THREE.CylinderGeometry(0.45, 0.5, 0.42, 16), 0x111827, { ink: 0.01 });
+    top.position.y = 0.24;
+    const band = part(new THREE.CylinderGeometry(0.51, 0.51, 0.1, 16), mat, { ink: 0 });
+    band.position.y = 0.08;
+    crown.add(brim, top, band);
+  } else {
+    const ring = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.55, 0.35, 8, 1, true), mat);
+    ring.castShadow = true;
+    crown.add(ring);
+  }
+  return crown;
+}
+
+// The parts every boss needs for the fight: core, socket, hit and crit boxes.
+function bossFinish(g, parts, crown) {
+  const core = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.75, 0.06), new THREE.MeshBasicMaterial({ color: 0xff9f1c }));
+  core.position.set(0, 2.0, 0.66);
+  core.visible = false;
+  const socket = new THREE.Mesh(new THREE.SphereGeometry(0.32, 12, 8), new THREE.MeshBasicMaterial({ color: 0xff3fa4 }));
+  socket.position.set(0, 3.3, 0);
+  socket.visible = false;
+  g.add(core, socket, crown);
+  Object.assign(parts, { crown, core, socket });
+  parts.hit = new THREE.Mesh(new THREE.BoxGeometry(1.8, 3.1, 1.4), hitMat);
+  parts.hit.position.y = 1.6;
+  g.add(parts.hit);
+  parts.crit = new THREE.Mesh(new THREE.BoxGeometry(1.35, 0.6, 0.3), hitMat);
+  parts.crit.position.set(0, 2.1, -0.62);
+  parts.critMult = 2.5;
+  g.add(parts.crit);
+  g.scale.setScalar(3.2);
+}
+
+// A glowing weak spot on the front, where you shoot in phase 1.
+function weakPlate(g, color, shape = 'box') {
+  const mat = new THREE.MeshBasicMaterial({ color });
+  const m = shape === 'gem' ? new THREE.Mesh(new THREE.OctahedronGeometry(0.32), mat) : new THREE.Mesh(new THREE.BoxGeometry(1.0, 0.45, 0.08), mat);
+  m.position.set(0, 2.1, -0.64);
+  if (shape === 'gem') m.scale.set(1.3, 1, 0.5);
+  g.add(m);
+  return m;
+}
+
+function buildThemedBoss(theme) {
+  const g = new THREE.Group();
+  const parts = {};
+  const bodyMat = toon(theme.body, { unique: true, emissive: 0xffffff, emissiveIntensity: 0 });
+  const eyeMat = new THREE.MeshBasicMaterial({ color: theme.eye });
+  let eye;
+  const cannonArm = (x, color) => {
+    const arm = part(new THREE.CylinderGeometry(0.2, 0.24, 1.2, 10), color, { ink: 0.02 });
+    arm.rotation.x = Math.PI / 2;
+    arm.position.set(x, 1.8, -0.45);
+    g.add(arm);
+    return arm;
+  };
+  if (theme.look === 'ice') {
+    // THE SNOW BARON: a giant three-ball snowman with an ice heart, coal buttons, a carrot nose,
+    // a red scarf, and icicle cannons for arms. He slides instead of walking.
+    const snow = bodyMat;
+    const base = part(new THREE.SphereGeometry(0.85, 20, 14), snow, { ink: 0.04 });
+    base.position.y = 0.75;
+    base.scale.y = 0.9;
+    const mid = part(new THREE.SphereGeometry(0.68, 20, 14), snow, { ink: 0.04 });
+    mid.position.y = 1.95;
+    const head = part(new THREE.SphereGeometry(0.48, 18, 12), snow, { ink: 0.04 });
+    head.position.y = 2.95;
+    const nose = part(new THREE.ConeGeometry(0.09, 0.5, 8), 0xff9f1c, { ink: 0.01 });
+    nose.rotation.x = -Math.PI / 2;
+    nose.position.set(0, 2.92, -0.65);
+    const scarf = part(new THREE.TorusGeometry(0.5, 0.1, 8, 20), 0xe63946, { ink: 0.01 });
+    scarf.rotation.x = Math.PI / 2;
+    scarf.position.y = 2.52;
+    const tail = part(new THREE.BoxGeometry(0.2, 0.6, 0.06), 0xe63946, { ink: 0.01 });
+    tail.position.set(0.3, 2.2, -0.55);
+    tail.rotation.z = 0.2;
+    g.add(base, mid, head, nose, scarf, tail);
+    for (const y of [1.45, 1.05, 0.65]) {
+      const coal = new THREE.Mesh(new THREE.SphereGeometry(0.07, 8, 6), new THREE.MeshBasicMaterial({ color: 0x111111 }));
+      coal.position.set(0, y, -0.86);
+      g.add(coal);
+    }
+    eye = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.09, 0.04), eyeMat);
+    eye.position.set(0, 3.08, -0.45);
+    g.add(eye);
+    weakPlate(g, 0x7dd3fc, 'gem');
+    for (const side of [-1, 1]) {
+      const arm = cannonArm(side * 0.95, 0xbfe9ff);
+      const spike = part(new THREE.ConeGeometry(0.2, 0.6, 6), 0xe0f2fe, { ink: 0.01 });
+      spike.rotation.x = -Math.PI / 2;
+      spike.position.set(side * 0.95, 1.8, -1.3);
+      g.add(spike);
+      void arm;
+    }
+    Object.assign(parts, { body: mid, eye, bodyMat });
+  } else if (theme.look === 'gator') {
+    // BOSS GATOR: a gator king standing on his hind legs. Scaly green hide, a pale belly with a gold
+    // buckle, a long snout full of teeth, yellow eyes and a huge tail dragging behind.
+    const torso = part(new THREE.CapsuleGeometry(0.72, 1.1, 6, 14), bodyMat, { ink: 0.04 });
+    torso.position.y = 1.75;
+    const belly = part(new THREE.CapsuleGeometry(0.5, 0.9, 6, 12), 0xd9e4a8, { ink: 0 });
+    belly.position.set(0, 1.7, -0.32);
+    belly.scale.z = 0.7;
+    const head = part(new THREE.BoxGeometry(0.85, 0.5, 0.8), bodyMat, { ink: 0.04 });
+    head.position.set(0, 3.0, -0.1);
+    const snout = part(new THREE.BoxGeometry(0.62, 0.3, 1.0), bodyMat, { ink: 0.03 });
+    snout.position.set(0, 2.88, -0.95);
+    const jaw = part(new THREE.BoxGeometry(0.58, 0.16, 0.95), 0x3f6212, { ink: 0.02 });
+    jaw.position.set(0, 2.62, -0.9);
+    jaw.rotation.x = 0.18;
+    g.add(torso, belly, head, snout, jaw);
+    for (let i = 0; i < 6; i++) {
+      for (const side of [-1, 1]) {
+        const tooth = part(new THREE.ConeGeometry(0.035, 0.12, 4), 0xfff6e0, { ink: 0 });
+        tooth.rotation.x = Math.PI;
+        tooth.position.set(side * 0.27, 2.72, -0.55 - i * 0.15);
+        g.add(tooth);
+      }
+    }
+    for (let i = 0; i < 5; i++) {
+      const ridge = part(new THREE.ConeGeometry(0.12, 0.28, 4), 0x3f6212, { ink: 0 });
+      ridge.position.set(0, 2.6 - i * 0.4, 0.68);
+      ridge.rotation.x = 0.5;
+      g.add(ridge);
+    }
+    for (const side of [-1, 1]) {
+      const yel = new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 6), new THREE.MeshBasicMaterial({ color: 0xfacc15 }));
+      yel.position.set(side * 0.3, 3.28, -0.4);
+      g.add(yel);
+    }
+    eye = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.06, 0.04), eyeMat);
+    eye.position.set(0, 3.15, -0.52);
+    g.add(eye);
+    const tail = part(new THREE.ConeGeometry(0.5, 2.6, 8), bodyMat, { ink: 0.03 });
+    tail.rotation.x = -Math.PI / 2 - 0.25;
+    tail.position.set(0, 0.7, 1.6);
+    g.add(tail);
+    weakPlate(g, 0xffd23f);
+    const legs = [];
+    for (const side of [-1, 1]) {
+      const leg = part(new THREE.BoxGeometry(0.42, 0.9, 0.5), bodyMat, { ink: 0.03 });
+      leg.position.set(side * 0.4, 0.45, 0);
+      const foot = part(new THREE.BoxGeometry(0.46, 0.18, 0.75), 0x3f6212, { ink: 0.02 });
+      foot.position.set(0, -0.38, -0.18);
+      leg.add(foot);
+      g.add(leg);
+      legs.push(leg);
+      const arm = part(new THREE.CapsuleGeometry(0.16, 0.6, 4, 8), bodyMat, { ink: 0.02 });
+      arm.position.set(side * 0.85, 1.9, -0.35);
+      arm.rotation.x = -1.1;
+      g.add(arm);
+    }
+    Object.assign(parts, { body: torso, legs, eye, bodyMat });
+  } else if (theme.look === 'wine') {
+    // BARON VINO: a giant walking wine barrel. Iron hoops, a painted estate label, a brass tap for
+    // a cannon, a twirled mustache, and stubby legs in riding boots.
+    const barrel = part(new THREE.CylinderGeometry(0.85, 0.85, 2.6, 22), bodyMat, { ink: 0.04 });
+    barrel.position.y = 1.85;
+    const bulge = part(new THREE.CylinderGeometry(0.95, 0.95, 1.4, 22), bodyMat, { ink: 0 });
+    bulge.position.y = 1.85;
+    g.add(barrel, bulge);
+    for (const y of [0.7, 1.3, 2.4, 3.0]) {
+      const r = y > 1.0 && y < 2.6 ? 0.96 : 0.86;
+      const hoop = part(new THREE.TorusGeometry(r, 0.05, 6, 24), 0x2b2140, { ink: 0 });
+      hoop.rotation.x = Math.PI / 2;
+      hoop.position.y = y;
+      g.add(hoop);
+    }
+    eye = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.1, 0.04), eyeMat);
+    eye.position.set(0, 2.85, -0.85);
+    const stache = part(new THREE.TorusGeometry(0.2, 0.05, 6, 12, Math.PI), 0x111111, { ink: 0 });
+    stache.position.set(0, 2.55, -0.9);
+    stache.rotation.z = Math.PI;
+    g.add(eye, stache);
+    // The estate label: the phase-1 weak spot.
+    weakPlate(g, 0xfff6e0);
+    const crest = new THREE.Mesh(new THREE.CircleGeometry(0.16, 12), new THREE.MeshBasicMaterial({ color: 0x7f1d3a }));
+    crest.position.set(0, 2.1, -0.69);
+    crest.rotation.y = Math.PI;
+    g.add(crest);
+    for (const side of [-1, 1]) {
+      const tap = part(new THREE.CylinderGeometry(0.12, 0.16, 1.0, 10), 0xd4a63a, { ink: 0.01 });
+      tap.rotation.x = Math.PI / 2;
+      tap.position.set(side * 0.95, 1.8, -0.6);
+      const valve = part(new THREE.TorusGeometry(0.14, 0.04, 6, 12), 0xd4a63a, { ink: 0 });
+      valve.position.set(side * 0.95, 2.05, -0.6);
+      g.add(tap, valve);
+    }
+    const legs = [];
+    for (const side of [-1, 1]) {
+      const leg = part(new THREE.BoxGeometry(0.34, 0.7, 0.42), 0x2b0f1c, { ink: 0.03 });
+      leg.position.set(side * 0.4, 0.35, 0);
+      g.add(leg);
+      legs.push(leg);
+    }
+    Object.assign(parts, { body: barrel, legs, eye, bodyMat });
+  } else {
+    // THE ENFORCER: the biggest bouncer the casino ever hired. Black suit, white shirt, red tie, a
+    // gold badge on his chest, shades and fists like engine blocks.
+    const torso = part(new THREE.BoxGeometry(1.75, 1.6, 1.05), bodyMat, { ink: 0.05 });
+    torso.position.y = 2.0;
+    const lapels = part(new THREE.BoxGeometry(0.75, 1.3, 0.06), 0xfff6e0, { ink: 0 });
+    lapels.position.set(0, 2.05, -0.54);
+    const tie = part(new THREE.BoxGeometry(0.16, 0.95, 0.06), 0xe63946, { ink: 0 });
+    tie.position.set(0, 1.95, -0.59);
+    const head = part(new THREE.BoxGeometry(0.9, 0.78, 0.85), 0x9ca3af, { ink: 0.04 });
+    head.position.y = 3.05;
+    const shades = new THREE.Mesh(new THREE.BoxGeometry(0.86, 0.2, 0.06), new THREE.MeshBasicMaterial({ color: 0x111111 }));
+    shades.position.set(0, 3.15, -0.45);
+    eye = new THREE.Mesh(new THREE.BoxGeometry(0.7, 0.05, 0.03), eyeMat);
+    eye.position.set(0, 3.15, -0.49);
+    const jaw = part(new THREE.BoxGeometry(0.75, 0.2, 0.7), 0x6b7280, { ink: 0.02 });
+    jaw.position.set(0, 2.72, -0.05);
+    g.add(torso, lapels, tie, head, shades, eye, jaw);
+    // Weak spot: a gold security badge.
+    const badge = weakPlate(g, 0xffd23f);
+    badge.scale.set(0.5, 1, 1);
+    badge.position.x = -0.5;
+    const legs = [];
+    for (const side of [-1, 1]) {
+      const arm = part(new THREE.BoxGeometry(0.45, 1.3, 0.5), bodyMat, { ink: 0.03 });
+      arm.position.set(side * 1.1, 1.85, -0.1);
+      const fist = part(new THREE.BoxGeometry(0.7, 0.62, 0.7), 0x9ca3af, { ink: 0.03 });
+      fist.position.set(side * 1.1, 1.2, -0.6);
+      g.add(arm, fist);
+      const leg = part(new THREE.BoxGeometry(0.55, 1.2, 0.6), 0x111827, { ink: 0.03 });
+      leg.position.set(side * 0.45, 0.6, 0);
+      g.add(leg);
+      legs.push(leg);
+    }
+    Object.assign(parts, { body: torso, legs, eye, bodyMat });
+  }
+  parts.muzzle = new THREE.Vector3(0.95, 1.8, -1.0);
+  bossFinish(g, parts, bossCrown(theme));
+  return { group: g, parts };
+}
+
 function buildModel(type, theme = bossTheme('vegas')) {
+  if (type === 'boss' && theme.look !== 'crown') return buildThemedBoss(theme);
   const g = new THREE.Group();
   const parts = {};
   if (type === 'slotbot' || type === 'boss') {
@@ -140,88 +435,7 @@ function buildModel(type, theme = bossTheme('vegas')) {
       legs.push(leg);
     }
     if (boss) {
-      // The crown (whatever it is on this map) blows off in phase 3, so its extras hang off it.
-      const crown = new THREE.Group();
-      crown.position.y = 3.4;
-      const crownMat = toon(theme.crown, { unique: true, side: THREE.DoubleSide });
-      if (theme.look === 'ice') {
-        // A ring of icicle spikes.
-        for (let i = 0; i < 7; i++) {
-          const a = (i / 7) * Math.PI * 2;
-          const spike = part(new THREE.ConeGeometry(0.12, 0.55 + (i % 2) * 0.3, 5), crownMat, { ink: 0.01 });
-          spike.position.set(Math.cos(a) * 0.45, 0.25, Math.sin(a) * 0.45);
-          crown.add(spike);
-        }
-        // Frost on the shoulders, a scarf.
-        const scarf = part(new THREE.BoxGeometry(1.7, 0.22, 1.3), 0xe63946, { ink: 0.01 });
-        scarf.position.y = 2.62;
-        g.add(scarf);
-        for (const side of [-1, 1]) {
-          const ice = part(new THREE.DodecahedronGeometry(0.28, 0), 0xe0f2fe, { ink: 0.01 });
-          ice.position.set(side * 0.75, 2.75, 0);
-          g.add(ice);
-        }
-      } else if (theme.look === 'gator') {
-        // A gator head for a hat: snout, teeth and yellow eyes; a tail out the back.
-        const head = part(new THREE.BoxGeometry(0.75, 0.32, 0.7), crownMat, { ink: 0.01 });
-        head.position.set(0, 0.1, 0);
-        const snout = part(new THREE.BoxGeometry(0.55, 0.22, 0.75), crownMat, { ink: 0.01 });
-        snout.position.set(0, 0.04, -0.68);
-        crown.add(head, snout);
-        for (let i = 0; i < 4; i++) {
-          const tooth = part(new THREE.ConeGeometry(0.04, 0.12, 4), 0xfff6e0, { ink: 0 });
-          tooth.rotation.x = Math.PI;
-          tooth.position.set(-0.18 + i * 0.12, -0.1, -0.95);
-          crown.add(tooth);
-        }
-        for (const side of [-1, 1]) {
-          const ey = new THREE.Mesh(new THREE.SphereGeometry(0.08, 8, 6), new THREE.MeshBasicMaterial({ color: 0xfacc15 }));
-          ey.position.set(side * 0.22, 0.3, -0.25);
-          crown.add(ey);
-        }
-        const tail = part(new THREE.ConeGeometry(0.35, 1.6, 6), 0x3f6212, { ink: 0.02 });
-        tail.rotation.x = -Math.PI / 2 - 0.3;
-        tail.position.set(0, 1.0, 1.2);
-        g.add(tail);
-      } else if (theme.look === 'wine') {
-        // A crown of grapes and vine leaves, barrel hoops round the belly.
-        for (let i = 0; i < 9; i++) {
-          const a = (i / 9) * Math.PI * 2;
-          const grape = new THREE.Mesh(new THREE.SphereGeometry(0.14, 8, 6), crownMat);
-          grape.position.set(Math.cos(a) * 0.45, 0.05 + (i % 2) * 0.12, Math.sin(a) * 0.45);
-          crown.add(grape);
-        }
-        for (const side of [-1, 1]) {
-          const leafM = part(new THREE.ConeGeometry(0.2, 0.5, 4), 0x4d7c0f, { ink: 0.01 });
-          leafM.rotation.z = side * 1.1;
-          leafM.position.set(side * 0.6, 0.2, 0);
-          crown.add(leafM);
-        }
-        for (const y of [1.1, 2.4]) {
-          const hoop = part(new THREE.BoxGeometry(1.66, 0.12, 1.26), 0x2b2140, { ink: 0 });
-          hoop.position.y = y;
-          g.add(hoop);
-        }
-      } else if (theme.look === 'suit') {
-        // Shirt front, red tie, shades and a gold-banded fedora.
-        const shirt = part(new THREE.BoxGeometry(0.55, 0.85, 0.05), 0xfff6e0, { ink: 0 });
-        shirt.position.set(0, 1.2, -0.62);
-        const tie = part(new THREE.BoxGeometry(0.18, 0.75, 0.06), 0xe63946, { ink: 0 });
-        tie.position.set(0, 1.18, -0.66);
-        const shades = new THREE.Mesh(new THREE.BoxGeometry(1.4, 0.2, 0.06), new THREE.MeshBasicMaterial({ color: 0x111111 }));
-        shades.position.set(0, 2.95, -0.69);
-        g.add(shirt, tie, shades);
-        const brim = part(new THREE.CylinderGeometry(0.85, 0.85, 0.06, 18), 0x111827, { ink: 0.01 });
-        const hatTop = part(new THREE.CylinderGeometry(0.5, 0.55, 0.45, 16), 0x111827, { ink: 0.01 });
-        hatTop.position.y = 0.25;
-        const band = part(new THREE.CylinderGeometry(0.56, 0.56, 0.1, 16), crownMat, { ink: 0 });
-        band.position.y = 0.08;
-        crown.add(brim, hatTop, band);
-      } else {
-        const ring = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 0.55, 0.35, 8, 1, true), crownMat);
-        ring.castShadow = true;
-        crown.add(ring);
-      }
+      const crown = bossCrown(theme);
       g.add(crown);
       const cannon2 = cannon.clone();
       cannon2.position.x = -0.95;
@@ -862,7 +1076,7 @@ export class Machine {
     sfx.alert(this.pos, raid.listener);
     if (!this.puppet) raid.slam(this, 12, 20);
     const msg = n === 2
-      ? `🔥 PHASE 2: ${this.name} is OVERCLOCKED! The screen is armored: shoot the glowing core on the BACK.`
+      ? `🔥 PHASE 2: ${this.name} is OVERCLOCKED! ${this.theme.weak.charAt(0)}${this.theme.weak.slice(1).toLowerCase()} is armored: shoot the glowing core on the BACK.`
       : `💥 PHASE 3: TILT! The ${this.theme.look === 'suit' ? 'hat' : this.theme.look === 'gator' ? 'gator head' : 'crown'} blew off. Hit the socket on TOP, and don't stand still.`;
     raid.feed(msg);
     if (raid.player && raid.player.alive && raid.player.pos.distanceTo(this.pos) < 90) raid.hud.toast(msg, 'big');
