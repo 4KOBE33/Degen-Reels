@@ -1,14 +1,14 @@
 // The Hub between raids: stash and loadout, the Back Room (gambling), the Fence (selling),
 // your look, your records (stats, achievements, collection log) and settings.
 // Everything here is plain HTML on top of the 3D backdrop.
-import { bossTheme, BACKPACK_SLOTS, BAG_UPGRADES, HUB_SLOTS, ITEMS, LOOT, QUALITY, RARITY_BY_TIER, WEAPONS, bagBonus } from './config.js';
+import { GUN_TIERS, bossTheme, BACKPACK_SLOTS, BAG_UPGRADES, HUB_SLOTS, ITEMS, LOOT, QUALITY, RARITY_BY_TIER, WEAPONS, bagBonus } from './config.js';
 import {
-  itemInfo, isGun, rollLoot, addToList, addToStash, makeGun, makeItem, fullAmmo,
+  itemInfo, isGun, rollLoot, addToList, addToStash, makeGun, makeItem, fullAmmo, weightedIndex,
 } from './items.js';
 import { save } from './save.js';
 import { cloud, net as cloudNet } from './cloud.js';
 import { iconHtml, gunIcon } from './icons.js';
-import { keyName, renderBinds, wireBinds, actionsFor } from './keys.js';
+import { keyName, renderBinds, wireBinds } from './keys.js';
 import { MAPS } from './map.js';
 import { escapeHtml } from './hud.js';
 import { sfx, initAudio, setVolume } from './audio.js';
@@ -19,8 +19,9 @@ import {
   LOOKS, LOOK_PARTS, unlockText, wornLook,
 } from './looks.js';
 import { LookPreview } from './preview.js';
+import { BUILD } from './version.js';
 import { Shoe, cardValue, handValue, isNatural } from './cards.js';
-import { MOB_LOAN, MOB_OWE, MOB_HOLD, mobDebt, borrow, repay } from './mob.js';
+import { MOB_MIN, MOB_MAX, mobDebt, borrow, repay } from './mob.js';
 
 const $ = (id) => document.getElementById(id);
 const LOADOUT_SLOTS = 8;
@@ -42,20 +43,48 @@ const cardHtml = (c, hidden, i = 0) => (hidden ? `<span class="pcard back" style
 // ---------- Loot Reels ----------
 export const REEL_SYMBOLS = ['🍒', '🍋', '🔔', '7️⃣', '💎', '🪙', '🎲', '⭐'];
 const ROW = 62;
-// One pull of a Loot Reels machine: what it pays, and what the reels land on (a triple for anything
-// Rare or better, a near miss otherwise).
+// The Loot Reels paytable, as multiples of what the pull cost. Matching three always wins big;
+// a gun prize comes with chips on top so the whole win is worth the multiple. Pays back about 95%.
+// [weight, symbol, pays (x cost), gun rarity]
+const REEL_PAYS = [
+  [50, null, 0.1, -1], // near miss: a few chips back
+  [25, 'item', 0.7, -1], // two coins: a bit of loot
+  [15, '🍒', 1.5, -1],
+  [7, '🔔', 3, 1],
+  [2.6, '7️⃣', 6, 2],
+  [0.4, '💎', 25, 3],
+];
+export const REEL_HITS = REEL_PAYS.map(([, sym, x, r]) => ({ sym, x, r }));
+const round5 = (n) => Math.max(5, Math.round(n / 5) * 5);
+
+// One pull of a Loot Reels machine: what it pays ({ item, chips, hit }) and where the reels land.
 export function reelPull(m) {
-  let prize = rollLoot(m.tier);
-  if (prize.chips) prize = { chips: prize.chips * 3 };
-  const rarity = prize.chips ? -1 : itemInfo(prize).rarity;
+  const hit = weightedIndex(REEL_PAYS.map(([w]) => w));
+  const [, sym, x, rarity] = REEL_PAYS[hit];
+  const target = m.cost * x;
+  let item = null;
+  let chips = 0;
   let finals;
-  if (rarity >= 1) finals = Array(3).fill(PRIZE_SYMBOL[rarity]);
-  else if (prize.chips) finals = ['🪙', '🪙', REEL_SYMBOLS[Math.floor(Math.random() * 3)]];
-  else {
+  if (hit === 0) {
+    chips = round5(target);
     const a = REEL_SYMBOLS[Math.floor(Math.random() * REEL_SYMBOLS.length)];
     finals = [a, a, a === '🍒' ? '🍋' : '🍒'];
+  } else if (hit === 1) {
+    const loot = rollLoot(m.tier);
+    if (loot.chips) chips = round5(target); else { item = loot; chips = round5(Math.max(0, target - itemInfo(loot).value)); }
+    finals = ['🪙', '🪙', REEL_SYMBOLS[Math.floor(Math.random() * 3)]];
+  } else {
+    if (rarity >= 0) {
+      // A gun of that rarity worth no more than the win (the rest comes as chips). Better
+      // machines lean toward their own tier's guns.
+      const pool = [...new Set(GUN_TIERS.slice(0, Math.min(GUN_TIERS.length, m.tier + 1)).flat())].filter((k) => !WEAPONS[k].melee).map((k) => makeGun(k, rarity));
+      const fits = pool.filter((g) => itemInfo(g).value <= target).sort((a, b) => itemInfo(b).value - itemInfo(a).value);
+      item = fits.length ? fits[Math.floor(Math.random() * Math.min(3, fits.length))] : pool.sort((a, b) => itemInfo(a).value - itemInfo(b).value)[0];
+    }
+    chips = round5(Math.max(0, target - (item ? itemInfo(item).value : 0)));
+    finals = [sym, sym, sym];
   }
-  return { prize, finals };
+  return { prize: { item, chips, hit }, finals };
 }
 export const PRIZE_SYMBOL = ['🍒', '🔔', '7️⃣', '💎'];
 
@@ -187,18 +216,6 @@ export class Hub {
       this.render();
     });
     $('hubBody').addEventListener('click', (e) => this.onClick(e));
-    // The Mob button is held, not clicked (mouse, touch, or the B key).
-    $('hubBody').addEventListener('pointerdown', (e) => { if (e.target.closest('#mobBtn')) { initAudio(); this.mobHold(true); } });
-    $('hubBody').addEventListener('pointerout', (e) => { if (e.target.closest('#mobBtn') && !(e.relatedTarget && e.relatedTarget.closest && e.relatedTarget.closest('#mobBtn'))) this.mobHold(false); });
-    window.addEventListener('pointerup', () => this.mobHold(false));
-    window.addEventListener('keydown', (e) => {
-      if (e.code !== 'KeyB' || e.repeat || $('hub').hidden || (document.activeElement && document.activeElement.tagName === 'INPUT')) return;
-      // B is also push-to-talk: then only the button borrows.
-      if (this.data.settings.voice === 'ptt' && actionsFor(e.code).includes('talk')) return;
-      initAudio();
-      this.mobHold(true);
-    });
-    window.addEventListener('keyup', (e) => { if (e.code === 'KeyB') this.mobHold(false); });
     wireBinds($('hubBody'), () => this.render(), (t) => this.toast(t));
     // Cash out on press, not release: every millisecond counts.
     $('hubBody').addEventListener('pointerdown', (e) => {
@@ -321,7 +338,8 @@ export class Hub {
     const bad = this.wrongBuild ? this.wrongBuild() : [];
     const pm = (m) => {
       const off = bad.includes(m) ? (this.partyBuilds.has(m.id) ? ` ⚠️ Build ${this.partyBuilds.get(m.id)}` : ' ⚠️ old version') : '';
-      return `<span class="pm ${m.id === r.host ? 'lead' : ''} ${teams ? `t${m.team || 0}` : ''} ${off ? 'oldbuild' : ''}">${m.id === r.host ? '👑' : '🙂'} ${escapeHtml(m.name)}${m.id === me ? ' (you)' : ''}${m.away ? ' 📶 reconnecting…' : ''}${off}</span>`;
+      const bld = m.id === me ? BUILD : this.partyBuilds && this.partyBuilds.get(m.id);
+      return `<span class="pm ${m.id === r.host ? 'lead' : ''} ${teams ? `t${m.team || 0}` : ''} ${off ? 'oldbuild' : ''}">${m.id === r.host ? '👑' : '🙂'} ${escapeHtml(m.name)}${m.id === me ? ' (you)' : ''}${m.away ? ' 📶 reconnecting…' : ''}${off || (bld ? ` <small class="pbld">Build ${bld}</small>` : '')}</span>`;
     };
     const members = teams
       ? [0, 1].map((t) => `<div class="pteam t${t}"><b>${t ? '🔵 Blue' : '🔴 Red'}</b>${r.members.filter((m) => (m.team || 0) === t).map(pm).join('')}</div>`).join('')
@@ -750,36 +768,13 @@ export class Hub {
       return `<div class="mob owing" title="Go into a raid still owing them and they'll come for you."><span>🤌 You owe the Mob <b>🪙 ${fmt(owe)}</b></span>
         <button class="btn tiny ${can ? 'green' : ''}" data-act="mobpay" ${can ? '' : 'disabled'}>Pay back</button></div>`;
     }
-    return `<button class="mob borrow" id="mobBtn" title="Hold for ${MOB_HOLD} seconds (or hold ${'B'}): the Mob spots you ${MOB_LOAN} chips. You owe them ${MOB_OWE} before your next raid, or else.">
-      <i id="mobFill"></i><span id="mobText">🤌 Borrow from the Mob <small>hold B</small></span></button>`;
-  }
-
-  // Holding the Mob button (mouse or B). Let go early and nothing happens.
-  mobHold(on) {
-    if (!on) {
-      if (this.mobT) { cancelAnimationFrame(this.mobT.raf); this.mobT = null; const f = $('mobFill'); if (f) f.style.width = '0%'; const t = $('mobText'); if (t) t.innerHTML = '🤌 Borrow from the Mob <small>hold B</small>'; }
-      return;
+    const asking = this.mobAsk && performance.now() - this.mobAsk < 8000;
+    if (asking) {
+      return `<div class="mob asking"><span>🤌 <b>Sure?</b> They'll lend 🪙 ${MOB_MIN}–${fmt(MOB_MAX)} at 50–150% interest. Go into a raid owing them and they kidnap you.</span>
+        <button class="btn tiny green" data-act="mobyes">Take the money</button><button class="btn tiny" data-act="mobno">No thanks</button></div>`;
     }
-    if (this.mobT || mobDebt() || this.tab !== 'backroom') return;
-    const start = performance.now();
-    const tick = () => {
-      const k = Math.min(1, (performance.now() - start) / (MOB_HOLD * 1000));
-      const f = $('mobFill');
-      const t = $('mobText');
-      if (!f) { this.mobT = null; return; }
-      f.style.width = `${k * 100}%`;
-      if (t) t.innerHTML = k < 1 ? `🤌 Keep holding… <small>${Math.ceil(MOB_HOLD * (1 - k))}s</small>` : '🤌 Deal.';
-      if (k >= 1) {
-        this.mobT = null;
-        borrow();
-        sfx.cashout();
-        this.toast(`🤌 The Mob spots you 🪙 ${MOB_LOAN}. You owe them 🪙 ${MOB_OWE}. Pay it back before your next raid... or else.`);
-        this.render();
-        return;
-      }
-      this.mobT.raf = requestAnimationFrame(tick);
-    };
-    this.mobT = { raf: requestAnimationFrame(tick) };
+    return `<button class="mob borrow" data-act="mobask" title="The Mob spots you anywhere from ${MOB_MIN} to ${fmt(MOB_MAX)} chips, at 50% to 150% interest (the bigger the loan, the worse it gets). Pay it back before your next raid, or else.">
+      🤌 Borrow from the Mob <small>🪙 ${MOB_MIN}–${fmt(MOB_MAX)}</small></button>`;
   }
 
   // Every game: the game itself on the left, bets and buttons in a column on the right, so the
@@ -808,14 +803,18 @@ export class Hub {
     }).join('');
     const strips = r ? r.strips : [0, 1, 2].map(() => this.randomStrip(3));
     const reels = strips.map((strip, k) => `<div class="reel"><div class="strip" id="strip${k}" style="${r && r.animating ? '' : `transform:translateY(${-(strip.length - 3) * ROW}px)`}">${strip.map((s) => `<span>${s}</span>`).join('')}</div></div>`).join('');
-    let prize = '<div class="prize empty">Pull the lever. Every pull pays out something: chips, gear, or if you\'re lucky, a Legendary.</div>';
+    let prize = '<div class="prize empty">Three of a kind pays big: 🍒 1.5x · 🔔 Rare gun 3x · 7️⃣ Epic gun 6x · 💎 Legendary 25x. Every pull pays something.</div>';
     if (r && !r.running && r.prize) {
       const p = r.prize;
-      prize = p.chips
-        ? `<div class="prize r0"><span class="pi">🪙</span><div><small>PAID OUT</small><b>🪙 ${fmt(p.chips)} chips</b></div></div>`
-        : `<div class="prize r${itemInfo(p).rarity}"><span class="pi">${iconHtml(p, 'gicon big')}</span><div><small>${['Common', 'Rare', 'Epic', 'LEGENDARY'][itemInfo(p).rarity]}${r.isNew ? ' · NEW TO YOUR COLLECTION!' : ''}</small><b style="color:${itemInfo(p).css}">${escapeHtml(itemInfo(p).name)}</b><small>Worth 🪙 ${fmt(itemInfo(p).value)} · sent to your stash</small></div></div>`;
+      const it = p.item;
+      const info = it && itemInfo(it);
+      const hit = REEL_HITS[p.hit] || REEL_HITS[0];
+      const head = hit.sym && hit.sym !== 'item' ? `${hit.sym}${hit.sym}${hit.sym} · PAYS ${hit.x}x` : p.hit === 1 ? 'TWO COINS' : 'SO CLOSE';
+      prize = `<div class="prize r${info ? info.rarity : 0}"><span class="pi">${it ? iconHtml(it, 'gicon big') : '🪙'}</span><div><small>${head}${r.isNew ? ' · NEW TO YOUR COLLECTION!' : ''}</small>
+        ${it ? `<b style="color:${info.css}">${escapeHtml(info.name)}</b>` : ''}${p.chips ? `<b>${it ? '+ ' : ''}🪙 ${fmt(p.chips)} chips</b>` : ''}
+        <small>${it ? `Worth 🪙 ${fmt(info.value)} · sent to your stash` : 'Paid out to your stash'}</small></div></div>`;
     }
-    const big = r && !running && r.prize && !r.prize.chips && itemInfo(r.prize).rarity >= 2;
+    const big = r && !running && r.prize && r.prize.hit >= 3;
     return this.split(`<div class="cabinet m${this.machine} ${running ? 'spinning' : ''} ${big ? 'bigwin' : ''}">
         <div class="cabtop">${m.name.toUpperCase()}</div>
         <div class="reelwin">${reels}<div class="payline"></div></div>
@@ -841,7 +840,7 @@ export class Hub {
     const canDouble = h && h.cards.length === 2 && !h.fromAces;
     return this.split(`<div class="felt bjtable">
         <div class="hand"><span class="who">DEALER ${g ? `<b>${dealerVal}${playing ? ' + ?' : ''}</b>` : ''}</span><div class="cards">${g ? g.dealer.map((c, i) => cardHtml(c, playing && i === 1, i)).join('') : ghost}</div></div>
-        <div class="felttext">BLACKJACK PAYS 3 TO 2 · DEALER STANDS ON 17</div>
+        <div class="felttext">BLACKJACK PAYS 3 TO 2 · DEALER PEEKS · STANDS ON 17</div>
         <div class="hands">${hands}</div>
       </div>`, `${playing ? '' : this.betChips()}
       <div class="row gbtns">${playing ? `<button class="btn" data-act="hit">Hit</button><button class="btn" data-act="stand">Stand</button>${canDouble ? `<button class="btn" data-act="double">Double · 🪙 ${fmt(h.bet)}</button>` : ''}${canSplit ? `<button class="btn split" data-act="split">✂️ Split · 🪙 ${fmt(h.bet)}</button>` : ''}`
@@ -1143,6 +1142,16 @@ export class Hub {
         save.update((x) => { addToStash(x.stash.items, x.loadout.items[i]); x.loadout.items.splice(i, 1); });
         break;
       }
+      case 'mobask': this.mobAsk = performance.now(); break;
+      case 'mobno': this.mobAsk = 0; break;
+      case 'mobyes': {
+        this.mobAsk = 0;
+        if (mobDebt()) break;
+        const { lent, owe } = borrow();
+        sfx.cashout();
+        this.toast(`🤌 The Mob spots you 🪙 ${fmt(lent)}. You owe them 🪙 ${fmt(owe)} (${Math.round((owe / lent - 1) * 100)}% interest). Pay it back before your next raid... or else.`);
+        break;
+      }
       case 'mobpay': {
         if (repay()) { sfx.win(); this.toast('🤌 Pleasure doing business. You\'re square with the Mob.'); } else this.toast('You can\'t cover it yet.');
         break;
@@ -1272,6 +1281,7 @@ export class Hub {
         if (!lookUnlocked(opt)) { this.toast(`🔒 ${unlockText(opt)}`); sfx.deny(); return; }
         save.update((x) => { x.look[part] = opt.id; });
         sfx.pickup();
+        this.sendLook();
         break;
       }
       case 'lookrandom':
@@ -1281,6 +1291,7 @@ export class Hub {
             x.look[part] = open[Math.floor(Math.random() * open.length)].id;
           }
         });
+        this.sendLook();
         break;
       case 'rectab': this.recTab = b.dataset.r; break;
       case 'hubpage': this.tab = b.dataset.t; break;
@@ -1372,8 +1383,7 @@ export class Hub {
       r.animating = false;
       const { payout, isNew } = this.awardReel(m, prize);
       r.isNew = isNew;
-      if (prize.chips) sfx.win();
-      else if (itemInfo(prize).rarity >= 3) sfx.jackpot(); else sfx.win();
+      if (prize.hit >= 4) sfx.jackpot(); else if (prize.hit >= 2) sfx.win(); else sfx.pickup();
       if (this.tab === 'backroom' && this.game === 'slots') this.render();
       else this.renderHeader();
     }, (1.3 + 2 * 0.45) * 1000 + 150);
@@ -1382,18 +1392,15 @@ export class Hub {
   // Pay out a Loot Reels pull: chips to the bank, gear to the stash (and the collection log).
   awardReel(m, prize) {
     let out = null;
-    let payout;
     let isNew = false;
-    if (prize.chips) {
-      payout = prize.chips;
-      this.earn(prize.chips);
-    } else {
-      const key = itemKey(prize);
+    if (prize.chips) this.earn(prize.chips);
+    if (prize.item) {
+      const key = itemKey(prize.item);
       isNew = !this.data.collection[key];
-      save.update((x) => addToStash(x.stash.items, prize));
+      save.update((x) => addToStash(x.stash.items, { ...prize.item }));
       out = progress((x) => { x.collection[key] = (x.collection[key] || 0) + 1; });
-      payout = itemInfo(prize).value;
     }
+    const payout = (prize.chips || 0) + (prize.item ? itemInfo(prize.item).value : 0);
     this.settleBet('🎰', m.cost, payout, (s) => { s.reelsPulled++; });
     if (out) this.announce(out);
     return { payout, isNew };
@@ -1412,7 +1419,8 @@ export class Hub {
     dealer.push(drawCard());
     this.bj = { shuffled, base: this.bet, hands: [{ cards: mine, bet: this.bet }], active: 0, dealer, state: 'play', msg: '', wagered: this.bet };
     sfx.tick();
-    if (handValue(this.bj.hands[0].cards) === 21) this.settle();
+    // The dealer peeks, like a real table: a blackjack (theirs or yours) is shown and paid at once.
+    if (handValue(this.bj.hands[0].cards) === 21 || handValue(dealer) === 21) this.settle();
   }
 
   bjHit() {
@@ -1458,9 +1466,9 @@ export class Hub {
     else this.settle();
   }
 
-  // Real rules, no peek: you always play your hand out first. Then the dealer turns over the hole
-  // card. A dealer blackjack beats everything except your own blackjack (that's a push), but only
-  // your original bet is lost to it: anything extra you put out to double or split comes back.
+  // Real rules: the dealer peeks on the deal, so a dealer blackjack shows up right away and you only
+  // lose your bet (or push with your own blackjack). Otherwise you play your hand out, then the dealer
+  // turns over the hole card and draws to 17.
   settle() {
     const g = this.bj;
     const dealerBJ = handValue(g.dealer) === 21 && g.dealer.length === 2;
@@ -1632,6 +1640,11 @@ export class Hub {
     this.settleBet('🚀', c.bet, win, (s) => { s.crashBest = Math.max(s.crashBest, c.mult); });
     this.render();
     this.drawCrash();
+  }
+
+  // Your party sees the look you're wearing (and the raid uses it), so tell them when it changes.
+  sendLook() {
+    if (this.net && this.net.inParty) this.net.profile(this.profileName(), wornLook(this.data.look));
   }
 
   profileName() { return (this.data.look.name || '').trim() || 'High Roller'; }

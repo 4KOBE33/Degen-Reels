@@ -1167,3 +1167,6 @@ body.kidnapfade::after { content: '🤌'; position: fixed; inset: 0; z-index: 50
 .groupbar button { border: none; background: transparent; color: var(--cream); font: 400 16px var(--display); letter-spacing: 1px; padding: 6px 14px; border-radius: 9px; cursor: pointer; opacity: 0.75; }
 .groupbar button:hover { opacity: 1; background: rgba(255, 255, 255, 0.06); }
 .groupbar button.on { opacity: 1; background: var(--gold); color: var(--ink); }
+.mob.asking { white-space: normal; max-width: 560px; gap: 6px; flex-wrap: wrap; font-size: 13px; background: linear-gradient(135deg, #2a1a10, #1a1a22); border-color: #8a5a1f; }
+.mob.asking b { color: var(--gold); }
+.pm .pbld { opacity: 0.55; font-size: 11px; font-weight: 800; }

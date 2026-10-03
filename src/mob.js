@@ -1,5 +1,5 @@
-// Borrowing from the Mob. Broke? Hold the button in the Back Room for 20 seconds and they spot you
-// a few chips. Pay them back, with interest, before your next raid. If you go in still owing them,
+// Borrowing from the Mob. Broke? Ask in the Back Room and they spot you anywhere from 25 to 5,000
+// chips. Pay them back, with interest, before your next raid. If you go in still owing them,
 // a black van shows up a few seconds into the raid and you're not coming back from that one.
 import * as THREE from 'three';
 import { part } from './toon.js';
@@ -8,14 +8,26 @@ import { Combatant } from './combatant.js';
 import { randomLook } from './looks.js';
 import { sfx } from './audio.js';
 
-export const MOB_LOAN = 25;
-export const MOB_OWE = 40; // what they want back
-export const MOB_HOLD = 20; // seconds you hold the button
+// How much they hand over is up to them: anywhere from 25 to 5,000 chips, small loans more often
+// than big ones. The bigger the loan, the worse the interest.
+export const MOB_MIN = 25;
+export const MOB_MAX = 5000;
+export function loanAmount() {
+  const raw = MOB_MIN * (MOB_MAX / MOB_MIN) ** Math.random();
+  const step = raw >= 1000 ? 100 : raw >= 200 ? 25 : 5;
+  return Math.min(MOB_MAX, Math.max(MOB_MIN, Math.round(raw / step) * step));
+}
+// Interest: 50% on the smallest loan, climbing to 150% on the biggest (5,000 back as 12,500).
+export const interestFor = (lent) => 0.5 + ((lent - MOB_MIN) / (MOB_MAX - MOB_MIN));
+export const oweFor = (lent) => Math.ceil((lent * (1 + interestFor(lent))) / 5) * 5;
 
 export const mobDebt = () => (save.get().mobDebt ? save.get().mobDebt.owe : 0);
 
 export function borrow() {
-  save.update((d) => { d.stash.chips += MOB_LOAN; d.mobDebt = { owe: MOB_OWE, at: Date.now() }; });
+  const lent = loanAmount();
+  const owe = oweFor(lent);
+  save.update((d) => { d.stash.chips += lent; d.mobDebt = { lent, owe, at: Date.now() }; });
+  return { lent, owe };
 }
 
 // Pay them back. Returns false if you can't cover it.

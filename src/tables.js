@@ -16,7 +16,7 @@ import { itemInfo, isGun, makeGun, fullAmmo, addToList } from './items.js';
 import { levelInfo } from './progress.js';
 import { Shoe, handValue, isNatural } from './cards.js';
 import {
-  BETS, BET_LEVEL, RED, WHEEL, REEL_SYMBOLS, PLINKO, PLINKO_ROWS, bucketColor, MINE_COUNTS, minesMult, reelPull,
+  BETS, BET_LEVEL, RED, WHEEL, REEL_SYMBOLS, REEL_HITS, PLINKO, PLINKO_ROWS, bucketColor, MINE_COUNTS, minesMult, reelPull,
 } from './hub.js';
 
 const $ = (id) => document.getElementById(id);
@@ -379,16 +379,13 @@ const Slots = {
     t.pull = null;
     const m = HUB_SLOTS[p.m];
     const prize = p.prize;
-    if (prize.chips) {
-      t.show(`${p.who} · ${m.name}`, `Paid 🪙 ${fmt(prize.chips)}`, '#ffd23f');
-      t.T.pop(t, `+${fmt(prize.chips)}`, '#ffd23f');
-    } else {
-      const info = itemInfo(prize);
-      t.show(`${p.who} won`, info.name, info.css);
-      t.T.pop(t, info.name, info.css, info.rarity >= 2);
-      if (info.rarity >= 2) t.flash = 3;
-      if (info.rarity >= 3) t.T.raid.feed(`🎰 ${p.who} hit a LEGENDARY on the Loot Reels: ${info.name}!`);
-    }
+    const hit = REEL_HITS[prize.hit] || REEL_HITS[0];
+    const info = prize.item && itemInfo(prize.item);
+    const what = [info ? info.name : '', prize.chips ? `🪙 ${fmt(prize.chips)}` : ''].filter(Boolean).join(' + ');
+    t.show(`${p.who} · ${hit.sym && hit.sym !== 'item' ? `${hit.sym}${hit.sym}${hit.sym} ${hit.x}x` : m.name}`, what, info ? info.css : '#ffd23f');
+    t.T.pop(t, hit.x >= 1.5 ? `${hit.x}x!` : `+${fmt(prize.chips || 0)}`, info ? info.css : '#ffd23f', prize.hit >= 3);
+    if (prize.hit >= 3) t.flash = 3;
+    if (prize.hit >= 4) t.T.raid.feed(`🎰 ${p.who} hit ${hit.sym}${hit.sym}${hit.sym} on the Loot Reels${info ? `: ${info.name}` : ''}!`);
     if (p.mine) {
       const { payout } = t.T.hub.awardReel(m, prize);
       t.T.afterSettle(m.cost, payout);
@@ -559,8 +556,10 @@ const Blackjack = {
     if (b.phase === 'play') {
       const v = handValue(b.p);
       t.show(`${b.who} · 🪙 ${fmt(b.bet)}`, `${b.who} ${v}${isNatural({ cards: b.p }) ? ' BLACKJACK' : ''} · Dealer ${handValue([b.d[0]])} + ?`);
-      // Our hand is over by itself (21, bust or a double): stand for us.
-      if (b.mine && (v >= 21 || b.doubled)) setTimeout(() => t.T.act(t, 'stand'), 350);
+      // The dealer peeks: a dealer blackjack is shown straight away. And our hand is over by
+      // itself on 21, a bust or a double: stand for us.
+      const dealerBJ = b.d.length === 2 && handValue(b.d) === 21;
+      if (b.mine && (v >= 21 || b.doubled || dealerBJ)) setTimeout(() => t.T.act(t, 'stand'), dealerBJ ? 150 : 350);
     } else if (b.phase === 'dealer') Blackjack.dealerStep(t);
   },
   dealerStep(t) {
@@ -580,7 +579,7 @@ const Blackjack = {
     let text;
     if (dealerBJ) {
       if (natural) { pay = b.bet; text = 'Both blackjack · PUSH'; }
-      else { pay = b.doubled ? b.bet / 2 : 0; text = 'Dealer BLACKJACK'; }
+      else { pay = 0; text = 'Dealer BLACKJACK'; }
     } else if (p > 21) text = `${p} · BUST`;
     else if (natural) { pay = Math.floor(b.bet * 2.5); text = 'BLACKJACK! Pays 3 to 2'; }
     else if (dv > 21) { pay = b.bet * 2; text = `Dealer busts (${dv})`; }
