@@ -3,6 +3,7 @@
 // own character and aim locally, sends where they are and what they hit, and draws everything
 // else from the host's snapshots. All messages go through the party server (server/index.js).
 import * as THREE from 'three';
+import { BUILD } from './version.js';
 import { Combatant } from './combatant.js';
 import { Machine } from './enemies.js';
 import { ItemPickup } from './pickups.js';
@@ -166,7 +167,7 @@ export class Session {
     this.sent.delete(from);
     this.net.to(from, {
       k: 'joinInfo',
-      info: { ...this.info, host: this.me, mode: this.mode, members: this.members },
+      info: { ...this.info, host: this.me, mode: this.mode, members: this.members, build: BUILD },
       pos: arr(pos),
       time: r1(raid.timeLeft),
       el: r2(raid.elapsed),
@@ -446,6 +447,10 @@ export class Session {
         if (s && !s.user) s.use(pup, true);
         break;
       }
+      case 'tg':
+        // A friend played a Lounge table: show it here and pass it on.
+        if (raid.duel) raid.duel.tables.relay(d.e, from);
+        break;
       case 'gw': {
         // A friend bet a gun on a Gun Wheel: we spin it.
         const w = raid.gunWheels[d.i];
@@ -749,6 +754,7 @@ export class Session {
         if (w) w.start(e.slice, e.gun, { prize: e.prize, chips: e.chips, owner: e.owner, name: e.name });
         break;
       }
+      case 'tgs': if (raid.duel) raid.duel.tables.apply({ ...e.e, mine: false }); break;
       case 'vo': raid.openVault({ name: e.by || 'Someone' }, true); break;
       case 'th': {
         const owner = this.byId.get(e.ow) || { name: '?', alive: true, team: 'raider' };

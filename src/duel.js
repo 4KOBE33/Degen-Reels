@@ -11,6 +11,7 @@ import { RaiderBrain } from './bots.js';
 import { randomLook } from './looks.js';
 import { keyName } from './keys.js';
 import { sfx } from './audio.js';
+import { LoungeTables } from './tables.js';
 
 const $ = (id) => document.getElementById(id);
 const fmt = (n) => Math.round(n).toLocaleString('en-US');
@@ -89,16 +90,13 @@ export class Duel {
       spot: new THREE.Vector3(this.arena.x + dx, 0, this.arena.z + dz), range: 3.5, searchTime: 0.2, searchLabel: 'Grabbing a ticket…',
       prompt: () => `<b>Hold ${keyName('use')}</b> 🎟️ Bet on the fight`, open: (by) => { if (by.isPlayer) this.openBet(); },
     }));
-    // The casino tables: walk up and play.
-    const NAMES = { slots: '🎰 Play the Loot Reels', blackjack: '🃏 Sit down at Blackjack', roulette: '🎡 Play Roulette', crash: '🚀 Play Crash', mines: '💣 Play Mines', plinko: '🔴 Drop some Plinko', poker: '🂡 Poker Showdown vs the House' };
-    this.tableSpots = (L.tables || []).map((t) => ({
+    // The casino tables: real games on the floor that everyone can watch (tables.js). Poker is
+    // still a Showdown against the House Champion.
+    this.tables = new LoungeTables(raid, L.tables || [], L.armory);
+    this.tableSpots = (L.tables || []).filter((t) => t.game === 'poker').map((t) => ({
       spot: new THREE.Vector3(t.x, 0, t.z), range: 3.6, searchTime: 0.2, searchLabel: 'Taking a seat…',
-      prompt: () => `<b>Hold ${keyName('use')}</b> ${NAMES[t.game]}`,
-      open: (by) => {
-        if (!by.isPlayer) return;
-        if (t.game === 'poker') { if (this.champ && this.champ.alive) this.openPanel(this.champ, 'poker'); }
-        else if (raid.openTable) raid.openTable(t.game);
-      },
+      prompt: () => `<b>Hold ${keyName('use')}</b> 🂡 Poker Showdown vs the House`,
+      open: (by) => { if (by.isPlayer && this.champ && this.champ.alive) this.openPanel(this.champ, 'poker'); },
     }));
     this.onKey = (e) => this.key(e);
     window.addEventListener('keydown', this.onKey);
@@ -108,6 +106,7 @@ export class Duel {
 
   dispose() {
     window.removeEventListener('keydown', this.onKey);
+    this.tables.dispose();
     $('duelInvite').hidden = true;
     $('duelStatus').hidden = true;
     $('duelPanel').hidden = true;
@@ -145,7 +144,7 @@ export class Duel {
 
   interactables() {
     const raid = this.raid;
-    const out = [this.exitSpot, ...this.tableSpots];
+    const out = [this.exitSpot, ...this.tableSpots, ...this.tables.interactables()];
     const v = this.view;
     const me = raid.player && raid.player.name;
     if (v && v.ph === 'bets' && v.a !== me && v.b !== me) out.push(...this.betSpots);
@@ -539,6 +538,7 @@ export class Duel {
   }
 
   update(dt) {
+    this.tables.update(dt);
     // Invites time out.
     if (this.invite && performance.now() > this.invite.until) this.answer(false);
     if (!this.referee) { this.render(); return; }

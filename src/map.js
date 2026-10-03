@@ -146,7 +146,7 @@ export const MAPS = {
     raidTime: 600, raiders: 7, hostile: 0.75,
     // The best loot in the game (everything a tier up, an extra item per search), and raiders a
     // notch less sharp so it's a fair fight in close quarters.
-    lootBonus: 1, lootRolls: 1, botSkill: 0.7, botAim: 1.7,
+    lootBonus: 1, lootRolls: 1, botSkill: 0.7, botAim: 2.0,
   },
   lounge: {
     name: 'High Roller Lounge', icon: '🎩', size: 'Social', danger: 'Safe', half: 60, wilds: 'The Lounge', indoor: true,
@@ -3170,8 +3170,21 @@ function theLounge(k) {
       box(sx, sz, 1.4, 1.8, 2.4);
     }
   }
+  // Every Back Room game has a table here, plus the Showdown table for poker. The games themselves
+  // (wheels, cards, rockets, reels) are built on top by tables.js; the reels and Plinko are full
+  // cabinets of their own, so they get no round table.
+  const tables = [
+    { x: -34, z: -32, game: 'blackjack', label: 'BLACKJACK', color: '#5ee27a' },
+    { x: 34, z: -32, game: 'roulette', label: 'ROULETTE', color: '#ff5d5d' },
+    { x: -34, z: 32, game: 'crash', label: 'CRASH', color: '#2ee6d6' },
+    { x: 34, z: 32, game: 'mines', label: 'MINES', color: '#c77dff' },
+    { x: -24, z: 0, game: 'plinko', label: 'PLINKO', color: '#ff9f1c' },
+    { x: 24, z: 0, game: 'poker', label: 'POKER SHOWDOWN', color: '#ffd23f' },
+    { x: 0, z: -34, game: 'slots', label: 'LOOT REELS', color: '#ff3fa4' },
+  ];
+  const CABINETS = ['slots', 'plinko'];
   const felt = toon(0x1f8a4c);
-  for (const [tx, tz] of [[-34, -32], [34, -32], [-34, 32], [34, 32], [-24, 0], [24, 0], [0, -34]]) {
+  for (const { x: tx, z: tz } of tables.filter((t) => !CABINETS.includes(t.game))) {
     const leg = part(new THREE.CylinderGeometry(0.8, 1.1, 0.9, 14), 0x2b2140);
     leg.position.set(tx, 0.45, tz);
     const rimT = part(new THREE.CylinderGeometry(2.6, 2.6, 0.22, 28), 0x6b3a1e);
@@ -3202,22 +3215,14 @@ function theLounge(k) {
   flat(0, 22, 6, 6, toon(0xffd23f), 0.05);
   zones.push({ name: 'High Roller Lounge', x: 0, z: 0, w: H * 2, d: H * 2, tier: 1 });
 
-  // Every Back Room game has a table here, plus the Showdown table for poker.
-  const tables = [
-    { x: -34, z: -32, game: 'blackjack', label: 'BLACKJACK', color: '#5ee27a' },
-    { x: 34, z: -32, game: 'roulette', label: 'ROULETTE', color: '#ff5d5d' },
-    { x: -34, z: 32, game: 'crash', label: 'CRASH', color: '#2ee6d6' },
-    { x: 34, z: 32, game: 'mines', label: 'MINES', color: '#c77dff' },
-    { x: -24, z: 0, game: 'plinko', label: 'PLINKO', color: '#ff9f1c' },
-    { x: 24, z: 0, game: 'poker', label: 'POKER SHOWDOWN', color: '#ffd23f' },
-    { x: 0, z: -34, game: 'slots', label: 'LOOT REELS', color: '#ff3fa4' },
-  ];
   for (const t of tables) {
+    // Hung up high, above the scoreboard each game puts over its table.
+    const y = CABINETS.includes(t.game) ? 7.2 : 6.2;
     const sg = neonSign(t.label, t.color, Math.max(6, t.label.length * 0.75));
-    sg.position.set(t.x, 4.2, t.z);
+    sg.position.set(t.x, y, t.z);
     statics.add(sg);
     const sg2 = neonSign(t.label, t.color, Math.max(6, t.label.length * 0.75));
-    sg2.position.set(t.x, 4.2, t.z);
+    sg2.position.set(t.x, y, t.z);
     sg2.rotation.y = Math.PI;
     statics.add(sg2);
   }
@@ -3232,14 +3237,14 @@ function theLounge(k) {
     if (bz < 0) bs.rotation.y = Math.PI;
     statics.add(bs);
   }
-  const lights = [[0, 0, 0xff3fa4], [-35, -30, 0xffd23f], [35, -30, 0x2ee6d6], [-35, 30, 0xc77dff], [35, 30, 0xffd23f], [0, 40, 0x5ee27a]];
+  const lights = [[0, 0, 0xff3fa4], [-35, -30, 0xffd23f], [35, -30, 0x2ee6d6], [-35, 30, 0xc77dff], [35, 30, 0xffd23f], [0, 40, 0x5ee27a], [-26, 50, 0xfff1d6]];
   return {
     casino: { x: 0, z: 0, w: 0, d: 0, doors: [] },
     vault: { x: 0, z: -5000, doorZ: -5000 },
     extracts: [],
     lights,
     spawns: [[-40, 40], [40, 40], [-40, -40], [40, -40], [-20, 45], [20, 45], [-45, 0], [45, 0]],
-    lounge: { arena: { x: 0, z: 0, r: R }, champion: { x: 0, z: 22 }, exit: { x: 0, z: H - 3.5 }, tables },
+    lounge: { arena: { x: 0, z: 0, r: R }, champion: { x: 0, z: 22 }, exit: { x: 0, z: H - 3.5 }, tables, armory: { x: -26, z: H - 4.5, rot: Math.PI } },
   };
 }
 

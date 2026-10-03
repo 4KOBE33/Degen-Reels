@@ -75,12 +75,22 @@ export class NavGrid {
     return null;
   }
 
-  // Straight walkable line between two cells?
+  // Straight walkable line between two cells? Checked on the grid first (quick), then along the
+  // actual line with room for a body, so pulled-tight paths don't clip wall corners.
   clear(ax, az, bx, bz) {
     const n = Math.max(Math.abs(bx - ax), Math.abs(bz - az)) * 2;
     for (let i = 1; i < n; i++) {
       const t = i / n;
       if (!this.walkable(Math.round(ax + (bx - ax) * t), Math.round(az + (bz - az) * t))) return false;
+    }
+    const x0 = ax * CELL;
+    const z0 = az * CELL;
+    const x1 = bx * CELL;
+    const z1 = bz * CELL;
+    const steps = Math.ceil(Math.hypot(x1 - x0, z1 - z0) / 0.6);
+    for (let i = 1; i < steps; i++) {
+      const t = i / steps;
+      if (!this.map.isFree(x0 + (x1 - x0) * t, z0 + (z1 - z0) * t, 0.6)) return false;
     }
     return true;
   }

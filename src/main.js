@@ -105,6 +105,8 @@ applySettings();
 let overlay = null; // 'bag' | 'map' | null
 
 function setOverlay(name) {
+  // Getting up from a Lounge table.
+  if (overlay === 'seat' && name !== 'seat' && raid.duel) raid.duel.tables.leave();
   overlay = name;
   if (name) tutorial.note(name);
   $('bag').hidden = name !== 'bag';
@@ -134,6 +136,11 @@ window.addEventListener('keydown', (e) => {
 window.addEventListener('keydown', (e) => { if (e.code === 'Space' || e.code === 'Escape' || e.code === 'Enter') raid.skipKillcam(); });
 window.addEventListener('mousedown', () => raid.skipKillcam());
 window.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && overlay === 'seat') {
+    if (raid.duel && !raid.duel.tables.canLeave()) return;
+    setOverlay(null);
+    return;
+  }
   if (e.key === 'Escape' && overlay) {
     overlay = null;
     $('bag').hidden = true;
@@ -203,6 +210,7 @@ function switchMap(id, seed = null) {
   raid.camera = camera;
   raid.setOverlay = setOverlay;
   raid.openTable = openTable;
+  raid.casino = hub;
   controller.raid = raid;
   if (typeof voice !== 'undefined') voice.raid = raid;
   applyQuality();
@@ -221,9 +229,42 @@ voice.onChange = (msg) => {
 };
 window.voice = voice;
 window.music = music;
+// Everyone in a party has to be on the same build: each game builds the map itself from the shared
+// seed, so a different build means a different map (crates that don't line up, loot and machines
+// inside walls). Members say which build they're on; anyone who doesn't answer is on an old one.
+const partyBuilds = new Map(); // member id -> build
+const partySeen = new Map(); // member id -> when we first saw them
+let verRoster = '';
+function wrongBuild() {
+  const r = net.room;
+  if (!r) return [];
+  const now = performance.now();
+  return r.members.filter((m) => m.id !== net.id && (partyBuilds.has(m.id) ? partyBuilds.get(m.id) !== BUILD : now - (partySeen.get(m.id) || now) > 4000));
+}
+net.on('room', (r) => {
+  if (!r) { partyBuilds.clear(); partySeen.clear(); verRoster = ''; return; }
+  for (const m of r.members) if (!partySeen.has(m.id)) partySeen.set(m.id, performance.now());
+  const key = r.members.map((m) => m.id).join(',');
+  if (key !== verRoster) { verRoster = key; net.to('all', { k: 'ver', b: BUILD }); }
+  // Re-check once the answers have had time to come in.
+  setTimeout(() => { if (!$('hub').hidden && hub.tab === 'loadout') hub.render(); }, 4500);
+});
+net.on('msg', ({ from, d }) => {
+  if (!d || d.k !== 'ver') return;
+  const first = !partyBuilds.has(from);
+  partyBuilds.set(from, d.b);
+  if (first) net.to(from, { k: 'ver', b: BUILD });
+  if (!$('hub').hidden && hub.tab === 'loadout') hub.render();
+});
+const buildFix = (list) => `${list.map((m) => m.name).join(', ')} ${list.length > 1 ? 'are' : 'is'} on a different version of the game (you're on Build ${BUILD}). Everyone open the same link and refresh the page, then try again.`;
+
 // The leader's start: everyone (leader included) launches from the server's echo.
 net.on('start', (info) => {
   if (raid.active) return;
+  if (info.build !== BUILD) {
+    hub.toast(`Can't drop in: the leader is on ${info.build ? `Build ${info.build}` : 'an older build'} and you're on Build ${BUILD}. You'd see a different map. Both of you refresh the same link.`);
+    return;
+  }
   hub.launch(info);
 });
 net.on('disconnected', () => {
@@ -286,6 +327,7 @@ function askToJoin(late) {
 net.on('msg', ({ d }) => {
   if (!d || raid.active) return;
   if (d.k === 'joinInfo') {
+    if (d.info.build !== BUILD) { hub.toast(`Can't drop in: the leader is on ${d.info.build ? `Build ${d.info.build}` : 'an older build'} and you're on Build ${BUILD}. Both of you refresh the same link.`); return; }
     const restore = readBackup(net.room && net.room.code);
     hub.launch({ ...d.info, join: { pos: d.pos, time: d.time, el: d.el, opened: d.opened, vault: d.vault, pickups: d.pickups, restore } });
   } else if (d.k === 'nojoin') hub.toast(d.why);
@@ -295,12 +337,14 @@ const hub = new Hub({
   net,
   // Leader hit DEPLOY SQUAD: pick the shared seed, exits and drop point, and tell the party.
   onPartyStart() {
+    const bad = wrongBuild();
+    if (bad.length) { hub.toast(buildFix(bad)); return; }
     const mapId = save.get().selectedMap;
     const seed = Math.floor(Math.random() * 2 ** 31);
     const exits = [0, 1, 2, 3].sort(() => Math.random() - 0.5).slice(0, 2);
     const spawns = raid.mapId === mapId ? raid.map.spawns : null;
     const spawn = spawns ? spawns[Math.floor(Math.random() * spawns.length)] : null;
-    net.start({ mapId, seed, exits, spawn });
+    net.start({ mapId, seed, exits, spawn, build: BUILD });
   },
   onSettings() { applySettings(); voice.apply(); },
   onJoinRaid() { askToJoin(true); },
@@ -346,6 +390,11 @@ const hub = new Hub({
 });
 
 window.hub = hub;
+// The Lounge tables bet out of the same bank as the Back Room.
+raid.casino = hub;
+hub.raidToast = (text) => hud.toast(text);
+hub.wrongBuild = wrongBuild;
+hub.partyBuilds = partyBuilds;
 
 // Lounge tables: the Back Room game, right there on the casino floor.
 function openTable(game) {
@@ -546,11 +595,13 @@ function step(now, draw = true) {
   if (draw) autoQuality(dt, rawDt);
   last = now;
   const inRaid = raid.active;
-  const paused = inRaid && (!controller.locked || !!overlay);
+  // Sitting at a Lounge table: the mouse is free for the panel, but the world keeps going.
+  const seated = inRaid && overlay === 'seat' && raid.duel && raid.duel.tables.seat;
+  const paused = inRaid && !seated && (!controller.locked || !!overlay);
 
   // Party raids never pause: the world is shared, so the pause menu only stops your controls.
-  if (!paused && inRaid && !kcLive()) controller.update(dt);
-  else if (inRaid && session && raid.player) { raid.player.move.set(0, 0); raid.player.aiming = false; }
+  if (!paused && !seated && inRaid && !kcLive()) controller.update(dt);
+  else if (inRaid && (session || seated) && raid.player) { raid.player.move.set(0, 0); raid.player.aiming = false; }
   if (!paused || session) raid.update(dt);
   if (wasActive && !raid.active) {
     syncPauseSliders();
@@ -581,12 +632,20 @@ function step(now, draw = true) {
   }
   // Offer it on the results screen while someone's still in there.
   if (!$('results').hidden) $('resultsSpectate').hidden = !squad().length;
+  // The Lounge table camera shifts the picture up; put it back once we're up from the table.
+  if (!seated && camera.view && camera.view.enabled) camera.clearViewOffset();
   if (spectating && $('hub').hidden) {
     spectateView(dt);
   } else if (kc && $('hub').hidden) {
     raid.killcamView(dt, camera);
     if (raid.player) raid.player.char.firstPerson(false);
+  } else if (seated && $('hub').hidden) {
+    raid.duel.tables.camera(camera, dt);
+    // Out of the way of your own view (everyone else still sees you sitting there).
+    raid.player.char.root.visible = false;
+    hud.update(dt, raid);
   } else if (raid.player && $('hub').hidden) {
+    if (raid.duel) raid.duel.tables.camCur = null;
     controller.updateCamera(dt);
     hud.update(dt, raid);
   } else {

@@ -29,6 +29,7 @@ import { keyName } from './keys.js';
 import { recordRaid } from './progress.js';
 import { randomLook } from './looks.js';
 import { Duel } from './duel.js';
+import { Kidnap, mobDebt } from './mob.js';
 
 const raycaster = new THREE.Raycaster();
 const tmp = new THREE.Vector3();
@@ -421,6 +422,9 @@ export class Raid {
     this.active = true;
     this.frozen = false;
     this.result = null;
+    // Owe the Mob and walked into a real raid anyway? They'll be along shortly.
+    if (this.kidnap) this.kidnap.cleanup();
+    this.kidnap = !this.map.safe && !opts.tutorial && mobDebt() ? new Kidnap(this) : null;
     save.update((d) => { d.stats.raids++; });
     this.hud.raidIntro(this);
   }
@@ -608,7 +612,8 @@ export class Raid {
   extract(where, riders = []) {
     if (!this.active) return;
     const p = this.player;
-    const items = [...p.weapons.filter(Boolean), ...p.backpack, ...(p.pocket || []).filter(Boolean)];
+    // House guns from the Lounge Armory stay in the Lounge.
+    const items = [...p.weapons.filter(Boolean), ...p.backpack, ...(p.pocket || []).filter(Boolean)].filter((it) => !it.house);
     const value = items.reduce((n, it) => n + itemInfo(it).value, 0) + p.chips;
     sfx.extract();
     save.update((d) => {
@@ -1445,6 +1450,7 @@ export class Raid {
   }
 
   update(dt) {
+    if (this.kidnap) this.kidnap.update(dt);
     const p = this.player;
     const kc = this.killcam;
     const solo = !this.net;

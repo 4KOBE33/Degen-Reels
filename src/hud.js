@@ -706,6 +706,9 @@ export class Hud {
     } else if (r.reason === 'time') {
       title = '⏰ LOCKED DOWN';
       line = 'The House locked the place down with you inside. Everything you carried is gone.';
+    } else if (r.reason === 'kidnapped') {
+      title = '🤌 KIDNAPPED';
+      line = 'You went in owing the Mob. They threw you in the back of a van and took everything you were carrying. Consider the debt paid.';
     } else if (r.reason === 'abandon') {
       title = '🏳️ ABANDONED';
       line = 'You bailed on the raid. Everything you carried is gone.';

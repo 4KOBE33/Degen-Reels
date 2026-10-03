@@ -1036,3 +1036,128 @@ h3 small.bank { color: var(--gold); opacity: 1; font-weight: 900; }
 #bigmap h2 { font-size: 30px; margin: 0; }
 #bigmapCanvas { width: min(820px, 100%, calc(100vh - 170px)); }
 #bigmap .legend { margin: 4px 0; }
+
+/* ---------- Lounge tables: the bet panel at the bottom while you sit at a game ---------- */
+#tablePanel {
+  position: fixed; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 30;
+  width: min(640px, calc(100vw - 32px)); max-height: 46vh; overflow-y: auto;
+  background: rgba(27, 15, 43, 0.92); border: 4px solid var(--ink); outline: 3px solid var(--gold);
+  border-radius: 18px; padding: 12px 16px 14px; box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+}
+#tablePanel .tphead { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+#tablePanel .tphead b { font: 400 22px var(--display); color: var(--gold); letter-spacing: 0.5px; }
+#tablePanel .tphead span { font-weight: 800; opacity: 0.85; }
+#tablePanel .tpleave { margin: 0 0 0 auto; padding: 4px 12px; font-size: 14px; }
+#tablePanel .tprow { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin-top: 8px; }
+#tablePanel .tprow .btn.big { margin-top: 0; padding: 10px; font-size: 22px; }
+#tablePanel .tpchips { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; padding: 6px 0 2px; }
+#tablePanel .tpchips .cchip { width: 44px; height: 44px; font-size: 13px; }
+#tablePanel .tpnote { display: block; text-align: center; opacity: 0.75; font-size: 13px; margin: 6px 0 0; }
+#tablePanel .tpscore { text-align: center; font-weight: 800; font-size: 18px; }
+#tablePanel .tpscore b { font: 400 30px var(--display); color: var(--gold); margin: 0 4px; }
+#tablePanel .tpscore small { display: block; opacity: 0.7; }
+#tablePanel .tpick { padding: 8px 14px; font-size: 18px; }
+#tablePanel .tpick.red { background: var(--red); color: var(--cream); }
+#tablePanel .tpick.black { background: #2b2140; color: var(--cream); }
+#tablePanel .tpick.green { background: #16a34a; color: var(--cream); }
+#tablePanel .tpick small { opacity: 0.75; font-size: 13px; }
+#tablePanel .tpgun { padding: 6px 12px; font-size: 15px; }
+#tablePanel .tpmines { display: flex; gap: 14px; align-items: center; justify-content: center; }
+#tablePanel .tmgrid { display: grid; grid-template-columns: repeat(5, 40px); gap: 5px; }
+#tablePanel .tmine { width: 40px; height: 40px; border-radius: 8px; border: 3px solid var(--ink); background: #5a2a8a; cursor: pointer; font-size: 18px; }
+#tablePanel .tmine:hover:not(:disabled) { background: #7b3cb5; }
+#tablePanel .tmine.gem { background: #2ee6d6; }
+#tablePanel .tpside { display: flex; flex-direction: column; gap: 8px; min-width: 190px; }
+body.seated #crosshair, body.seated #prompt, body.seated #keyhint { display: none !important; }
+
+/* ---------- Back Room: the game on the left, bets on the right, all on one screen ---------- */
+.hubbody[data-tab="backroom"] { --gh: max(240px, calc(100vh - 340px)); }
+.backroom { height: 100%; min-height: 0; grid-template-rows: auto minmax(0, 1fr); }
+.table.split { display: grid; grid-template-columns: minmax(0, 1fr) 310px; gap: 14px; align-items: stretch; align-content: stretch; justify-items: stretch; min-height: 0; padding: 10px; }
+.gview { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 8px; min-width: 0; min-height: 0; }
+.gctrl { display: flex; flex-direction: column; gap: 10px; justify-content: center; align-items: stretch; min-height: 0; overflow-y: auto; padding: 12px; border-radius: 14px; background: rgba(10, 4, 22, 0.4); border: 1px solid rgba(255, 255, 255, 0.07); }
+.gctrl .betchips { display: grid; grid-template-columns: repeat(auto-fill, 48px); gap: 8px 10px; justify-content: center; }
+.gctrl .betchips > small { grid-column: 1 / -1; text-align: center; margin: 0; }
+.gctrl .btn.big { margin-top: 0; padding: 12px; font-size: 22px; }
+.gctrl .msg, .gctrl .hint { margin: 0; text-align: center; }
+.gctrl .hint { font-size: 13px; }
+.gctrl .recent { margin-top: 2px; }
+.gctrl .row.gbtns { display: flex; flex-wrap: wrap; gap: 8px; justify-content: center; margin: 0; }
+.gctrl .row.gbtns .btn:not(.big) { flex: 1 1 40%; }
+.gctrl .minecount { justify-content: center; flex-wrap: wrap; }
+.gctrl .machines { grid-template-columns: 1fr; max-width: none; gap: 6px; }
+.gctrl .machine { padding: 6px 10px; grid-template-columns: 1fr auto; text-align: left; align-items: center; }
+.gctrl .machine small { grid-column: 1 / -1; }
+.gctrl .prize { padding: 8px 10px; gap: 10px; }
+.gctrl .prize .pi { font-size: 34px; }
+.gctrl .prize b { font-size: 18px; }
+.gctrl .prize.empty { font-size: 13px; }
+.gctrl .mside { min-width: 0; }
+.gctrl .rbets { min-width: 0; }
+.shoenote { text-align: center; opacity: 0.6; font-weight: 800; font-size: 12px; }
+/* Size each game to the room it has. */
+.gview .cabinet { max-width: 380px; }
+.gview .felt { max-width: 640px; max-height: var(--gh); }
+.gview .wheelwrap { width: min(var(--gh), 330px); height: min(var(--gh), 330px); }
+.gview .mgrid { --mt: clamp(34px, calc((var(--gh) - 70px) / 5), 64px); grid-template-columns: repeat(5, var(--mt)); }
+.gview .mtile { width: var(--mt); height: var(--mt); font-size: calc(var(--mt) * 0.5); }
+.gview .plinko { width: auto; max-width: 100%; height: var(--gh); aspect-ratio: 560 / 430; }
+.gview .plinko canvas { width: 100%; height: 100%; display: block; }
+.gview .crashbox { max-width: 100%; width: min(100%, calc(var(--gh) * 2)); }
+.gview .crashgraph { width: 100%; margin: 0; }
+@media (max-height: 760px) {
+  .gview .pcard { width: 54px; height: 78px; }
+  .gview .pcard em { font-size: 28px; }
+  .gview .felt { padding: 8px 12px 10px; }
+}
+@media (max-width: 900px) {
+  .table.split { grid-template-columns: 1fr; }
+  .backroom { height: auto; }
+  .hubbody[data-tab="backroom"] { --gh: 300px; }
+}
+.gctrl { justify-content: safe center; }
+.gctrl .betchips { grid-template-columns: repeat(auto-fill, 40px); gap: 8px 7px; }
+.gctrl .cchip { width: 40px; height: 40px; font-size: 12px; border-width: 3px; outline-width: 3px; }
+.gctrl .cchip i { font-size: 8px; }
+.gctrl .mside { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 6px; }
+.gctrl .mside .btn.big { grid-column: 1 / -1; }
+.gctrl .mstat { padding: 4px 6px; text-align: center; }
+.gctrl .mstat small { font-size: 10px; letter-spacing: 1px; }
+.gctrl .mstat b { font-size: 20px; }
+.gctrl .rbets { gap: 6px; }
+.gctrl .rbet { padding: 6px 8px; min-height: 0; }
+.gctrl .rbet b { font-size: 18px; }
+.gctrl .rbet small { font-size: 11px; }
+.gctrl .rbet.green { grid-column: 1 / -1; }
+.gctrl .recent { flex-wrap: wrap; }
+@media (max-height: 740px) {
+  .gctrl { gap: 7px; padding: 8px 10px; }
+  .gctrl .btn.big { padding: 8px; font-size: 20px; }
+  .gctrl .hint { display: none; }
+  .gctrl .msg { font-size: 14px !important; }
+  .gctrl .rbet { padding: 4px 8px; }
+  .gctrl .machine { padding: 4px 10px; }
+  .gctrl .prize { padding: 6px 10px; }
+  .gctrl .prize .pi { font-size: 26px; }
+}
+@media (max-height: 740px) {
+  .gctrl .machines { gap: 3px; }
+  .gctrl .machine b { font-size: 15px; }
+  .gctrl .prize b { font-size: 16px; }
+}
+.pm.oldbuild { outline: 2px solid #ffb347; }
+.pbuild { margin: 6px 0 0; padding: 6px 10px; border-radius: 10px; background: rgba(255, 179, 71, 0.15); color: #ffcf8a; font-weight: 800; font-size: 13px; }
+
+/* ---------- The Mob ---------- */
+.mob { position: relative; display: flex; align-items: center; gap: 8px; padding: 6px 12px; border-radius: 12px; border: 3px solid var(--ink); background: #1a1a22; color: var(--cream); font: 800 14px var(--body); overflow: hidden; white-space: nowrap; }
+.mob.borrow { cursor: pointer; touch-action: none; user-select: none; }
+.mob.borrow:hover { background: #24242f; }
+.mob.borrow i { position: absolute; left: 0; top: 0; bottom: 0; width: 0%; background: linear-gradient(90deg, rgba(212, 166, 58, 0.25), rgba(212, 166, 58, 0.55)); pointer-events: none; }
+.mob.borrow span { position: relative; }
+.mob small { opacity: 0.65; font-size: 11px; margin-left: 4px; }
+.mob.owing { background: linear-gradient(135deg, #3a1218, #1a1a22); border-color: #7a1f2b; }
+.mob.owing b { color: #ff7b85; }
+/* Kidnapped: the screen goes dark while the goons close in. */
+body.kidnapfade::after { content: '🤌'; position: fixed; inset: 0; z-index: 50; display: grid; place-items: center; font-size: 120px; background: radial-gradient(circle, rgba(0, 0, 0, 0.35), rgba(0, 0, 0, 0.92)); animation: kidnapIn 3s ease-in forwards; pointer-events: none; }
+@keyframes kidnapIn { from { opacity: 0; } to { opacity: 1; } }

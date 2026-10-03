@@ -6,6 +6,9 @@ import * as THREE from 'three';
 import { WEAPONS, RAIDERS, PLAYER } from './config.js';
 
 const RESCUE_LINES = ['Hang on, I got you!', "Don't bleed on my shoes.", 'Coming! Stay down!', 'You owe me one.', 'Nobody gets left in Lost Vegas.'];
+// Bots' extra aim error, and extra pause between shots, by gun.
+const BOT_GUN_AIM = { revolver: 1.9, pistol: 1.3, rifle: 1.6, sniper: 1.8, ar: 1.15 };
+const BOT_GUN_PAUSE = { revolver: 0.3, rifle: 0.25, sniper: 0.5 };
 const REVIVED_LINES = ['Up you get, high roller.', "The House isn't done with you yet.", 'Try not to do that again.', 'Back in the game!', 'That one was free.'];
 const FINISH_LINES = ['Nothing personal.', 'House rules.', 'Should have stayed home.', 'Your loot looks better on me.'];
 const say = (raid, c, lines) => raid.feed(`💬 ${c.name}: "${lines[Math.floor(Math.random() * lines.length)]}"`);
@@ -98,9 +101,33 @@ export class RaiderBrain {
     const dx = wp.x - c.pos.x;
     const dz = wp.z - c.pos.z;
     const wd = Math.hypot(dx, dz);
-    if (wd > 0.4) c.move.set(dx / wd, dz / wd);
+    if (wd > 0.4) {
+      c.move.set(dx / wd, dz / wd);
+      if (!this.avoidWalls()) this.pathAge = Math.max(this.pathAge, 3.5); // boxed in: find a new way round soon
+    }
     c.sprint = sprint === null ? d > 12 : sprint;
     return d;
+  }
+
+  // Look a step ahead before walking into something: if the way is blocked, slide along it at the
+  // smallest angle that's open. Returns false if every way forward is blocked.
+  avoidWalls() {
+    const { c, raid } = this;
+    const mx = c.move.x;
+    const mz = c.move.y;
+    if (mx * mx + mz * mz < 0.01) return true;
+    const ahead = c.isSprinting ? 1.4 : 1.0;
+    const free = (x, z) => raid.map.isFree(c.pos.x + x * ahead, c.pos.z + z * ahead, 0.45);
+    if (free(mx, mz)) return true;
+    const side = this.strafe || 1;
+    for (const a of [0.45, -0.45, 0.9, -0.9, 1.4, -1.4]) {
+      const ang = a * side;
+      const x = mx * Math.cos(ang) - mz * Math.sin(ang);
+      const z = mx * Math.sin(ang) + mz * Math.cos(ang);
+      if (free(x, z)) { c.move.set(x, z); return true; }
+    }
+    c.move.set(0, 0);
+    return false;
   }
 
   faceMove(dt) {
@@ -324,11 +351,10 @@ export class RaiderBrain {
       }
       const len = Math.hypot(mx, mz);
       if (len > 0) c.move.set(mx / len, mz / len);
-      // Don't strafe into walls.
-      if (len > 0 && !raid.map.isFree(c.pos.x + c.move.x * 1.6, c.pos.z + c.move.y * 1.6, 0.6)) {
+      // Don't strafe or back into walls: slide along them, and switch strafe direction when boxed in.
+      if (len > 0 && !this.avoidWalls()) {
         this.strafe *= -1;
         this.strafeIn = 0.4;
-        c.move.set(dx / d, dz / d);
       }
       c.sprint = d > ideal + 10 || (hurting && this.los);
     }
@@ -338,13 +364,14 @@ export class RaiderBrain {
     const aimed = Math.abs(angleDiff(c.yaw, wantYaw)) < 0.12 + (1 - this.skill) * 0.15;
     const range = w.melee ? w.range + 0.5 : w.range || 60;
     if (this.los && aimed && d < range && this.reaction <= 0 && !c.using) {
-      const err = RAIDERS.accuracy * (1.5 - this.skill) * (0.35 + d / 30) * (c.isSprinting ? 1.6 : 1) * (this.raid.map.botAim || 1);
+      // Precise guns (one big bullet) get extra wobble so bots aren't snipers with them.
+      const err = RAIDERS.accuracy * (1.5 - this.skill) * (0.35 + d / 30) * (c.isSprinting ? 1.6 : 1) * (this.raid.map.botAim || 1) * (BOT_GUN_AIM[c.weapon] || 1);
       aim.x += (Math.random() - 0.5) * err * d;
       aim.y += (Math.random() - 0.5) * err * d * 0.6;
       aim.z += (Math.random() - 0.5) * err * d;
       raid.fire(c, origin, aim.sub(origin).normalize());
       // A beat between taps on single-shot guns, so they aren't aimbots.
-      if (c.weapon !== 'smg') this.reaction = 0.08 + Math.random() * (0.35 - this.skill * 0.2);
+      if (c.weapon !== 'smg') this.reaction = 0.08 + Math.random() * (0.35 - this.skill * 0.2) + (BOT_GUN_PAUSE[c.weapon] || 0);
     }
     // Throwables: flush people out of cover.
     if (d > 8 && d < 26 && c.currentThrowable() && Math.random() < dt * (this.los ? 0.1 : 0.25)) {
