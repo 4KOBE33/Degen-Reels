@@ -746,7 +746,7 @@ export class Session {
       }
       case 'gws': {
         const w = raid.gunWheels[e.i];
-        if (w) w.start(e.slice, e.gun);
+        if (w) w.start(e.slice, e.gun, { prize: e.prize, chips: e.chips, owner: e.owner, name: e.name });
         break;
       }
       case 'vo': raid.openVault({ name: e.by || 'Someone' }, true); break;

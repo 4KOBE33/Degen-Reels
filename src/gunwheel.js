@@ -3,7 +3,7 @@
 import * as THREE from 'three';
 import { WEAPONS } from './config.js';
 import { part, canvasTexture } from './toon.js';
-import { makeGun, itemInfo, isGun } from './items.js';
+import { makeGun, itemInfo, isGun, addToList } from './items.js';
 import { sfx } from './audio.js';
 import { keyName } from './keys.js';
 
@@ -143,40 +143,58 @@ export class GunWheel {
   }
 
   use(c) {
-    if (this.spin) return 'Already spinning';
-    const gun = c.weapons[c.active];
+    if (this.spin || this.pending) return 'Already spinning';
+    const slot = c.active;
+    const gun = c.weapons[slot];
     if (!isGun(gun)) return 'Hold the gun you want to bet';
     if (gun.free) return 'Free loadout guns can\'t go on the wheel';
-    c.weapons[c.active] = null;
+    c.weapons[slot] = null;
     c.refreshWeapon();
     const raid = this.raid;
-    const i = raid.gunWheels.indexOf(this);
-    // Party client: the host spins it and drops the prize.
+    // Remember what went in: the prize goes back in that hand, and if the spin never happens
+    // (a dropped connection) the gun comes back.
+    this.pending = { gun, slot, at: performance.now() };
     if (raid.isClient && c.isPlayer) {
-      raid.net.send({ k: 'gw', i, gun });
-      this.mine = true;
+      raid.net.send({ k: 'gw', i: raid.gunWheels.indexOf(this), gun });
       return null;
     }
     this.roll(c, gun);
     return null;
   }
 
-  // Host or solo: pick where it lands.
+  // Host or solo: decide where it lands and what it pays, then tell everyone.
   roll(by, gun) {
     const slice = Math.floor(Math.random() * GW_SLICES.length);
-    if (this.raid.isHost) this.raid.net.rel({ k: 'gws', i: this.raid.gunWheels.indexOf(this), slice, gun });
-    this.start(slice, gun, by);
+    const out = GW_SLICES[slice];
+    const prize = wheelPrize(gun, out);
+    const over = gun.rarity + (GW_OUT[out].step || 0) - 3;
+    const chips = prize && over > 0 ? Math.round(itemInfo(gun).value * over) : 0;
+    const raid = this.raid;
+    const owner = by && by.isPlayer ? (raid.net ? raid.net.me : 'me') : by && by.owner;
+    if (raid.isHost) raid.net.rel({ k: 'gws', i: raid.gunWheels.indexOf(this), slice, gun, prize, chips, owner, name: by ? by.name : '' });
+    this.start(slice, gun, { prize, chips, owner, name: by ? by.name : '' });
   }
 
-  start(slice, gun, by = null) {
+  start(slice, gun, { prize = null, chips = 0, owner = null, name = '' } = {}) {
+    const raid = this.raid;
+    let mine = owner && owner === (raid.net ? raid.net.me : 'me');
+    if (mine && this.refunded) { mine = false; this.refunded = false; }
     // Land the pointer inside the slice, after a few full turns.
     const land = (slice + 0.2 + Math.random() * 0.6) * STEP;
     const base = this.angle - (this.angle % (Math.PI * 2));
-    this.spin = { t: 0, from: this.angle, to: base + Math.PI * 2 * 5 + land, slice, gun, by };
-    sfx.lever(this.position, this.raid.listener);
+    this.spin = { t: 0, from: this.angle, to: base + Math.PI * 2 * 5 + land, slice, gun, prize, chips, mine, name };
+    sfx.lever(this.position, raid.listener);
   }
 
   update(dt) {
+    // We bet a gun and never heard back (connection trouble): hand it back.
+    if (this.pending && !this.spin && performance.now() - this.pending.at > 9000) {
+      const p = this.raid.player;
+      if (p && p.alive) { this.give(p, this.pending.gun, this.pending.slot); this.raid.hud.toast('🎡 The wheel jammed. Your gun is back.'); }
+      this.pending = null;
+      this.refunded = true; // if the answer turns up late after all, don't pay twice
+
+    }
     this.blink += dt * (this.spin ? 14 : 2);
     const flash = this.flash > 0;
     this.flash = Math.max(0, (this.flash || 0) - dt);
@@ -196,29 +214,41 @@ export class GunWheel {
     if (k >= 1) this.finish();
   }
 
+  // Put a gun in your hands: the slot it was bet from, any free slot, the backpack, or at your feet.
+  give(p, gun, slot = p.active) {
+    if (slot !== undefined && !p.weapons[slot]) {
+      p.weapons[slot] = gun;
+      p.active = slot;
+      p.refreshWeapon();
+      return;
+    }
+    if (p.equip(gun) || addToList(p.backpack, gun, p.capacity)) return;
+    this.raid.dropItem(p.pos.clone(), gun, p.pos);
+  }
+
   finish() {
-    const { slice, gun, by } = this.spin;
+    const { slice, gun, prize, chips, mine, name } = this.spin;
     this.spin = null;
     const raid = this.raid;
     const out = GW_SLICES[slice];
     const o = GW_OUT[out];
     const top = this.position.clone().setY(4.6);
     raid.fx.number(top, `${o.icon} ${o.label}`, o.color === '#3a2a4f' ? '#ff7b85' : o.color, 1.6);
-    const mine = (by && by.isPlayer) || this.mine;
-    this.mine = false;
-    if (out === 'bust') sfx.deny(this.position, raid.listener);
+    if (out === 'bust' || !prize) sfx.deny(this.position, raid.listener);
     else if (out === 'jackpot') { this.flash = 2.5; raid.fx.confetti(top.clone()); sfx.jackpot(this.position, raid.listener); } else sfx.win(this.position, raid.listener);
-    // The host (or you, solo) drops the prize; everyone else just sees it land.
-    if (raid.isClient) {
-      if (mine) raid.hud.toast(out === 'bust' ? `💀 The wheel ate your ${itemInfo(gun).name}.` : `🎡 ${o.label}! Grab your new gun.`, out === 'jackpot' ? 'big' : '');
-      return;
+    if (name) raid.feed(`🎡 ${name} ${prize ? `spun a ${itemInfo(prize).name} on the Gun Wheel` : `lost a ${itemInfo(gun).name} to the Gun Wheel`}`);
+    if (!mine) return;
+    // Our spin: the winnings go straight into our hands.
+    const p = raid.player;
+    const slot = this.pending ? this.pending.slot : p.active;
+    this.pending = null;
+    if (prize && p.alive) {
+      this.give(p, { ...prize }, slot);
+      if (chips) p.chips += chips;
     }
-    const prize = wheelPrize(gun, out);
-    if (prize) raid.dropItem(this.position.clone().addScaledVector(this.front, 2.4), prize, this.position.clone().addScaledVector(this.front, 1.2).setY(1.5));
-    if (mine) {
-      raid.hud.toast(prize ? `🎡 ${o.label}! Your ${itemInfo(gun).name} became a ${itemInfo(prize).name}.` : `💀 BUST. The wheel ate your ${itemInfo(gun).name}.`, out === 'jackpot' || (prize && prize.rarity >= 3) ? 'big' : '');
-      raid.run.wheelSpins = (raid.run.wheelSpins || 0) + 1;
-    }
-    if (by && by.name) raid.feed(`🎡 ${by.name} ${prize ? `spun a ${itemInfo(prize).name} on the Gun Wheel` : `lost a ${itemInfo(gun).name} to the Gun Wheel`}`);
+    raid.hud.toast(prize
+      ? `🎡 ${o.label}! Your ${itemInfo(gun).name} became a ${itemInfo(prize).name}${chips ? ` (+🪙 ${chips})` : ''}. It's in your hands.`
+      : `💀 BUST. The wheel ate your ${itemInfo(gun).name}.`, out === 'jackpot' || (prize && prize.rarity >= 3) ? 'big' : '');
+    raid.run.wheelSpins = (raid.run.wheelSpins || 0) + 1;
   }
 }

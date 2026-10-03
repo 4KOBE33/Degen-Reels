@@ -332,7 +332,7 @@ export class Raid {
     this.throws.clear();
     for (const k of this.containers) k.reset();
     for (const s of this.slots) s.user = null;
-    for (const w of this.gunWheels) w.spin = null;
+    for (const w of this.gunWheels) { w.spin = null; w.pending = null; }
     this.closeVault();
     if (this.player) {
       this.scene.remove(this.player.char.root);
