@@ -756,7 +756,7 @@ export class Hub {
     return `${this.betChips(playing)}
       <div class="felt bjtable">
         <div class="hand"><span class="who">DEALER ${g ? `<b>${dealerVal}${playing ? ' + ?' : ''}</b>` : ''}</span><div class="cards">${g ? g.dealer.map((c, i) => cardHtml(c, playing && i === 1, i)).join('') : ghost}</div></div>
-        <div class="felttext">BLACKJACK PAYS 3 TO 2 · DEALER STANDS ON 17 · SPLIT ANY PAIR</div>
+        <div class="felttext">BLACKJACK PAYS 3 TO 2 · NO DEALER PEEK · ANY 21 PUSHES DEALER BLACKJACK</div>
         <div class="hands">${hands}</div>
       </div>
       <div class="row">${playing ? `<button class="btn" data-act="hit">Hit</button><button class="btn" data-act="stand">Stand</button>${canDouble ? `<button class="btn" data-act="double">Double · 🪙 ${fmt(h.bet)}</button>` : ''}${canSplit ? `<button class="btn split" data-act="split">✂️ Split · 🪙 ${fmt(h.bet)}</button>` : ''}`
@@ -1370,7 +1370,8 @@ export class Hub {
 
   settle() {
     const g = this.bj;
-    const live = g.hands.some((h) => handValue(h.cards) <= 21);
+    // The dealer only draws if some hand still needs beating (not bust, not a natural).
+    const live = g.hands.some((h) => handValue(h.cards) < 21 || (handValue(h.cards) === 21 && !(h.cards.length === 2 && !h.split)));
     if (live) while (handValue(g.dealer) < 17) g.dealer.push(drawCard());
     const dv = handValue(g.dealer);
     const dealerBJ = dv === 21 && g.dealer.length === 2;
@@ -1381,13 +1382,15 @@ export class Hub {
       let won = 0;
       if (p > 21) h.result = { text: 'BUST', cls: 'loss' };
       else if (p === 21 && h.cards.length === 2 && !h.split && !dealerBJ) { won = Math.floor(h.bet * 2.5); natural = true; h.result = { text: 'BLACKJACK!', cls: 'win' }; }
+      // House rule: no dealer peek, and a dealer blackjack is just 21, so any 21 of yours pushes it.
+      else if (dealerBJ && p === 21) { won = h.bet; h.result = { text: 'PUSH', cls: '' }; }
       else if (dv > 21 || p > dv) { won = h.bet * 2; h.result = { text: 'WIN', cls: 'win' }; }
       else if (p === dv) { won = h.bet; h.result = { text: 'PUSH', cls: '' }; }
       else h.result = { text: 'LOSE', cls: 'loss' };
       pay += won;
     }
     const net = pay - g.wagered;
-    const dealerText = dv > 21 ? `Dealer busts with ${dv}` : `Dealer has ${dv}`;
+    const dealerText = dealerBJ ? 'Dealer flips blackjack' : dv > 21 ? `Dealer busts with ${dv}` : `Dealer has ${dv}`;
     g.msg = net > 0 ? `${natural ? '🂡 BLACKJACK! ' : ''}${dealerText}. Won 🪙 ${fmt(net)}.` : net < 0 ? `${dealerText}. Lost 🪙 ${fmt(-net)}.` : `${dealerText}. Even money.`;
     g.win = net > 0 ? true : net < 0 ? false : null;
     if (pay) this.earn(pay);
