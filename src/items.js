@@ -137,13 +137,31 @@ export function addToList(list, item, capacity = Infinity) {
   return true;
 }
 
-// For merging stash items with no stack limit.
+// Into the stash: same stack limits as everywhere else (3 Chip Plates to a stack, 5 bandages...),
+// topping up existing stacks first, then starting new ones.
 export function addToStash(list, item) {
-  if (!isGun(item)) {
-    const same = list.find((o) => o.id === item.id);
-    if (same) { same.qty += item.qty; return; }
+  if (isGun(item)) { list.push({ ...item }); return; }
+  const def = ITEMS[item.id];
+  const cap = Math.max(1, (def && def.stack) || 1);
+  let left = Math.max(1, item.qty || 1);
+  for (const o of list) {
+    if (left <= 0) break;
+    if (o.id !== item.id || isGun(o) || !!o.free !== !!item.free) continue;
+    const n = Math.min(cap - (o.qty || 1), left);
+    if (n > 0) { o.qty = (o.qty || 1) + n; left -= n; }
   }
-  list.push({ ...item });
+  while (left > 0) {
+    const n = Math.min(cap, left);
+    list.push({ ...item, qty: n });
+    left -= n;
+  }
+}
+
+// Re-split a list into proper stacks (older saves kept everything in one pile).
+export function restack(list) {
+  const out = [];
+  for (const it of list || []) addToStash(out, it);
+  return out;
 }
 
 export function itemTitle(item) {

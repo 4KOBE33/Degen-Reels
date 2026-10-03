@@ -1,5 +1,6 @@
 // Your permanent profile: stash, settings, look, stats, XP, collection log and achievements.
 import { START_STASH, SETTINGS_DEFAULT } from './config.js';
+import { restack } from './items.js';
 
 const KEY = 'degen-reels-raid-v1';
 
@@ -34,6 +35,8 @@ function normalize(stored) {
   d.collection = { ...stored.collection };
   d.achievements = { ...stored.achievements };
   d.xp = stored.xp || 0;
+  // Stacks over the limit (from before stash stacks were capped) get split up.
+  d.stash = { ...d.stash, items: restack(d.stash.items) };
   return d;
 }
 

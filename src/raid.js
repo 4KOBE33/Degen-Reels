@@ -622,11 +622,7 @@ export class Raid {
         // Free-loadout gear you got out with is yours now.
         const it = { ...raw };
         delete it.free;
-        if (!isGun(it)) {
-          const same = d.stash.items.find((o) => o.id === it.id);
-          if (same) { same.qty += it.qty; continue; }
-        }
-        d.stash.items.push({ ...it });
+        addToStash(d.stash.items, it);
       }
     });
     this.finish({ success: true, where, items, chips: p.chips, value, riders });
