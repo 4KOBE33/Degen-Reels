@@ -144,6 +144,8 @@ export const ENEMIES = {
   roller: { name: 'Roulette Roller', hp: 75, speed: 10.5, damage: 14, melee: true, rate: 1.1, range: 2.1, aggro: 30, chips: [12, 30], loot: 0.3, head: 1.3, radius: 0.85, bar: 2.8 },
   // Bolted down on rooftops and monuments: slow, heavy, very long-range shots.
   turret: { name: 'Jackpot Turret', hp: 170, speed: 0, damage: 24, burst: 1, burstGap: 0, rate: 2.7, range: 55, aggro: 52, accuracy: 0.045, chips: [35, 80], loot: 0.6, head: 1.6, radius: 0.9, bar: 2.8, fixed: true },
+  // A tall elite that keeps its distance and flings a fan of five razor cards.
+  dealer: { name: 'The Dealer', hp: 300, speed: 3.6, damage: 8, burst: 1, burstGap: 0, rate: 2.3, range: 24, aggro: 28, accuracy: 0.035, pellets: 5, fan: 0.09, chips: [50, 110], loot: 0.9, head: 3.4, radius: 0.75, bar: 4.1 },
   boss: { name: 'The Pit Boss', hp: 3200, speed: 2.2, damage: 4, burst: 10, burstGap: 0.08, rate: 3.4, range: 40, aggro: 45, accuracy: 0.12, chips: [600, 900], loot: 1 },
 };
 

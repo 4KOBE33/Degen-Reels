@@ -1040,9 +1040,11 @@ export function buildMap(scene, mapId = 'vegas') {
   // Safety net: an exit circle with a building in it, or a spawn inside something solid, gets
   // nudged to the nearest clear ground.
   const solidAt = (x, z, r, minTop) => {
-    for (let dx = -r; dx <= r; dx += 1.5) {
-      for (let dz = -r; dz <= r; dz += 1.5) {
-        if (dx * dx + dz * dz > r * r) continue;
+    // The centre, plus a grid of points across the circle (the centre always counts, even for tiny r).
+    const pts = [[0, 0]];
+    for (let dx = -r; dx <= r; dx += 1.5) for (let dz = -r; dz <= r; dz += 1.5) if (dx * dx + dz * dz <= r * r) pts.push([dx, dz]);
+    for (const [dx, dz] of pts) {
+      {
         const px = x + dx;
         const pz = z + dz;
         for (const c of grid.get(cellKey(Math.floor(px / CELL), Math.floor(pz / CELL))) || []) {
@@ -1066,18 +1068,6 @@ export function buildMap(scene, mapId = 'vegas') {
     }
     return null;
   };
-  // Loot nobody can get to (boxed in by scenery) moves to the nearest open ground.
-  for (const k of containers) {
-    if (k.y > 0.5) continue;
-    let open = false;
-    for (let i = 0; i < 8 && !open; i++) {
-      const ang = (i / 8) * Math.PI * 2;
-      open = !solidAt(k.x + Math.cos(ang) * 1.4, k.z + Math.sin(ang) * 1.4, 0.45, 0.4);
-    }
-    if (open) continue;
-    const to = clearSpot(k.x, k.z, 1.6, 0.4);
-    if (to) [k.x, k.z] = to;
-  }
   for (const e of extracts) {
     const to = clearSpot(e.x, e.z, 8, 2.5);
     if (to) [e.x, e.z] = to;
@@ -1630,11 +1620,26 @@ export function buildMap(scene, mapId = 'vegas') {
     }
     zones.filter((q) => q.tier >= 2 && q.w * q.d < 5000).forEach((q, i) => {
       if (i % 4 === 0) enemies('bouncer', q.x, q.z + q.d / 2 + 3, 1, 2);
+      // The Dealer works the better spots, mostly the dangerous ones.
+      else if (i % 4 === 2 && (q.tier >= 3 || i % 8 === 2)) enemies('dealer', q.x + q.w / 2 + 4, q.z, 1, 2);
     });
   } else if (def.indoor && !def.safe) {
     // The Bunker gets a couple of Bouncers working the door.
     enemies('bouncer', -30, 50, 1, 2);
     enemies('bouncer', 30, -52, 1, 2);
+    enemies('dealer', 0, 20, 1, 3);
+  }
+  // Loot nobody can get to (boxed in by scenery) moves to the nearest open ground.
+  for (const k of containers) {
+    if (k.y > 0.5) continue;
+    let open = false;
+    for (let i = 0; i < 8 && !open; i++) {
+      const ang = (i / 8) * Math.PI * 2;
+      open = !solidAt(k.x + Math.cos(ang) * 1.4, k.z + Math.sin(ang) * 1.4, 0.45, 0.4);
+    }
+    if (open) continue;
+    const to = clearSpot(k.x, k.z, 1.6, 0.4);
+    if (to) [k.x, k.z] = to;
   }
   const CX = layout.casino.x;
   const CZ = layout.casino.z;

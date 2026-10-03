@@ -84,8 +84,8 @@ export class Raid {
     this.frozen = false;
 
     this.slots = this.map.slotSpots.map((s) => new SlotMachine(this, s));
-    this.gunWheels = this.map.safe ? [] : this.wheelSpots().map((s) => new GunWheel(this, s));
     this.containers = this.map.containers.map((c) => new Container(this, c));
+    this.gunWheels = this.map.safe ? [] : this.wheelSpots().map((s) => new GunWheel(this, s));
     this.drawDist = 115;
     this.buildVaultDoor();
     this.buildBossLock();
@@ -567,7 +567,7 @@ export class Raid {
   startKillcam(victim, killer, { replay = !this.net } = {}) {
     const real = killer && killer !== victim && killer.pos && killer.alive !== undefined ? killer : null;
     const weapon = !killer ? 'something'
-      : killer.team === 'machine' ? ({ shark: 'its blade', gator: 'its jaws', boss: 'the jackpot cannon', dicer: 'dice bullets', bouncer: 'its fists', roller: 'a running start', turret: 'a jackpot shell' }[killer.type] || 'a burst of bullets')
+      : killer.team === 'machine' ? ({ shark: 'its blade', gator: 'its jaws', boss: 'the jackpot cannon', dicer: 'dice bullets', bouncer: 'its fists', roller: 'a running start', turret: 'a jackpot shell', dealer: 'a fan of razor cards' }[killer.type] || 'a burst of bullets')
         : killer.team === 'env' ? '' : killer.weaponName || 'their fists';
     this.killcam = {
       t: 0, dur: 4, over: false, killer: real, victimPos: victim.pos.clone(), name: killer ? killer.name : 'Something',
@@ -811,6 +811,7 @@ export class Raid {
         const z = s.z - side * fx * 3.2 + fz * 0.6;
         if (!this.map.isFree(x, z, 1.9) || !this.map.isFree(x + fx * 1.6, z + fz * 1.6, 0.6)) continue;
         if (this.slots.some((sl) => Math.hypot(sl.spot.x - x, sl.spot.z - z) < 2.6)) continue;
+        if (this.containers.some((k) => k.spot.y < 0.5 && Math.hypot(k.spot.x - x, k.spot.z - z) < 3.4)) continue;
         if (out.some((o) => Math.hypot(o.x - x, o.z - z) < 8)) continue;
         out.push({ x, z, rot });
         break;

@@ -5,6 +5,7 @@
 //   Bouncer   – a hulking bruiser that charges in and hits like a truck
 //   Roulette Roller – a runaway roulette wheel that rams you
 //   Jackpot Turret – bolted onto rooftops; slow, heavy, long-range shots
+//   The Dealer – a tall elite in a green visor; keeps its distance and flings fans of razor cards
 //   Pit Boss  – a giant golden slot mech: bullet sweeps, rockets, summons, ground slams
 import * as THREE from 'three';
 import { ENEMIES } from './config.js';
@@ -354,6 +355,64 @@ function buildModel(type) {
     parts.crit.position.set(0, 2.05, 0);
     parts.critMult = 2.0;
     g.add(parts.crit);
+  } else if (type === 'dealer') {
+    // A lanky dealer bot: white shirt, green felt vest, red bow tie, a green visor and a fan of cards.
+    const bodyMat = toon(0x15803d, { unique: true, emissive: 0xffffff, emissiveIntensity: 0 });
+    const shirt = part(new THREE.BoxGeometry(1.1, 1.5, 0.7), 0xfff6e0, { ink: 0.04 });
+    shirt.position.y = 2.1;
+    const vest = part(new THREE.BoxGeometry(1.16, 1.2, 0.74), bodyMat, { ink: 0 });
+    vest.position.y = 2.0;
+    const bow = part(new THREE.BoxGeometry(0.4, 0.16, 0.08), 0xe63946, { ink: 0.01 });
+    bow.position.set(0, 2.72, -0.39);
+    const neck = part(new THREE.CylinderGeometry(0.16, 0.18, 0.3, 8), 0x9ca3af, { ink: 0.01 });
+    neck.position.y = 2.95;
+    const head = part(new THREE.BoxGeometry(0.75, 0.62, 0.66), 0x9ca3af, { ink: 0.04 });
+    head.position.y = 3.35;
+    const visor = new THREE.Mesh(new THREE.BoxGeometry(0.95, 0.06, 0.55), new THREE.MeshBasicMaterial({ color: 0x22c55e, transparent: true, opacity: 0.85 }));
+    visor.position.set(0, 3.62, -0.45);
+    visor.rotation.x = -0.25;
+    const band = part(new THREE.BoxGeometry(0.8, 0.12, 0.7), 0x166534, { ink: 0 });
+    band.position.y = 3.6;
+    const eye = new THREE.Mesh(new THREE.BoxGeometry(0.55, 0.08, 0.03), new THREE.MeshBasicMaterial({ color: 0xff3fa4 }));
+    eye.position.set(0, 3.38, -0.34);
+    g.add(shirt, vest, bow, neck, head, visor, band, eye);
+    // Arms: one holds a fan of cards out in front.
+    const arm = part(new THREE.BoxGeometry(0.28, 1.1, 0.3), 0xfff6e0, { ink: 0.02 });
+    arm.position.set(0.7, 2.1, -0.35);
+    arm.rotation.x = -1.1;
+    const arm2 = arm.clone();
+    arm2.position.x = -0.7;
+    arm2.rotation.x = -0.3;
+    const fan = new THREE.Group();
+    fan.position.set(0.7, 2.25, -1.05);
+    const faceMat = toon(0xffffff, { map: cardFace() });
+    const backMat = toon(0xb5172b);
+    for (let i = 0; i < 5; i++) {
+      const c = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.48, 0.02), [backMat, backMat, backMat, backMat, faceMat, backMat]);
+      c.position.y = 0.18;
+      const pivot = new THREE.Group();
+      pivot.rotation.z = (i - 2) * 0.28;
+      pivot.add(c);
+      fan.add(pivot);
+    }
+    fan.rotation.y = Math.PI;
+    g.add(arm, arm2, fan);
+    const legs = [];
+    for (const side of [-1, 1]) {
+      const leg = part(new THREE.BoxGeometry(0.32, 1.4, 0.36), 0x111827, { ink: 0.03 });
+      leg.position.set(side * 0.3, 0.7, 0);
+      g.add(leg);
+      legs.push(leg);
+    }
+    Object.assign(parts, { body: shirt, legs, eye, fan, bodyMat, muzzle: new THREE.Vector3(0.7, 2.25, -1.1) });
+    parts.hit = new THREE.Mesh(new THREE.BoxGeometry(1.3, 3.0, 0.9), hitMat);
+    parts.hit.position.y = 1.5;
+    g.add(parts.hit);
+    // Weak spot: the head under the visor.
+    parts.crit = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.7, 0.75), hitMat);
+    parts.crit.position.y = 3.38;
+    parts.critMult = 2.2;
+    g.add(parts.crit);
   }
   return { group: g, parts };
 }
@@ -552,6 +611,12 @@ export class Machine {
         }
         if (d < 8 && this.cooldown < def.rate * 0.5) speed *= 1.35;
         if (def.charge && d < 12 && d > 3) speed *= def.charge;
+      } else if (this.type === 'dealer') {
+        // Holds a card-throwing distance and sidesteps.
+        const ideal = 13;
+        mx = (-dz / d) * this.strafe * 0.7;
+        mz = (dx / d) * this.strafe * 0.7;
+        if (d > ideal + 4 || !this.seesTarget) { mx += dx / d; mz += dz / d; } else if (d < ideal - 5) { mx -= dx / d * 1.2; mz -= dz / d * 1.2; }
       } else if (this.type === 'dicer') {
         const ideal = 11;
         mx = (-dz / d) * this.strafe;
@@ -580,7 +645,16 @@ export class Machine {
             aim.x += (Math.random() - 0.5) * err * d;
             aim.y += (Math.random() - 0.5) * err * d * 0.6;
             aim.z += (Math.random() - 0.5) * err * d;
-            raid.machineShot(this, origin, aim.sub(origin).normalize(), Math.round(def.damage * this.rage.dmg));
+            const dir = aim.sub(origin).normalize();
+            if (def.pellets) {
+              // A fan of cards spread out sideways.
+              const side = new THREE.Vector3(-dir.z, 0, dir.x).normalize();
+              for (let k = 0; k < def.pellets; k++) {
+                const off = (k - (def.pellets - 1) / 2) * def.fan;
+                raid.machineShot(this, origin, dir.clone().addScaledVector(side, off).normalize(), Math.round(def.damage * this.rage.dmg));
+              }
+              this.parts.fan.rotation.z = 0.6;
+            } else raid.machineShot(this, origin, dir, Math.round(def.damage * this.rage.dmg));
           }
         }
       }
@@ -633,6 +707,7 @@ export class Machine {
       this.parts.wheel.rotation.x -= dt * Math.hypot(this.vel.x, this.vel.z) / 1.1;
       this.parts.wheel.rotation.z = Math.sin(performance.now() / 160) * 0.06;
     }
+    if (this.type === 'dealer') this.parts.fan.rotation.z *= Math.max(0, 1 - dt * 6);
     if (this.type === 'turret') this.parts.lever.rotation.x = this.burstLeft > 0 ? 0.8 : this.parts.lever.rotation.x * 0.9;
     if (this.type === 'bouncer') {
       const swing = this.cooldown > this.def.rate - 0.25 ? 1 : 0;
