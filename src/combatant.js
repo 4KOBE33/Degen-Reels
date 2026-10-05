@@ -308,7 +308,13 @@ export class Combatant {
 
     this.vel.y -= PLAYER.gravity * dt;
     this.pos.addScaledVector(this.vel, dt);
+    const wasOnGround = this.onGround;
     const r = resolve(this.pos, this.vel, PLAYER.radius, this.raid.map);
+    // Walking down stairs or a slope: stay on it instead of hopping off every step.
+    if (!r.onGround && wasOnGround && this.vel.y <= 0) {
+      const g = this.raid.map.groundAt(this.pos.x, this.pos.z, this.pos.y);
+      if (this.pos.y - g < 0.45) { this.pos.y = g; this.vel.y = 0; r.onGround = true; }
+    }
     this.onGround = r.onGround;
     // Waiting for the bell in The Pit: stay on your mark (you can still look around).
     if (this.pin) {

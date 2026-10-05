@@ -3,6 +3,15 @@ const STEP = 0.3;
 
 // Colliders are { type: 'box', minX, maxX, minZ, maxZ, top } or { type: 'circle', x, z, r, top }.
 // An optional `bottom` lifts one off the ground (an upstairs floor or wall): you walk under it.
+// A box with `ramp` has a sloped top (stairs): you glide up and down it instead of hopping steps.
+
+// How high the top of a collider is at (x, z).
+export function topAt(c, x, z) {
+  const r = c.ramp;
+  if (!r) return c.top;
+  const t = Math.max(0, Math.min(1, (z - r.z0) / (r.z1 - r.z0)));
+  return Math.max(r.y0, Math.min(r.y1, r.y0 + r.rise * (t * r.steps + 0.5)));
+}
 export function resolve(pos, vel, radius, map) {
   let ground = 0;
   for (const c of map.near(pos.x, pos.z)) {
@@ -17,8 +26,11 @@ export function resolve(pos, vel, radius, map) {
       const dz = pos.z - nz;
       const d2 = dx * dx + dz * dz;
       if (!inside && d2 >= radius * radius) continue;
-      if (pos.y >= c.top - STEP) {
-        if (inside || d2 < radius * radius * 0.36) ground = Math.max(ground, c.top);
+      const top = c.ramp ? topAt(c, nx, nz) : c.top;
+      // Under this part of a stair flight that hangs in the air: walk on under it.
+      if (c.ramp && c.ramp.floating && pos.y < top - 0.65) continue;
+      if (pos.y >= top - STEP) {
+        if (inside || d2 < radius * radius * 0.36) ground = Math.max(ground, top);
         continue;
       }
       if (inside) {

@@ -1,4 +1,5 @@
-// Physical poker chips: the raid's currency. Enemies and containers spill them; walk over to grab.
+// Physical poker chips: the raid's currency. Enemies and containers spill them, and like XP orbs
+// they fly to whoever's close.
 import * as THREE from 'three';
 import { toon, outline } from './toon.js';
 import { sfx } from './audio.js';
@@ -68,6 +69,7 @@ export function breakIntoChips(amount) {
 }
 
 const MAX_CHIPS = 400;
+const MAGNET = 8; // how far away chips start flying to you
 
 export class ChipSystem {
   constructor(raid) {
@@ -125,21 +127,39 @@ export class ChipSystem {
       const p = chip.mesh.position;
       chip.age += dt;
 
-      // Magnet toward nearby players once it's been on the ground a moment.
+      // Like XP orbs: once it's had a moment to land, it homes in on the nearest player within
+      // range, speeding up as it goes (through walls and all), and gets soaked up.
+      if (!chip.homing || !chip.homing.alive) {
+        chip.homing = null;
+        if (chip.age > 0.35) {
+          let best = MAGNET * MAGNET;
+          for (const c of people) {
+            if (!c.alive || c.downed) continue;
+            if (c === chip.owner && chip.age < chip.lockUntil) continue;
+            const dx = c.pos.x - p.x;
+            const dy = c.pos.y + 0.8 - p.y;
+            const dz = c.pos.z - p.z;
+            const d2 = dx * dx + dy * dy + dz * dz;
+            if (d2 < best) { best = d2; chip.homing = c; }
+          }
+        }
+      }
       let collector = null;
-      for (const c of people) {
-        if (!c.alive) continue;
-        if (c === chip.owner && chip.age < chip.lockUntil) continue;
-        const dx = c.pos.x - p.x;
-        const dy = c.pos.y + 0.6 - p.y;
-        const dz = c.pos.z - p.z;
-        const d = Math.hypot(dx, dy, dz);
-        if (d < 0.9) { collector = c; break; }
-        if (d < 3 && chip.age > 0.5) {
-          chip.vel.x += (dx / d) * 40 * dt;
-          chip.vel.z += (dz / d) * 40 * dt;
-          chip.vel.y += (dy / d) * 40 * dt;
+      if (chip.homing) {
+        const c = chip.homing;
+        const to = new THREE.Vector3(c.pos.x - p.x, c.pos.y + 0.8 - p.y, c.pos.z - p.z);
+        const d = to.length();
+        if (d < 0.7 || !c.alive) collector = c.alive ? c : null;
+        else if (d > MAGNET * 1.5) chip.homing = null; // they got away
+        else {
+          chip.pull = Math.min(26, (chip.pull || 5) + dt * 30);
+          // Steer toward them, a little floaty, faster the longer it's been chasing.
+          chip.vel.lerp(to.multiplyScalar(chip.pull / d), Math.min(1, dt * 8));
+          p.addScaledVector(chip.vel, dt);
+          chip.mesh.rotation.y += dt * 14;
           chip.resting = false;
+          if (chip.age > 45) chip.age = 40;
+          continue;
         }
       }
       if (collector) {

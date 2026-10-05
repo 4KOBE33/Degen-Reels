@@ -868,8 +868,8 @@ export class Raid {
   // Drop an item near `pos`. `from` is where it came out of (a crate, a machine, a body):
   // the item always lands somewhere open and reachable from there, never inside furniture
   // or on the far side of a wall.
-  dropItem(pos, item, from = null) {
-    const spot = this.findDropSpot(from || pos, pos);
+  dropItem(pos, item, from = null, gap = 0.6) {
+    const spot = this.findDropSpot(from || pos, pos, gap);
     const p = new ItemPickup(this, spot, item, from);
     this.pickups.push(p);
     if (this.isHost) {
@@ -924,14 +924,14 @@ export class Raid {
     return [x, z];
   }
 
-  findDropSpot(from, want) {
+  findDropSpot(from, want, gap = 0.6) {
     // Works upstairs too: loot lands on whatever floor it came from.
     const baseY = from.y > 0.5 ? from.y : 0;
     const floorAt = (x, z) => (baseY ? this.map.groundAt(x, z, baseY + 0.5) : 0);
     const origin = new THREE.Vector3(from.x, baseY + 1.0, from.z);
     const reachable = (x, z) => {
       if (!this.map.isFree(x, z, 0.6)) return false;
-      if (this.pickups.some((pk) => Math.hypot(pk.spot.x - x, pk.spot.z - z) < 0.6)) return false;
+      if (this.pickups.some((pk) => Math.hypot(pk.spot.x - x, pk.spot.z - z) < gap)) return false;
       if (baseY && Math.abs(floorAt(x, z) - baseY) > 0.6) return false;
       const to = new THREE.Vector3(x, baseY + 1.0, z);
       const d = origin.distanceTo(to);
@@ -941,7 +941,7 @@ export class Raid {
     if (reachable(want.x, want.z)) return new THREE.Vector3(want.x, floorAt(want.x, want.z), want.z);
     // Spiral outward from the source, starting in the direction we wanted.
     const base = Math.atan2(want.z - from.z, want.x - from.x) || 0;
-    for (const r of [1.2, 1.7, 2.3, 3, 3.8, 4.8]) {
+    for (const r of [1.2, 1.7, 2.3, 3, 3.8, 4.8, 5.8, 7]) {
       for (let k = 0; k < 12; k++) {
         const a = base + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * (Math.PI / 6);
         const x = from.x + Math.cos(a) * r;
@@ -1374,11 +1374,10 @@ export class Raid {
       this.chips.spawnBurst(target.center(new THREE.Vector3()), randInt(def.chips[0], def.chips[1]), null, { speed: target.isBoss ? 7 : 3 });
       const tier = this.map.tierAt(at.x, at.z);
       if (target.isBoss) {
-        for (let i = 0; i < 5; i++) this.dropAround(at, rollLoot(4), 4);
-        this.dropAround(at, makeGun(pick(['rifle', 'rocket', 'sniper', 'minigun', 'ar', 'dbarrel']), Math.random() < 0.25 ? 3 : 2), 4);
-        this.dropAround(at, makeItem('keycard'), 4);
-        if (Math.random() < 0.2) this.dropAround(at, makeItem('clover'), 4);
-        if (Math.random() < 0.01) this.dropAround(at, makeItem('crown'), 4);
+        const haul = [...Array.from({ length: 5 }, () => rollLoot(4)), makeGun(pick(['rifle', 'rocket', 'sniper', 'minigun', 'ar', 'dbarrel']), Math.random() < 0.25 ? 3 : 2), makeItem('keycard')];
+        if (Math.random() < 0.2) haul.push(makeItem('clover'));
+        if (Math.random() < 0.01) haul.push(makeItem('crown'));
+        this.spillLoot(at, haul);
         this.feed(`👑 ${this.bossName} is DOWN!`);
         if (attacker && attacker.isPlayer) {
           this.run.boss = true;
@@ -1406,8 +1405,7 @@ export class Raid {
       this.fail('dead', attacker ? attacker.name : null);
       return;
     }
-    for (const g of target.weapons) if (g) this.dropAround(at, g, 1.5);
-    for (const it of target.backpack) this.dropAround(at, it, 1.5);
+    this.spillLoot(at, [...target.weapons.filter(Boolean), ...target.backpack]);
     if (target.chips) this.chips.spawnBurst(at.clone().setY(1.2), target.chips, null);
     target.weapons = [null, null];
     target.backpack = [];
@@ -1415,6 +1413,37 @@ export class Raid {
     target.removeIn = 8;
     this.feed(`${attacker ? attacker.name : 'Something'} busted ${target.name}`);
     if (attacker && attacker.isPlayer) { this.run.kills++; this.run.raiders++; }
+  }
+
+  // Everything a raider was carrying, laid out around the body in rings (guns closest) with room
+  // between them, so you can walk up to the one you want instead of digging through a pile.
+  spillLoot(at, items) {
+    const guns = items.filter((it) => isGun(it));
+    const rest = items.filter((it) => !isGun(it) && !it.chips);
+    for (const it of items) if (it.chips) this.chips.spawnBurst(at.clone().setY(1), it.chips, null);
+    const spin = Math.random() * Math.PI * 2;
+    let ring = 0;
+    let placed = 0;
+    const place = (list, r0) => {
+      let r = r0;
+      let left = list.slice();
+      while (left.length) {
+        const fit = Math.max(3, Math.floor((Math.PI * 2 * r) / 1.5)); // ~1.5m apart around the ring
+        const row = left.slice(0, fit);
+        left = left.slice(fit);
+        row.forEach((it, k) => {
+          const a = spin + ring * 0.4 + (k / row.length) * Math.PI * 2;
+          this.dropItem(at.clone().add(new THREE.Vector3(Math.cos(a) * r, 0, Math.sin(a) * r)), it, at, 1.2);
+          placed++;
+        });
+        ring++;
+        r += 1.4;
+      }
+      return r;
+    };
+    const r = place(guns, 1.7);
+    place(rest, guns.length ? r : 1.7);
+    return placed;
   }
 
   dropAround(at, item, spread) {

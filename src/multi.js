@@ -473,7 +473,7 @@ export class Session {
         pup.removeIn = 8;
         this.gone.add(from);
         raid.feed(`💀 ${pup.name} ${d.by ? `was busted by ${d.by}` : 'went down for good'}`);
-        for (const it of d.items || []) raid.dropAround(pup.pos.clone(), it, 1.5);
+        raid.spillLoot(pup.pos.clone(), d.items || []);
         if (d.chips) raid.chips.spawnBurst(pup.pos.clone().setY(1.2), d.chips, null);
         break;
       }

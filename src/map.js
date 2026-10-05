@@ -4,6 +4,7 @@
 // still costs only a few hundred draw calls (and far chunks get frustum-culled).
 // Colliders live in a spatial grid so physics and bullets only check nearby ones.
 import * as THREE from 'three';
+import { topAt } from './physics.js';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { part, toon, canvasTexture, INK } from './toon.js';
 
@@ -209,7 +210,7 @@ export function buildMap(scene, mapId = 'vegas') {
   }
   // A solid thing: blocks movement and bullets.
   function addCollider(c) {
-    c.proxy = proxyFor(c, c.bottom || 0);
+    c.proxy = c.noProxy ? null : proxyFor(c, c.bottom || 0);
     insert(c, ...boundsOf(c));
     return c;
   }
@@ -1111,15 +1112,26 @@ export function buildMap(scene, mapId = 'vegas') {
       if (solid) addCollider({ type: 'box', minX: x0, maxX: x1, minZ: z0, maxZ: z1, top: y1, bottom: y0 > 0.5 ? y0 : undefined });
       return m;
     };
-    // Steps from y0 up to y1 along z (dir +1 or -1) starting at z0, across x0..x1.
+    // Steps from y0 up to y1 along z (dir +1 or -1) starting at z0, across x0..x1. They look like
+    // steps (and stop bullets like steps), but you walk on a smooth ramp through them, so going
+    // up and down is a glide instead of a hop on every step.
     const stairs = (x0, x1, z0, dir, y0, y1, mat, steps = 15) => {
       const run = 0.6;
+      const floating = y0 > 0.5;
       for (let i = 0; i < steps; i++) {
         const top = y0 + ((i + 1) * (y1 - y0)) / steps;
         const za = z0 + dir * i * run;
         const zb = za + dir * run;
-        slab(x0, x1, Math.min(za, zb), Math.max(za, zb), Math.max(0, y0 > 0.5 ? top - 0.5 : 0), top, mat);
+        const bottom = Math.max(0, floating ? top - 0.5 : 0);
+        slab(x0, x1, Math.min(za, zb), Math.max(za, zb), bottom, top, mat, false);
+        addRayBlocker(x0, x1, Math.min(za, zb), Math.max(za, zb), bottom, top);
       }
+      const zEnd = z0 + dir * steps * run;
+      addCollider({
+        type: 'box', minX: x0, maxX: x1, minZ: Math.min(z0, zEnd), maxZ: Math.max(z0, zEnd), top: y1,
+        bottom: floating ? y0 - 0.6 : undefined, noProxy: true,
+        ramp: { z0, z1: zEnd, y0, y1, steps, rise: (y1 - y0) / steps, floating },
+      });
     };
 
     // A climbable tower: stairs zig-zag up the east side, loot on every floor, a turret on the roof.
@@ -1726,7 +1738,7 @@ export function buildMap(scene, mapId = 'vegas') {
       for (let cx = minX; cx <= maxX; cx++) {
         for (let cz = minZ; cz <= maxZ; cz++) {
           const list = grid.get(cellKey(cx, cz));
-          if (list) for (const c of list) out.add(c.proxy);
+          if (list) for (const c of list) if (c.proxy) out.add(c.proxy);
         }
       }
       return [groundProxy, ...out, ...extraProxies];
@@ -1763,11 +1775,13 @@ export function buildMap(scene, mapId = 'vegas') {
     groundAt(x, z, y) {
       let g = 0;
       for (const c of map.near(x, z)) {
-        if (c.rayOnly || c.top > y + 0.3) continue;
+        if (c.rayOnly) continue;
+        const top = c.ramp ? topAt(c, x, z) : c.top;
+        if (top > y + 0.3) continue;
         const over = c.type === 'box'
           ? x >= c.minX && x <= c.maxX && z >= c.minZ && z <= c.maxZ
           : Math.hypot(x - c.x, z - c.z) <= c.r;
-        if (over) g = Math.max(g, c.top);
+        if (over) g = Math.max(g, top);
       }
       return g;
     },

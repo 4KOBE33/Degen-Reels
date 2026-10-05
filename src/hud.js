@@ -86,6 +86,7 @@ export class Hud {
     bag.addEventListener('dragend', () => {
       this.dragging = null;
       bag.classList.remove('isdragging');
+      $('bag').classList.remove('dropout');
       bag.querySelectorAll('.over, .dragging').forEach((x) => x.classList.remove('over', 'dragging'));
     });
     bag.addEventListener('dragover', (e) => {
@@ -101,10 +102,28 @@ export class Hud {
       const from = this.dragging;
       if (!t || !from) return;
       e.preventDefault();
+      e.stopPropagation();
       const kind = t.dataset.drop;
       if (kind === 'ground') this.onDrop(from.where, from.i);
       else if (kind === 'throw') this.onPickThrowFrom(from);
       else this.onMove(from, { where: t.dataset.where, i: Number(t.dataset.i) });
+      this.selected = null;
+      this.dragging = null;
+      this.last.bagList = null;
+    });
+    // Drag something anywhere that isn't a slot (off the panel, onto empty space) to drop it.
+    const overlay = $('bag');
+    overlay.addEventListener('dragover', (e) => {
+      if (!this.dragging) return;
+      e.preventDefault();
+      overlay.classList.toggle('dropout', !e.target.closest('[data-drop]'));
+    });
+    overlay.addEventListener('drop', (e) => {
+      const from = this.dragging;
+      overlay.classList.remove('dropout');
+      if (!from || e.target.closest('[data-drop]')) return;
+      e.preventDefault();
+      this.onDrop(from.where, from.i);
       this.selected = null;
       this.dragging = null;
       this.last.bagList = null;
@@ -507,8 +526,8 @@ export class Hud {
       const info = itemInfo(item);
       const qty = !isGun(item) && item.qty > 1 ? `<span class="qty">×${item.qty}</span>` : '';
       const ammo = isGun(item) ? `<span class="qty">${item.ammo}</span>` : '';
-      return `<button class="islot r${info.rarity} ${big ? 'big' : ''} ${sel ? 'sel' : ''} ${where === 'weapon' && i === p.active ? 'active' : ''} ${where}" draggable="true" data-drop="slot" data-act="select" data-where="${where}" data-i="${i}" style="--rc:${info.css}" title="Drag to move · double-click or right-click to ${isGun(item) ? (where === 'weapon' ? 'stash' : 'equip') : 'use'}">
-        <span class="ic">${iconHtml(item)}</span>${big ? `<span class="nm" style="color:${info.css}">${escapeHtml(info.name)}${where === 'weapon' && i === p.active ? '<small>IN HAND</small>' : ''}</span>` : ''}${tag}${qty}${ammo}<i class="rbar"></i></button>`;
+      return `<button class="islot r${info.rarity} ${big ? 'big' : ''} ${sel ? 'sel' : ''} ${where === 'weapon' && i === p.active ? 'active' : ''} ${where}" draggable="true" data-drop="slot" data-act="select" data-where="${where}" data-i="${i}" style="--rc:${info.css}" title="Drag to move (drag off the panel to drop) · double-click or right-click to ${isGun(item) ? (where === 'weapon' ? 'stash' : 'equip') : 'use'}">
+        <span class="qdrop" data-act="drop" data-where="${where}" data-i="${i}" title="Drop it">✕</span><span class="ic">${iconHtml(item)}</span>${big ? `<span class="nm" style="color:${info.css}">${escapeHtml(info.name)}${where === 'weapon' && i === p.active ? '<small>IN HAND</small>' : ''}</span>` : ''}${tag}${qty}${ammo}<i class="rbar"></i></button>`;
     };
 
     // Left: weapons, Safe Pocket, throwable and vitals.
@@ -532,7 +551,7 @@ export class Hud {
         ${bar('stamina', '🏃', 'Stamina', p.stamina, PLAYER.maxStamina)}
         <div class="vit chipsline"><span>🪙 Chips</span><b>${p.chips.toLocaleString("en-US")}</b></div>
       </div>
-      <div class="dropzone" data-drop="ground">🗑️ Drop on the ground</div>
+      <div class="dropzone" data-drop="ground">🗑️ Drop: drag here or off the panel, or hit ✕ on an item</div>
     </section>`;
 
     // Middle: the backpack grid.
