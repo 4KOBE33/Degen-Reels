@@ -1231,3 +1231,35 @@ body.showdownup #toast { opacity: 0 !important; }
 #cdRing { width: 72px; height: 72px; }
 #cdRing circle { stroke-width: 7; }
 #cdRing .bg { stroke: rgba(27, 15, 43, 0.7); }
+
+/* Five-card draw */
+#pokerCard { max-width: min(620px, calc(100vw - 32px)); text-align: center; }
+#pokerCard h2 small { font: 800 15px var(--body); opacity: 0.8; margin-left: 6px; }
+.pkhand { display: flex; gap: 10px; justify-content: center; margin: 18px 0 8px; flex-wrap: nowrap; }
+.pkslot { background: none; border: 0; padding: 0; cursor: pointer; display: grid; justify-items: center; gap: 6px; transition: transform 0.15s; }
+.pkslot .pcard { width: 82px; height: 116px; animation: none; transition: transform 0.15s, opacity 0.15s, box-shadow 0.15s; }
+.pkslot .pcard em { font-size: 42px; }
+.pkslot .pcard i { font-size: 20px; }
+.pkhand.fresh .pkslot .pcard { animation: deal 0.35s ease-out both; animation-delay: calc(var(--i) * 0.09s); }
+.pkslot:hover .pcard { transform: translateY(-4px); }
+.pkslot .pcard.hot { box-shadow: 0 0 0 3px #ffd23f, 0 6px 18px rgba(255, 210, 63, 0.45); }
+.pkslot.out .pcard { transform: translateY(14px) rotate(-4deg); opacity: 0.45; filter: grayscale(0.6); box-shadow: none; }
+.pktag { font: 900 12px var(--body); letter-spacing: 1px; padding: 2px 10px; border-radius: 10px; background: #5ee27a; color: #1b0f2b; }
+.pkslot.out .pktag { background: #ff5d6c; color: #fff; }
+.pknow { font: 800 16px var(--body); margin: 10px 0 4px; }
+.pknow b { font: 400 22px var(--display); color: var(--gold); }
+@media (max-width: 560px) { .pkslot .pcard { width: 58px; height: 84px; } .pkslot .pcard em { font-size: 28px; } .pkhand { gap: 5px; } }
+#showdown .sdwho small { font: 800 12px var(--body); opacity: 0.7; }
+#showdown.show .sdwho i { animation: sdpop 0.35s backwards; }
+#showdown.show .sdfoot { animation: sdpop 0.45s backwards; }
+#showdown.show .sdrow.win { animation: sdwin 0.5s both; animation-delay: var(--done); }
+#showdown.show .sdrow.lose { animation: sdlose 0.5s both; animation-delay: var(--done); }
+#showdown.show .pcard.hot { animation: flipin 0.5s backwards, sdhot 0.6s forwards; }
+#showdown .pcard.new::after { content: 'NEW'; position: absolute; top: -9px; left: 50%; transform: translateX(-50%); font: 900 9px var(--body); background: #4da3ff; color: #fff; padding: 1px 5px; border-radius: 6px; }
+@keyframes sdpop { from { opacity: 0; transform: scale(0.6); } }
+@keyframes sdwin { from { background: rgba(255, 255, 255, 0.06); outline-color: transparent; } to { background: rgba(94, 226, 122, 0.22); outline: 3px solid #5ee27a; } }
+@keyframes sdlose { to { opacity: 0.7; } }
+@keyframes sdhot { to { transform: translateY(-8px); box-shadow: 0 0 0 3px #ffd23f, 0 0 18px rgba(255, 210, 63, 0.7); } }
+#tablePanel .tprow.tp3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+#tablePanel .tprow.tp3 .btn { margin: 0; width: 100%; padding: 10px 6px; font-size: 16px; }
+#tablePanel .tprow.tp3 .btn[disabled] { opacity: 0.45; }

@@ -380,6 +380,7 @@ export class Session {
     const duel = this.raid.duel;
     if (duel && d.k === 'duelAsk') { const a = this.puppetOf(from); const b = this.byId.get(d.to); if (a && b) duel.request(a, b, d.stakes || {}, d.gun || null); return; }
     if (duel && d.k === 'duelReply') { const p = duel.pending.get(d.id); if (p && p.b.owner === from) duel.reply(d.id, !!d.yes, d.gun || null); return; }
+    if (duel && d.k === 'pokerDraw') { const c = this.puppetOf(from); if (c) duel.pokerDraw(d.id, c, d.discard); return; }
     if (duel && d.k === 'duelLost') { duel.lostBy(from); return; }
     if (duel && d.k === 'bet') { const b = this.puppetOf(from); if (b && !duel.placeBet(b, d.side, Math.max(0, Number(d.amount) || 0))) this.net.to(from, { k: 'toast', text: 'Bets are closed.' }); return; }
     if (d.k === 'watch') { if (d.i) this.watching.set(from, d.i); else this.watching.delete(from); return; }
@@ -605,6 +606,7 @@ export class Session {
       case 'duelResult': if (raid.duel) raid.duel.applyResult(d); break;
       case 'betResult': if (raid.duel) raid.duel.applyBet(d); break;
       case 'showdown': if (raid.duel) raid.duel.showReveal(d); break;
+      case 'pokerDeal': if (raid.duel) raid.duel.showDeal(d); break;
       case 'tp':
         // Mid kill cam: wait for it to finish before moving.
         if (raid.killcam && !raid.killcam.over) raid.pendingTp = d;

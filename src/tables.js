@@ -7,7 +7,7 @@
 // The player at a table runs the game (their chips, their luck) and tells everyone what happened;
 // the host passes it on. One player per table at a time; anyone can watch.
 import * as THREE from 'three';
-import { HUB_SLOTS } from './config.js';
+import { HUB_SLOTS, PLAYER } from './config.js';
 import { part, toon, canvasTexture } from './toon.js';
 import { sfx } from './audio.js';
 import { keyName } from './keys.js';
@@ -1319,7 +1319,7 @@ export class LoungeTables {
       c.shadowBlur = 0;
       c.font = "bold 30px Nunito, Arial, sans-serif";
       c.fillStyle = '#fff6e0';
-      c.fillText('FREE AMMO · HOUSE GUNS', w / 2, h * 0.8);
+      c.fillText('AMMO · HEALS · ARMOR · GUNS', w / 2, h * 0.8);
     });
     const signMesh = new THREE.Mesh(new THREE.PlaneGeometry(3.6, 1.1), new THREE.MeshBasicMaterial({ map: sign }));
     signMesh.position.set(0, 4.4, -1.58);
@@ -1338,7 +1338,7 @@ export class LoungeTables {
       group: g, blink: 0, table: t,
       spotDef: {
         spot: t.seatPos, range: 3.4, searchTime: 0.2, searchLabel: 'Stepping up…',
-        prompt: () => `<b>Hold ${keyName('use')}</b> 🔫 Armory: free ammo and house guns`,
+        prompt: () => `<b>Hold ${keyName('use')}</b> 🔫 Armory: free ammo, heals, armor and house guns`,
         open: (by) => { if (by.isPlayer) this.sit(t); },
       },
     };
@@ -1352,7 +1352,11 @@ export class LoungeTables {
       return `<button class="btn tpgun" data-act="take" data-arg="${k}">${info.name}</button>`;
     }).join('');
     return `<p class="tpnote">Your guns: ${guns}</p>
-      <div class="tprow"><button class="btn big" data-act="refill">📦 Refill all ammo · FREE</button></div>
+      <p class="tpnote">❤️ ${Math.ceil(p.hp)} / ${p.maxHp} &nbsp;|&nbsp; 🛡️ ${Math.ceil(p.armor)} / ${PLAYER.maxArmor}</p>
+      <div class="tprow tp3"><button class="btn" data-act="refill">📦 Refill ammo</button>
+        <button class="btn" data-act="heal" ${p.hp >= p.maxHp ? 'disabled' : ''}>❤️ Heal up</button>
+        <button class="btn" data-act="armor" ${p.armor >= PLAYER.maxArmor ? 'disabled' : ''}>🛡️ Armor up</button></div>
+      <p class="tpnote">All free, as often as you like.</p>
       <p class="tpnote">House guns are free to use in the Lounge, but they stay here when you cash out. Pick one to swap it into your hands.</p>
       <div class="tprow">${rack}</div>
       ${p.weapons.some((g) => g && g.house) ? '<div class="tprow"><button class="btn ghost" data-act="return">Hand back the house guns</button></div>' : ''}`;
@@ -1369,6 +1373,12 @@ export class LoungeTables {
         if (Number.isFinite(full) && g.ammo < full) { g.ammo = full; n++; }
       }
       if (n) { sfx.pickup(); hud.toast(`📦 Topped up ${n} gun${n > 1 ? 's' : ''}. On the house.`); } else hud.toast('Your guns are already full.');
+    } else if (a === 'heal') {
+      if (p.hp >= p.maxHp) hud.toast('You\'re already at full health.');
+      else { p.hp = p.maxHp; sfx.heal(); hud.toast('❤️ Patched up to full. On the house.'); }
+    } else if (a === 'armor') {
+      if (p.armor >= PLAYER.maxArmor) hud.toast('Your armor is already full.');
+      else { p.armor = PLAYER.maxArmor; sfx.heal(); hud.toast('🛡️ Fresh plates, full armor. On the house.'); }
     } else if (a === 'take' && HOUSE_GUNS.includes(arg)) {
       const gun = { ...makeGun(arg, 0), free: true, house: true };
       const held = p.weapons[p.active];

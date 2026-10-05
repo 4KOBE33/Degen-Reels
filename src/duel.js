@@ -26,12 +26,6 @@ const CHALLENGERS = ['Slick Vinnie', 'Lady Luck', 'Two-Bit Tony', 'The Dealer\'s
 const RANKS = '23456789TJQKA';
 const SUITS = ['♠', '♥', '♦', '♣'];
 const HAND_NAMES = ['High Card', 'One Pair', 'Two Pair', 'Three of a Kind', 'Straight', 'Flush', 'Full House', 'Four of a Kind', 'Straight Flush'];
-function dealHands(n) {
-  const deck = [];
-  for (let r = 0; r < 13; r++) for (let s = 0; s < 4; s++) deck.push(r * 4 + s);
-  for (let i = deck.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [deck[i], deck[j]] = [deck[j], deck[i]]; }
-  return Array.from({ length: n }, (_, k) => deck.slice(k * 5, k * 5 + 5));
-}
 // [category, ...tiebreakers], compared left to right.
 function scoreHand(cards) {
   const ranks = cards.map((c) => Math.floor(c / 4)).sort((a, b) => b - a);
@@ -62,11 +56,39 @@ function compareHands(a, b) {
   for (let i = 0; i < Math.max(x.length, y.length); i++) if ((x[i] || 0) !== (y[i] || 0)) return (x[i] || 0) - (y[i] || 0);
   return 0;
 }
+// Which cards make the hand (lit up at the reveal).
+function madeCards(cards) {
+  const cat = scoreHand(cards)[0];
+  if ([4, 5, 6, 8].includes(cat)) return [0, 1, 2, 3, 4];
+  const rank = (c) => Math.floor(c / 4);
+  if (cat >= 1) return cards.map((c, i) => [c, i]).filter(([c]) => cards.filter((x) => rank(x) === rank(c)).length >= 2).map(([, i]) => i);
+  let top = 0;
+  cards.forEach((c, i) => { if (rank(c) > rank(cards[top])) top = i; });
+  return [top];
+}
+// The House's draw: keep anything made, chase four to a flush or a straight, else keep the two best.
+function houseDiscard(cards) {
+  const cat = scoreHand(cards)[0];
+  if (cat >= 4) return [];
+  const made = madeCards(cards);
+  if (cat >= 1) return [0, 1, 2, 3, 4].filter((i) => !made.includes(i)).slice(0, 3);
+  for (let s = 0; s < 4; s++) {
+    const off = cards.map((c, i) => [c, i]).filter(([c]) => c % 4 !== s);
+    if (off.length === 1) return [off[0][1]];
+  }
+  for (let i = 0; i < 5; i++) {
+    const rest = [...new Set(cards.filter((_, j) => j !== i).map((c) => Math.floor(c / 4)))];
+    if (rest.length === 4 && Math.max(...rest) - Math.min(...rest) <= 4) return [i];
+  }
+  return cards.map((c, i) => [c, i]).sort((x, y) => x[0] - y[0]).slice(0, 3).map(([, i]) => i);
+}
+const MAX_DISCARD = 3;
+const DRAW_TIME = 25; // seconds to pick your discards
 // Same card face as the blackjack table: rank in the corners, big suit in the middle.
-const cardHtml = (c) => {
+const cardHtml = (c, cls = '', style = '') => {
   const s = SUITS[c % 4];
   const r = RANKS[Math.floor(c / 4)].replace('T', '10');
-  return `<span class="pcard ${s === '♥' || s === '♦' ? 'red' : ''}"><i>${r}</i><em>${s}</em><i class="flip">${r}</i></span>`;
+  return `<span class="pcard ${s === '♥' || s === '♦' ? 'red' : ''} ${cls}" ${style ? `style="${style}"` : ''}><i>${r}</i><em>${s}</em><i class="flip">${r}</i></span>`;
 };
 const STAKES = [0, 500, 1000, 5000, 10000, 25000, 50000, 100000];
 const gunName = (g) => (g ? itemInfo({ id: 'gun', kind: g.kind, rarity: g.rarity }).name : 'nothing');
@@ -80,6 +102,8 @@ export class Duel {
     this.invite = null; // an invite to us
     this.nextId = 1;
     this.lostSent = false;
+    this.hands = new Map(); // referee: poker hands waiting on the draw
+    this.myHand = null; // our cards while we pick what to throw back
     const L = raid.map.lounge;
     this.arena = new THREE.Vector3(L.arena.x, 0, L.arena.z);
     this.r = L.arena.r;
@@ -112,7 +136,10 @@ export class Duel {
     document.body.classList.remove('duelbar', 'showdownup');
     $('duelPanel').hidden = true;
     $('betPanel').hidden = true;
+    $('pokerPanel').hidden = true;
     $('showdown').hidden = true;
+    clearTimeout(this.revealTimer);
+    clearTimeout(this.footTimer);
   }
 
   get referee() { return !this.raid.isClient; }
@@ -333,14 +360,56 @@ export class Duel {
 
   // ---------- poker showdown ----------
 
+  // Five-card draw. The referee deals from one deck and holds the hands; each player sees only
+  // their own five, throws back up to three, and when both have drawn the hands go face up.
   showdown(a, b, stakes, gunA, gunB) {
+    const deck = [];
+    for (let r = 0; r < 13; r++) for (let s = 0; s < 4; s++) deck.push(r * 4 + s);
+    for (let i = deck.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [deck[i], deck[j]] = [deck[j], deck[i]]; }
+    const id = this.nextId++;
+    const g = { id, a, b, stakes, gunA, gunB, deck, ha: deck.splice(0, 5), hb: deck.splice(0, 5), da: null, db: null, at: performance.now() };
+    this.hands.set(id, g);
+    this.raid.feed(`🃏 ${a.name} and ${b.name} sit down to five-card draw${stakes.chips ? ` for 🪙 ${fmt(stakes.chips * 2)}` : ''}`);
+    for (const side of ['a', 'b']) {
+      const c = g[side];
+      const other = side === 'a' ? b : a;
+      const deal = { k: 'pokerDeal', id, hand: g[`h${side}`], vs: other.name, chips: stakes.chips || 0, guns: !!(stakes.guns && gunA && gunB) };
+      if (c.champion || !(c.isPlayer || c.human)) g[`d${side}`] = houseDiscard(g[`h${side}`]);
+      else if (c.isPlayer) this.showDeal(deal);
+      else if (this.net) this.net.net.to(c.owner, deal);
+    }
+    this.pokerCheck(g);
+  }
+
+  // A player's discards reach the referee.
+  pokerDraw(id, c, discard) {
+    const g = this.hands.get(id);
+    if (!g) return;
+    const side = c === g.a ? 'a' : c === g.b ? 'b' : null;
+    if (!side || g[`d${side}`]) return;
+    g[`d${side}`] = [...new Set((Array.isArray(discard) ? discard : []).map(Number))].filter((i) => Number.isInteger(i) && i >= 0 && i < 5).slice(0, MAX_DISCARD);
+    if (!g[`d${side === 'a' ? 'b' : 'a'}`]) this.tell(c, `🃏 Waiting on ${g[side === 'a' ? 'b' : 'a'].name} to draw…`);
+    this.pokerCheck(g);
+  }
+
+  pokerCheck(g) {
+    if (g.da && g.db) this.pokerFinish(g);
+  }
+
+  pokerFinish(g) {
+    this.hands.delete(g.id);
+    const { a, b, stakes, gunA, gunB } = g;
+    const draw = (hand, dis) => hand.map((c, i) => (dis.includes(i) ? g.deck.shift() : c));
+    const ha = draw(g.ha, g.da);
+    const hb = draw(g.hb, g.db);
     const guns = !!(stakes.guns && gunA && gunB);
-    const [ha, hb] = dealHands(2);
     const cmp = compareHands(ha, hb);
     const ra = HAND_NAMES[scoreHand(ha)[0]];
     const rb = HAND_NAMES[scoreHand(hb)[0]];
     const winner = cmp > 0 ? a : cmp < 0 ? b : null;
-    const reveal = { k: 'showdown', a: a.name, b: b.name, ha, hb, ra, rb, w: winner ? winner.name : '', chips: stakes.chips || 0, guns };
+    const reveal = {
+      k: 'showdown', a: a.name, b: b.name, ia: this.whoId(a), ib: this.whoId(b), ws: winner ? (winner === a ? 'a' : 'b') : '', ha, hb, ra, rb, na: g.da, nb: g.db, ma: madeCards(ha), mb: madeCards(hb), w: winner ? winner.name : '', chips: stakes.chips || 0, guns,
+    };
     for (const c of [a, b]) {
       if (c.isPlayer) this.showReveal(reveal);
       else if (c.human && this.net) this.net.net.to(c.owner, reveal);
@@ -354,24 +423,109 @@ export class Duel {
     setTimeout(() => {
       this.settle(winner, { won: true, chips: stakes.chips || 0, gainGun: guns ? loserGun : null, loseGun: null, vs: loser.name, poker: true });
       this.settle(loser, { won: false, chips: stakes.chips || 0, gainGun: null, loseGun: guns ? loserGun : null, vs: winner.name, poker: true });
-    }, 2600);
+    }, 4200);
   }
 
-  // Flip both hands face up.
+  // Who a seat belongs to, by id (two players can share a name).
+  whoId(c) {
+    if (c.isPlayer) return this.net ? this.net.me : 'me';
+    return c.human ? c.owner : null;
+  }
+
+  // ---------- our side of a poker hand ----------
+
+  showDeal(d) {
+    this.myHand = { ...d, out: new Set(), until: performance.now() + DRAW_TIME * 1000, sent: false };
+    $('showdown').hidden = true;
+    document.body.classList.remove('showdownup');
+    d.hand.forEach((_, i) => setTimeout(() => sfx.card(), i * 90));
+    this.renderDeal(true);
+    this.raid.setOverlay('poker');
+  }
+
+  renderDeal(fresh = false) {
+    const h = this.myHand;
+    if (!h) return;
+    const el = $('pokerCard');
+    const n = h.out.size;
+    const name = HAND_NAMES[scoreHand(h.hand)[0]];
+    const made = madeCards(h.hand);
+    el.innerHTML = `<h2>🃏 Five-Card Draw</h2>
+      <p class="hint">vs <b>${h.vs}</b> · ${h.chips ? `🪙 ${fmt(h.chips * 2)} pot` : 'Just for fun'}${h.guns ? ' + 🔫 pink slips' : ''}. Click up to ${MAX_DISCARD} cards to throw back, then draw. Best hand takes it.</p>
+      <div class="pkhand ${fresh ? 'fresh' : ''}">${h.hand.map((c, i) => `<button class="pkslot ${h.out.has(i) ? 'out' : ''}" data-i="${i}" style="--i:${i}">${cardHtml(c, made.includes(i) && name !== 'High Card' ? 'hot' : '')}<span class="pktag">${h.out.has(i) ? 'TOSS' : 'HOLD'}</span></button>`).join('')}</div>
+      <p class="pknow">You're holding: <b>${name}</b></p>
+      <div class="resbtns"><button id="pokerGo" class="btn big">${n ? `DRAW ${n} CARD${n > 1 ? 'S' : ''}` : 'STAND PAT'}</button></div>
+      <p class="hint" id="pokerTime"></p>`;
+    el.querySelector('.pkhand').onclick = (e) => {
+      const b = e.target.closest('[data-i]');
+      if (!b || h.sent) return;
+      const i = Number(b.dataset.i);
+      if (h.out.has(i)) h.out.delete(i);
+      else if (h.out.size < MAX_DISCARD) h.out.add(i);
+      else { this.raid.hud.toast(`You can only throw back ${MAX_DISCARD}.`); return; }
+      sfx.tick();
+      this.renderDeal();
+    };
+    $('pokerGo').onclick = () => this.sendDraw();
+    this.tickDeal();
+  }
+
+  tickDeal() {
+    const h = this.myHand;
+    if (!h || h.sent) return;
+    const left = Math.max(0, Math.ceil((h.until - performance.now()) / 1000));
+    const t = $('pokerTime');
+    if (t) { const txt = `${left}s to draw, then you stand pat.`; if (t.textContent !== txt) t.textContent = txt; }
+    if (left <= 0) this.sendDraw();
+  }
+
+  sendDraw() {
+    const h = this.myHand;
+    if (!h || h.sent) return;
+    h.sent = true;
+    const discard = [...h.out];
+    if (!$('pokerPanel').hidden) this.raid.setOverlay(null);
+    if (this.referee) this.pokerDraw(h.id, this.raid.player, discard);
+    else this.net.send({ k: 'pokerDraw', id: h.id, discard });
+    if (discard.length) discard.forEach((_, i) => setTimeout(() => sfx.card(), i * 110));
+  }
+
+  // The panel closed (Esc, a click away): play the hand as it stands.
+  pokerClosed() {
+    if (this.myHand && !this.myHand.sent) this.sendDraw();
+  }
+
+  // Both hands face up: theirs card by card, the hand names, then the cards that won it light up.
   showReveal(r) {
+    this.myHand = null;
     const el = $('showdown');
-    const me = this.raid.player && this.raid.player.name;
-    el.innerHTML = `<div class="sdhead">🃏 POKER SHOWDOWN${r.chips ? ` · 🪙 ${fmt(r.chips * 2)} pot` : ''}${r.guns ? ' + 🔫 pink slips' : ''}</div>
-      ${[[r.a, r.ha, r.ra], [r.b, r.hb, r.rb]].map(([n, h, rank]) => `<div class="sdrow ${r.w === n ? 'win' : r.w ? 'lose' : ''}"><div class="sdwho"><b>${r.w === n ? '🏆 ' : ''}${n}${n === me ? ' (you)' : ''}</b><i>${rank}</i></div><span class="cards">${h.map(cardHtml).join('')}</span></div>`).join('')}
-      <div class="sdfoot">${r.w ? `🏆 ${r.w} wins` : 'Split pot!'}</div>`;
+    const myId = this.net ? this.net.me : 'me';
+    const mine = r.ia === myId ? 'a' : r.ib === myId ? 'b' : '';
+    const STEP = 0.22;
+    const ROW = 5 * STEP + 0.5;
+    const rows = [['a', r.a, r.ha, r.ra, r.na || [], r.ma || []], ['b', r.b, r.hb, r.rb, r.nb || [], r.mb || []]];
+    // Your hand first, theirs flips after.
+    if (mine === 'b') rows.reverse();
+    const done = 2 * ROW + 0.2;
+    const ws = r.ws || '';
+    const iWon = !!ws && ws === mine;
+    const winName = ws === 'a' ? r.a : r.b;
+    const money = r.chips ? (iWon ? ` +🪙 ${fmt(r.chips)}` : ws && mine ? ` · you lose 🪙 ${fmt(r.chips)}` : '') : '';
+    el.innerHTML = `<div class="sdhead">🃏 SHOWDOWN${r.chips ? ` · 🪙 ${fmt(r.chips * 2)} pot` : ''}${r.guns ? ' + 🔫 pink slips' : ''}</div>
+      ${rows.map(([side, n, h, rank, drew, made], k) => `<div class="sdrow ${ws === side ? 'win' : ws ? 'lose' : ''}" style="--done:${done}s">
+        <div class="sdwho"><b>${ws === side ? '🏆 ' : ''}${n}${side === mine ? ' (you)' : ''}</b><small>${drew.length ? `drew ${drew.length}` : 'stood pat'}</small><i style="animation-delay:${k * ROW + 5 * STEP}s">${rank}</i></div>
+        <span class="cards">${h.map((c, i) => cardHtml(c, `${made.includes(i) && ws === side ? 'hot' : ''} ${drew.includes(i) ? 'new' : ''}`, `animation-delay:${k * ROW + i * STEP}s, ${done}s`)).join('')}</span></div>`).join('')}
+      <div class="sdfoot" style="animation-delay:${done}s">${ws ? `${iWon ? '🏆 YOU WIN' : `🏆 ${winName} wins`}${money}` : 'Split pot! Chips back.'}</div>`;
     el.hidden = false;
     document.body.classList.add('showdownup');
     el.classList.remove('show');
     void el.offsetWidth;
     el.classList.add('show');
-    sfx.lever();
+    for (let k = 0; k < 2; k++) for (let i = 0; i < 5; i++) setTimeout(() => sfx.card(), (k * ROW + i * STEP) * 1000);
+    clearTimeout(this.footTimer);
+    this.footTimer = setTimeout(() => { if (iWon) sfx.win(); else if (ws && mine) sfx.deny(); else sfx.lever(); }, done * 1000);
     clearTimeout(this.revealTimer);
-    this.revealTimer = setTimeout(() => { el.hidden = true; document.body.classList.remove('showdownup'); }, 7000);
+    this.revealTimer = setTimeout(() => { el.hidden = true; document.body.classList.remove('showdownup'); }, (done + 5) * 1000);
   }
 
   // ---------- betting on The Pit ----------
@@ -390,21 +544,36 @@ export class Duel {
   openBet() {
     const v = this.view;
     if (!v || v.ph !== 'bets') return;
-    this.betSide = this.betSide || 'a';
-    this.betAmt = this.betAmt || 0;
+    if (this.myBet && this.myBetFight !== v.a + v.b) this.myBet = null; // last fight's bet
+    this.betSide = this.myBet ? this.myBet.side : this.betSide || 'a';
+    this.betAmt = this.myBet ? this.myBet.amount : this.betAmt || 0;
+    this.betWhoKey = this.betChipKey = null;
     this.renderBet();
     this.raid.setOverlay('bet');
   }
 
+  // The bet window. render() calls this every frame, so the buttons are only rebuilt when something
+  // on them actually changes; rebuilding them under the mouse swallowed clicks (you couldn't switch sides).
   renderBet() {
     const v = this.view;
     if (!v) { this.raid.setOverlay(null); return; }
     const chips = save.get().stash.chips;
-    $('betWho').innerHTML = [['a', v.a], ['b', v.b]].map(([k, n]) => `<button class="betside ${this.betSide === k ? 'on' : ''}" data-s="${k}"><b>${n}</b><small>🪙 ${fmt(k === 'a' ? v.pa || 0 : v.pb || 0)} bet so far</small></button>`).join('');
+    const mine = this.myBet;
+    const whoKey = `${this.betSide}|${v.a}|${v.b}|${v.pa || 0}|${v.pb || 0}|${mine ? mine.side + mine.amount : ''}`;
+    if (whoKey !== this.betWhoKey) {
+      this.betWhoKey = whoKey;
+      $('betWho').innerHTML = [['a', v.a], ['b', v.b]].map(([k, n]) => `<button class="betside ${this.betSide === k ? 'on' : ''}" data-s="${k}"><b>${n}</b><small>🪙 ${fmt(k === 'a' ? v.pa || 0 : v.pb || 0)} bet so far${mine && mine.side === k ? ` · yours: 🪙 ${fmt(mine.amount)}` : ''}</small></button>`).join('');
+    }
+    const chipKey = `${this.betAmt}|${BETS.map((x) => x > chips).join('')}`;
+    if (chipKey !== this.betChipKey) {
+      this.betChipKey = chipKey;
+      $('betChips').innerHTML = BETS.map((x) => `<button class="cchip c${x} ${x === this.betAmt ? 'on' : ''}" data-v="${x}" ${x > chips ? 'disabled' : ''}>${x >= 1000 ? `${x / 1000}K` : x}</button>`).join('');
+    }
     $('betWho').onclick = (e) => { const b = e.target.closest('[data-s]'); if (b) { this.betSide = b.dataset.s; this.renderBet(); } };
-    $('betChips').innerHTML = BETS.map((x) => `<button class="cchip c${x} ${x === this.betAmt ? 'on' : ''}" data-v="${x}" ${x > chips ? 'disabled' : ''}>${x >= 1000 ? `${x / 1000}K` : x}</button>`).join('');
     $('betChips').onclick = (e) => { const b = e.target.closest('[data-v]'); if (b && !b.disabled) { this.betAmt = Number(b.dataset.v); this.renderBet(); } };
-    $('betNote').textContent = `Pays 2x if you're right. Draws are refunded. Your bank: 🪙 ${fmt(chips)}. Bets close in ${Math.max(0, Math.ceil(BET_TIME - v.t))}s.`;
+    const note = `${mine ? `You have 🪙 ${fmt(mine.amount)} on ${mine.side === 'a' ? v.a : v.b}. Pick again to change it. ` : ''}Pays 2x if you're right. Draws are refunded. Your bank: 🪙 ${fmt(chips)}. Bets close in ${Math.max(0, Math.ceil(BET_TIME - v.t))}s.`;
+    if ($('betNote').textContent !== note) $('betNote').textContent = note;
+    $('betSend').textContent = mine ? 'CHANGE BET' : 'BET';
     $('betSend').onclick = () => this.sendBet();
     $('betCancel').onclick = () => this.raid.setOverlay(null);
   }
@@ -418,6 +587,7 @@ export class Duel {
       if (!this.placeBet(this.raid.player, side, amt)) { this.raid.hud.toast('Bets are closed.'); return; }
     } else this.net.send({ k: 'bet', side, amount: amt });
     this.myBet = { side, amount: amt };
+    this.myBetFight = this.view.a + this.view.b;
     this.raid.hud.toast(`🎟️ 🪙 ${fmt(amt)} on ${side === 'a' ? this.view.a : this.view.b}. Good luck!`);
   }
 
@@ -548,7 +718,12 @@ export class Duel {
     this.tables.update(dt);
     // Invites time out.
     if (this.invite && performance.now() > this.invite.until) this.answer(false);
+    this.tickDeal();
     if (!this.referee) { this.render(); return; }
+    // Someone never drew (left, lost connection): they stand pat.
+    for (const g of [...this.hands.values()]) {
+      if (performance.now() - g.at > (DRAW_TIME + 8) * 1000) { g.da = g.da || []; g.db = g.db || []; this.pokerCheck(g); }
+    }
     for (const [id, p] of this.pending) if (performance.now() - p.at > 22000) { this.pending.delete(id); this.tell(p.a, `${p.b.name} didn't answer.`); }
     const c = this.cur;
     if (c) {

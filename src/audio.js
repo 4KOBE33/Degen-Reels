@@ -137,6 +137,7 @@ export const sfx = {
   extract() { [392, 523, 659, 784, 1047].forEach((f, i) => tone({ freq: f, dur: 0.2, type: 'triangle', vol: 0.12, delay: i * 0.1 })); },
   // The extraction siren: heard across the whole map.
   siren(near = 1) { [0, 0.45].forEach((d) => tone({ freq: 520, to: 880, dur: 0.42, type: 'sawtooth', vol: 0.05 * near + 0.025, delay: d })); },
+  card() { noise({ dur: 0.07, vol: 0.12, freq: 2600, to: 1100, q: 2 }); },
   deny() { tone({ freq: 200, to: 150, dur: 0.18, type: 'square', vol: 0.1 }); },
   cashout() { [523, 659, 784, 1047, 1319, 1568].forEach((f, i) => tone({ freq: f, dur: 0.25, type: 'triangle', vol: 0.14, delay: i * 0.12 })); },
 };

@@ -117,8 +117,11 @@ function setOverlay(name) {
   if (overlay === 'seat' && name && name !== 'seat') return;
   // Getting up from a Lounge table.
   if (overlay === 'seat' && name !== 'seat' && raid.duel) raid.duel.tables.leave();
+  const wasPoker = overlay === 'poker';
   overlay = name;
   if (name) tutorial.note(name);
+  $('pokerPanel').hidden = name !== 'poker';
+  if (wasPoker && name !== 'poker' && raid.duel) raid.duel.pokerClosed();
   $('bag').hidden = name !== 'bag';
   $('bigmap').hidden = name !== 'map';
   $('duelPanel').hidden = name !== 'duel';
@@ -132,6 +135,8 @@ controller.onToggle = (name) => setOverlay(overlay === name ? null : name);
 controller.onLockChange = (locked) => {
   const inRaid = raid.active;
   $('paused').hidden = locked || !inRaid || !!overlay;
+  // The challenge panel closing re-locks the mouse just as the cards land: keep the poker hand open.
+  if (locked && overlay === 'poker') { document.exitPointerLock(); return; }
   if (locked && overlay) setOverlay(null);
 };
 const kcLive = () => raid.killcam && !raid.killcam.over;
@@ -152,6 +157,7 @@ window.addEventListener('keydown', (e) => {
     return;
   }
   if (e.key === 'Escape' && overlay) {
+    if (overlay === 'poker') { setOverlay(null); return; }
     overlay = null;
     $('bag').hidden = true;
     $('bigmap').hidden = true;
