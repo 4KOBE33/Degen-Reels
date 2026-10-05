@@ -1301,13 +1301,19 @@ export class Raid {
       const center = a.center(new THREE.Vector3());
       const d = center.distanceTo(point);
       if (d > w.splash + (a.radius || 0.5)) continue;
-      const k = Math.max(0, 1 - d / w.splash);
+      let k = Math.max(0, 1 - d / w.splash);
+      // Behind a wall or a pillar: the blast mostly misses you.
+      if (d > 0.6) {
+        const to = center.clone().sub(point);
+        const wall = this.raycast(point, to.clone().normalize(), d, null, { solidsOnly: true });
+        if (wall.hit && wall.distance < d - 0.4) k *= 0.25;
+      }
       if (a.vel && a.team !== 'machine') {
         a.vel.add(center.clone().sub(point).normalize().multiplyScalar(14 * k));
         a.vel.y += 7 * k;
         a.onGround = false;
       }
-      this.damage(a, base * (0.4 + 0.6 * k) * (a === owner ? 0.4 : 1), owner, center);
+      this.damage(a, base * (0.4 + 0.6 * k) * (k < 0.3 && d > 0.6 ? 0.35 : 1) * (a === owner ? 0.4 : 1), owner, center);
     }
   }
 

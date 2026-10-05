@@ -1081,6 +1081,14 @@ export class Machine {
     raid.feed(msg);
     if (raid.player && raid.player.alive && raid.player.pos.distanceTo(this.pos) < 90) raid.hud.toast(msg, 'big');
     if (this.puppet) return;
+    // The house comps the challengers: heals and plates drop by the cover pillars.
+    const spots = (raid.map.casino && raid.map.casino.comps) || [];
+    const loot = n === 2 ? [{ id: 'soda', qty: 1 }, { id: 'plate', qty: 1 }, { id: 'bandage', qty: 2 }] : [{ id: 'soda', qty: 1 }, { id: 'plate', qty: 2 }, { id: 'bandage', qty: 2 }];
+    if (spots.length) {
+      const far = spots.slice().sort((a, b) => Math.hypot(b.x - this.pos.x, b.z - this.pos.z) - Math.hypot(a.x - this.pos.x, a.z - this.pos.z));
+      loot.forEach((it, i) => { const sp = far[i % Math.min(2, far.length)]; raid.dropItem(new THREE.Vector3(sp.x + (i - 1) * 0.8, 0, sp.z), it); });
+      raid.feed('🩹 The house comps the challengers: heals and plates by the pillars!');
+    }
     // Backup arrives.
     const call = n === 2 ? this.theme.adds2 : this.theme.adds3;
     for (const type of call) {
@@ -1134,14 +1142,14 @@ export class Machine {
         }
         raid.feed(`📣 ${this.name} called in backup!`);
       } else {
-        for (let i = 0; i < (ph === 3 ? 5 : 4); i++) {
+        for (let i = 0; i < (ph === 3 ? 4 : 3); i++) {
           setTimeout(() => {
             if (!this.alive || !t.alive) return;
             const origin = this.muzzleWorld();
             origin.y += 1;
             const aim = t.pos.clone().add(new THREE.Vector3((Math.random() - 0.5) * 5, 0.5, (Math.random() - 0.5) * 5));
-            raid.spawnRocket(origin, aim.sub(origin).normalize(), this, 0, Math.round(40 * this.rage.dmg));
-          }, i * 260);
+            raid.spawnRocket(origin, aim.sub(origin).normalize(), this, 0, Math.round(30 * this.rage.dmg));
+          }, i * 300);
         }
       }
       return;
@@ -1156,7 +1164,7 @@ export class Machine {
           const origin = this.muzzleWorld();
           origin.y += 1;
           const aim = t.pos.clone().add(new THREE.Vector3((Math.random() - 0.5) * 6, 0.5, (Math.random() - 0.5) * 6));
-          raid.spawnRocket(origin, aim.sub(origin).normalize(), this, 0, 40);
+          raid.spawnRocket(origin, aim.sub(origin).normalize(), this, 0, 30);
         }, i * 350);
       }
     } else if (roll < 0.65 && raid.machines.filter((m) => m.alive && m.type === this.theme.summon[1] && m.summoned).length < 4) {

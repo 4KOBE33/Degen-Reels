@@ -220,6 +220,27 @@ export function buildMap(scene, mapId = 'vegas') {
     c.proxy = proxyFor(c, bottom);
     insert(c, minX, maxX, minZ, maxZ);
   }
+  function removeCollider(c) {
+    const [minX, maxX, minZ, maxZ] = boundsOf(c);
+    for (let cx = Math.floor((minX - 1) / CELL); cx <= Math.floor((maxX + 1) / CELL); cx++) {
+      for (let cz = Math.floor((minZ - 1) / CELL); cz <= Math.floor((maxZ + 1) / CELL); cz++) {
+        const list = grid.get(cellKey(cx, cz));
+        if (list) { const i = list.indexOf(c); if (i >= 0) list.splice(i, 1); }
+      }
+    }
+  }
+  // Trees, cacti and rocks, so a tower or monument built later can clear them out of its way
+  // (no more pine trees growing through a staircase).
+  const scenery = [];
+  function clearScenery(minX, maxX, minZ, maxZ) {
+    for (let i = scenery.length - 1; i >= 0; i--) {
+      const t = scenery[i];
+      if (t.x + t.r < minX || t.x - t.r > maxX || t.z + t.r < minZ || t.z - t.r > maxZ) continue;
+      if (t.obj.parent) t.obj.parent.remove(t.obj);
+      removeCollider(t.col);
+      scenery.splice(i, 1);
+    }
+  }
   const box = (x, z, w, d, top) => addCollider({ type: 'box', minX: x - w / 2, maxX: x + w / 2, minZ: z - d / 2, maxZ: z + d / 2, top });
   const circle = (x, z, r, top) => addCollider({ type: 'circle', x, z, r, top });
 
@@ -284,7 +305,7 @@ export function buildMap(scene, mapId = 'vegas') {
       g.add(leaf);
     }
     statics.add(g);
-    circle(x, z, 0.35, 8);
+    scenery.push({ x, z, r: 2, obj: g, col: circle(x, z, 0.35, 8) });
   }
 
   function cactus(x, z) {
@@ -303,7 +324,7 @@ export function buildMap(scene, mapId = 'vegas') {
     }
     g.rotation.y = Math.random() * Math.PI;
     statics.add(g);
-    circle(x, z, 0.4 * s, 3 * s);
+    scenery.push({ x, z, r: s, obj: g, col: circle(x, z, 0.4 * s, 3 * s) });
   }
 
   function rock(x, z, s) {
@@ -312,7 +333,7 @@ export function buildMap(scene, mapId = 'vegas') {
     m.scale.y = 0.6;
     m.rotation.y = Math.random() * Math.PI;
     statics.add(m);
-    circle(x, z, s * 0.9, s * 0.9);
+    scenery.push({ x, z, r: s, obj: m, col: circle(x, z, s * 0.9, s * 0.9) });
   }
 
   function streetLight(x, z) {
@@ -367,6 +388,7 @@ export function buildMap(scene, mapId = 'vegas') {
   const lampMat = new THREE.MeshBasicMaterial({ color: 0xfff1b8 });
   const winPaneMat = new THREE.MeshBasicMaterial({ color: 0x35507a });
 
+  const doorFronts = [];
   // Walls with door gaps, a floor and a roof. doors: [{ side: 'n'|'s'|'e'|'w', at, width }]
   function building({ name, x, z, w, d, h = 5, color = 0xe9d8a6, trim = 0x2b2140, floor = 0x9c6b4a, floorMap = null, doors = [], tier = 2, sign = null, signColor = '#ff3fa4', roof = true, mapColor = '#6b4f3a', windows = !def.indoor, furnish = true }) {
     const T = 0.5;
@@ -388,6 +410,12 @@ export function buildMap(scene, mapId = 'vegas') {
       statics.add(lamp);
     }
 
+    // Remember where the doors are, so the outside can be dressed without blocking them.
+    for (const dr of doors) {
+      const nx = dr.side === 'e' ? 1 : dr.side === 'w' ? -1 : 0;
+      const nz = dr.side === 's' ? 1 : dr.side === 'n' ? -1 : 0;
+      doorFronts.push({ x: nz ? x + dr.at : x + (nx * w) / 2, z: nz ? z + (nz * d) / 2 : z + dr.at, nx, nz, width: dr.width });
+    }
     const sides = {
       n: { len: w, cx: x, cz: z - d / 2, horiz: true },
       s: { len: w, cx: x, cz: z + d / 2, horiz: true },
@@ -517,7 +545,7 @@ export function buildMap(scene, mapId = 'vegas') {
       }
     }
     statics.add(g);
-    circle(x, z, 0.5 * s, 7 * s);
+    scenery.push({ x, z, r: 2 * s, obj: g, col: circle(x, z, 0.5 * s, 7 * s) });
   }
 
   function snowman(x, z) {
@@ -564,7 +592,7 @@ export function buildMap(scene, mapId = 'vegas') {
       g.add(moss);
     }
     statics.add(g);
-    circle(x, z, 0.8 * s, 8 * s);
+    scenery.push({ x, z, r: 2.4 * s, obj: g, col: circle(x, z, 0.8 * s, 8 * s) });
   }
 
   function reeds(x, z) {
@@ -794,6 +822,66 @@ export function buildMap(scene, mapId = 'vegas') {
       statics.add(base, rim, top);
       circle(CX + tx, CZ + tz, 2.4, 1.15);
     }
+    // Real cover for the boss fight: marble pillars up to the ceiling, back-to-back banks of tall
+    // slot machines, and a giant chip statue by the doors. Rockets and bullets stop on all of them.
+    const marble = toon(0xf3e8d6);
+    const goldM = toon(0xd4a63a);
+    const comps = [];
+    for (const [px, pz] of [[-10, 2], [10, 2], [-34, 20], [34, 20], [-36, -6], [36, -6], [0, -6]]) {
+      const shaft = part(new THREE.CylinderGeometry(1.15, 1.15, 10, 18), marble, { ink: 0.03 });
+      shaft.position.set(CX + px, 5, CZ + pz);
+      for (const y of [0.35, 9.65]) {
+        const cap = part(new THREE.CylinderGeometry(1.5, 1.5, 0.7, 18), goldM, { ink: 0.02 });
+        cap.position.set(CX + px, y, CZ + pz);
+        statics.add(cap);
+      }
+      statics.add(shaft);
+      circle(CX + px, CZ + pz, 1.3, 10);
+      comps.push({ x: CX + px, z: CZ + pz + (pz < 10 ? -2.2 : 2.2) });
+    }
+    const bankColors = [0x2a9d8f, 0xe63946, 0x7b2cbf, 0xff9f1c];
+    for (const [bx, bz] of [[-20, -8], [20, -8], [-38, 30], [38, 30]]) {
+      const g = new THREE.Group();
+      g.position.set(CX + bx, 0, CZ + bz);
+      const core = part(new THREE.BoxGeometry(7.2, 3.4, 1.0), 0x1b0f2b, { ink: 0.03 });
+      core.position.y = 1.7;
+      g.add(core);
+      for (const face of [-1, 1]) {
+        for (let i = 0; i < 4; i++) {
+          const mx = -2.7 + i * 1.8;
+          const body = part(new THREE.BoxGeometry(1.6, 3.0, 0.6), bankColors[(i + (face > 0 ? 1 : 0)) % 4], { ink: 0.02 });
+          body.position.set(mx, 1.5, face * 0.75);
+          const scr = new THREE.Mesh(new THREE.PlaneGeometry(1.1, 0.7), new THREE.MeshBasicMaterial({ color: 0xfff6e0 }));
+          scr.position.set(mx, 2.2, face * 1.06);
+          if (face < 0) scr.rotation.y = Math.PI;
+          const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 6), new THREE.MeshBasicMaterial({ color: [0xff3fa4, 0xffd23f, 0x2ee6d6][i % 3] }));
+          lamp.position.set(mx, 3.2, face * 0.75);
+          g.add(body, scr, lamp);
+        }
+      }
+      const sign = part(new THREE.BoxGeometry(7.4, 0.5, 0.3), 0xd4a63a, { ink: 0.02 });
+      sign.position.y = 3.65;
+      g.add(sign);
+      statics.add(g);
+      box(CX + bx, CZ + bz, 7.4, 2.2, 3.9);
+    }
+    // The chip statue: a tall stack of giant chips on a plinth.
+    {
+      const sx = CX;
+      const sz = CZ + 26;
+      const plinth = part(new THREE.CylinderGeometry(2.4, 2.6, 1, 24), 0x2b2140, { ink: 0.03 });
+      plinth.position.set(sx, 0.5, sz);
+      statics.add(plinth);
+      const chipCols = [0xe63946, 0x1b0f2b, 0x2a9d8f, 0x7b2cbf, 0xffd23f];
+      for (let i = 0; i < 6; i++) {
+        const c = part(new THREE.CylinderGeometry(1.9, 1.9, 0.55, 28), chipCols[i % 5], { ink: 0.02 });
+        c.position.set(sx + Math.sin(i * 1.7) * 0.12, 1.3 + i * 0.56, sz + Math.cos(i * 1.7) * 0.12);
+        statics.add(c);
+      }
+      circle(sx, sz, 2.4, 4.6);
+      comps.push({ x: sx, z: sz - 3.2 });
+    }
+
     // Cashier cage and bar.
     const cage = part(new THREE.BoxGeometry(14, 1.3, 2), 0x24103d);
     cage.position.set(CX - 30, 0.65, CZ - 20);
@@ -806,7 +894,7 @@ export function buildMap(scene, mapId = 'vegas') {
     box(CX + 30, CZ - 20, 14, 2, 1.3);
     container('register', CX + 30, CZ - 18.4, 3);
     for (const lx of [-40, -36, 36, 40]) container('locker', CX + lx, CZ - CD / 2 + 1.5, 3);
-    for (const [kx, kz] of [[-18, -7], [18, -7], [-40, 15], [40, 15], [-20, 30], [20, 30]]) container('crate', CX + kx, CZ + kz, 3);
+    for (const [kx, kz] of [[-18, -12], [18, -12], [-40, 15], [40, 15], [-20, 31], [20, 31]]) container('crate', CX + kx, CZ + kz, 3);
     const bulbMat = new THREE.MeshBasicMaterial({ color: 0xfff1b8 });
     for (const [lx, lz] of [[-20, 15], [20, 15], [0, 25], [-20, -5], [20, -5]]) {
       const ring = part(new THREE.TorusGeometry(1.6, 0.1, 8, 24), 0xd4a63a, { ink: 0.02, shadow: false });
@@ -828,7 +916,7 @@ export function buildMap(scene, mapId = 'vegas') {
     enemies('dicer', CX, CZ + 5, 2, 20);
     if (plaza) plaza(CX, CZ + CD / 2 + 15);
     return {
-      casino: { x: CX, z: CZ, w: CW, d: CD, doors },
+      casino: { x: CX, z: CZ, w: CW, d: CD, doors, comps },
       vault: { x: CX, z: vz, doorZ: vz + VD / 2 },
     };
   }
@@ -1056,6 +1144,205 @@ export function buildMap(scene, mapId = 'vegas') {
     }
     return false;
   };
+  // ---------- dressing: props by the doors and little things on the ground ----------
+  // Purely for looks (the bigger props are solid so you can't walk through them). Seeded like the
+  // rest of the map, so everyone in a party gets the same props.
+  if (!def.indoor && !def.safe) {
+    const theme = { vegas: 'vegas', frost: 'frost', bayou: 'bayou', tequila: 'wine' }[mapId] || 'vegas';
+    const R = Math.random;
+    const add = (m, x, y, z, ry = 0) => { m.position.set(x, y, z); m.rotation.y = ry; statics.add(m); return m; };
+    const basic = (c) => new THREE.MeshBasicMaterial({ color: c });
+    const props = {
+      trash(x, z, ry) {
+        add(part(new THREE.CylinderGeometry(0.33, 0.3, 0.9, 12), 0x2f5d50, { ink: 0.02 }), x, 0.45, z);
+        add(part(new THREE.CylinderGeometry(0.36, 0.36, 0.08, 12), 0x1f3d35, { ink: 0.015 }), x, 0.94, z, ry);
+        circle(x, z, 0.38, 1);
+      },
+      newsbox(x, z, ry) {
+        const c = R() < 0.5 ? 0xe63946 : 0x2563eb;
+        add(part(new THREE.BoxGeometry(0.55, 1.0, 0.45), c, { ink: 0.02 }), x, 0.5, z, ry);
+        add(new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.3, 0.47), basic(0xfff6e0)), x, 0.72, z, ry);
+        circle(x, z, 0.35, 1.1);
+      },
+      hydrant(x, z) {
+        add(part(new THREE.CylinderGeometry(0.15, 0.18, 0.62, 10), 0xe63946, { ink: 0.02 }), x, 0.31, z);
+        add(part(new THREE.SphereGeometry(0.16, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2), 0xe63946, { ink: 0.015 }), x, 0.62, z);
+        const nub = part(new THREE.CylinderGeometry(0.06, 0.06, 0.42, 8), 0xffd23f, { ink: 0.01 });
+        nub.rotation.z = Math.PI / 2;
+        add(nub, x, 0.4, z);
+        circle(x, z, 0.22, 0.75);
+      },
+      planter(x, z, ry, leaf = 0x3f8f3a) {
+        add(part(new THREE.BoxGeometry(0.95, 0.5, 0.95), 0x9c5a32, { ink: 0.02 }), x, 0.25, z, ry);
+        add(part(new THREE.IcosahedronGeometry(0.55, 0), leaf, { ink: 0.02 }), x, 0.85, z, R() * 3);
+        box(x, z, 0.95, 0.95, 1.2);
+      },
+      bench(x, z, ry) {
+        const g = new THREE.Group();
+        const wood = 0x8b5a2b;
+        const seat = part(new THREE.BoxGeometry(1.6, 0.1, 0.5), wood, { ink: 0.015 });
+        seat.position.y = 0.48;
+        const back = part(new THREE.BoxGeometry(1.6, 0.4, 0.08), wood, { ink: 0.015 });
+        back.position.set(0, 0.78, -0.22);
+        g.add(seat, back);
+        for (const sx of [-0.7, 0.7]) {
+          const leg = part(new THREE.BoxGeometry(0.08, 0.48, 0.45), 0x2b2140, { ink: 0 });
+          leg.position.set(sx, 0.24, 0);
+          g.add(leg);
+        }
+        add(g, x, 0, z, ry);
+        const along = Math.abs(Math.sin(ry)) > 0.5;
+        box(x, z, along ? 0.5 : 1.6, along ? 1.6 : 0.5, 0.6);
+      },
+      barrel(x, z, ry) {
+        add(part(new THREE.CylinderGeometry(0.42, 0.42, 1.0, 14), 0x7c4a22, { ink: 0.02 }), x, 0.5, z, ry);
+        for (const y of [0.2, 0.8]) add(new THREE.Mesh(new THREE.TorusGeometry(0.43, 0.03, 4, 16), basic(0x374151)), x, y, z).rotation.x = Math.PI / 2;
+        circle(x, z, 0.45, 1.05);
+      },
+      winebarrel(x, z, ry) {
+        const b = part(new THREE.CylinderGeometry(0.48, 0.48, 1.1, 14), 0x8b5a2b, { ink: 0.02 });
+        b.rotation.z = Math.PI / 2;
+        const g = new THREE.Group();
+        g.add(b);
+        for (const dx of [-0.35, 0.35]) {
+          const band = new THREE.Mesh(new THREE.TorusGeometry(0.49, 0.03, 4, 16), basic(0x3f2a14));
+          band.rotation.y = Math.PI / 2;
+          band.position.x = dx;
+          g.add(band);
+        }
+        const cork = new THREE.Mesh(new THREE.CircleGeometry(0.12, 10), basic(0x6b1d2e));
+        cork.position.set(0.56, 0, 0);
+        cork.rotation.y = Math.PI / 2;
+        g.add(cork);
+        add(g, x, 0.5, z, ry);
+        circle(x, z, 0.55, 1);
+      },
+      lantern(x, z) {
+        add(part(new THREE.CylinderGeometry(0.06, 0.08, 2.2, 8), 0x2b2140, { ink: 0.01 }), x, 1.1, z);
+        add(new THREE.Mesh(new THREE.BoxGeometry(0.28, 0.34, 0.28), basic(0xffc56b)), x, 2.3, z);
+        add(part(new THREE.ConeGeometry(0.24, 0.2, 4), 0x2b2140, { ink: 0.01 }), x, 2.57, z, Math.PI / 4);
+        circle(x, z, 0.15, 2.4);
+      },
+      crate(x, z, ry) {
+        add(part(new THREE.BoxGeometry(0.85, 0.85, 0.85), 0xb07a3c, { ink: 0.02 }), x, 0.43, z, ry);
+        if (R() < 0.5) add(part(new THREE.BoxGeometry(0.6, 0.6, 0.6), 0x9c6b32, { ink: 0.02 }), x + 0.08, 1.15, z - 0.05, ry + 0.4);
+        box(x, z, 0.9, 0.9, 1.4);
+      },
+      snowpile(x, z) {
+        const m = part(new THREE.SphereGeometry(0.8, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2), 0xf8fafc, { ink: 0.02 });
+        m.scale.set(1.2, 0.55, 0.9);
+        add(m, x, 0, z, R() * 3);
+      },
+      firewood(x, z, ry) {
+        const g = new THREE.Group();
+        for (const [lx, ly] of [[-0.24, 0.16], [0, 0.16], [0.24, 0.16], [-0.12, 0.4], [0.12, 0.4], [0, 0.62]]) {
+          const log = part(new THREE.CylinderGeometry(0.13, 0.13, 1.1, 8), 0x7c4a22, { ink: 0.015 });
+          log.rotation.x = Math.PI / 2;
+          log.position.set(lx, ly, 0);
+          g.add(log);
+        }
+        add(g, x, 0, z, ry);
+        box(x, z, 1.1, 1.1, 0.8);
+      },
+      agave(x, z) {
+        add(part(new THREE.CylinderGeometry(0.35, 0.26, 0.5, 10), 0xc2410c, { ink: 0.02 }), x, 0.25, z);
+        for (let i = 0; i < 7; i++) {
+          const a = (i / 7) * Math.PI * 2;
+          const leaf = part(new THREE.ConeGeometry(0.08, 0.7, 5), 0x6b8f71, { ink: 0.01 });
+          leaf.position.set(x + Math.cos(a) * 0.12, 0.75, z + Math.sin(a) * 0.12);
+          leaf.rotation.set(Math.sin(a) * 0.6, 0, -Math.cos(a) * 0.6);
+          statics.add(leaf);
+        }
+        circle(x, z, 0.36, 1);
+      },
+      flowerpot(x, z) {
+        add(part(new THREE.CylinderGeometry(0.32, 0.24, 0.45, 10), 0xc2410c, { ink: 0.02 }), x, 0.23, z);
+        const cols = [0xff7eb6, 0xffd23f, 0xc77dff, 0xff5d5d];
+        for (let i = 0; i < 5; i++) {
+          const a = (i / 5) * Math.PI * 2;
+          add(new THREE.Mesh(new THREE.SphereGeometry(0.1, 8, 6), basic(cols[i % 4])), x + Math.cos(a) * 0.15, 0.58 + (i % 2) * 0.06, z + Math.sin(a) * 0.15);
+        }
+        add(part(new THREE.SphereGeometry(0.22, 8, 6), 0x3f8f3a, { ink: 0 }), x, 0.48, z);
+        circle(x, z, 0.32, 0.8);
+      },
+    };
+    const sets = {
+      vegas: ['trash', 'newsbox', 'hydrant', 'planter', 'bench', 'trash'],
+      frost: ['snowpile', 'firewood', 'lantern', 'barrel', 'bench', 'snowpile'],
+      bayou: ['barrel', 'lantern', 'crate', 'planter', 'firewood', 'barrel'],
+      wine: ['winebarrel', 'flowerpot', 'bench', 'lantern', 'agave', 'flowerpot'],
+    }[theme];
+    for (const dr of doorFronts) {
+      if (R() < 0.2) continue;
+      const tx = -dr.nz;
+      const tz = dr.nx;
+      const ry = Math.atan2(dr.nx, dr.nz);
+      for (const side of [-1, 1]) {
+        if (R() < 0.25) continue;
+        const off = dr.width / 2 + 1.0 + R() * 0.6;
+        const x = dr.x + tx * side * off + dr.nx * 0.95;
+        const z = dr.z + tz * side * off + dr.nz * 0.95;
+        if (solidAt(x, z, 0.7, 0.3)) continue;
+        if (Math.abs(x) > H - 3 || Math.abs(z) > H - 3) continue;
+        const kind = sets[Math.floor(R() * sets.length)];
+        props[kind](x, z, ry);
+      }
+    }
+    // Little things on the ground: grass, pebbles, flowers, a dropped chip or card here and there.
+    const tuftCol = { vegas: 0xc9a861, frost: 0x94a3b8, bayou: 0x4d7c2f, wine: 0x5a8f2e }[theme];
+    const tuftMat = toon(tuftCol);
+    const stoneMat = toon({ vegas: 0x9c7a55, frost: 0x64748b, bayou: 0x6b6b5a, wine: 0x8a7a66 }[theme]);
+    const chipMats = [0xe63946, 0x2563eb, 0x1b0f2b, 0x16a34a].map((c) => basic(c));
+    const flowerMats = [0xff7eb6, 0xffd23f, 0xffffff, 0xc77dff].map((c) => basic(c));
+    const capMat = basic(0xe63946);
+    const tuftGeo = new THREE.ConeGeometry(0.06, 0.5, 4);
+    const stoneGeo = new THREE.DodecahedronGeometry(0.22, 0);
+    const chipGeo = new THREE.CylinderGeometry(0.16, 0.16, 0.04, 12);
+    const bloomGeo = new THREE.SphereGeometry(0.09, 6, 5);
+    const roadFree = (x, z) => !solidAt(x, z, 0.4, 0.2);
+    scatter(520, (x, z) => {
+      if (!roadFree(x, z)) return;
+      const r = R();
+      if (r < 0.5) {
+        // A tuft of grass (or dry brush, or frozen reeds).
+        for (let i = 0; i < 4; i++) {
+          const t = new THREE.Mesh(tuftGeo, tuftMat);
+          t.position.set(x + (R() - 0.5) * 0.35, 0.22, z + (R() - 0.5) * 0.35);
+          t.rotation.set((R() - 0.5) * 0.7, 0, (R() - 0.5) * 0.7);
+          t.scale.y = 0.6 + R() * 0.8;
+          statics.add(t);
+        }
+      } else if (r < 0.75) {
+        const st = new THREE.Mesh(stoneGeo, stoneMat);
+        st.position.set(x, 0.08, z);
+        st.scale.set(0.6 + R(), 0.4 + R() * 0.4, 0.6 + R());
+        st.rotation.set(R() * 3, R() * 3, 0);
+        statics.add(st);
+      } else if (r < 0.88 && theme !== 'frost') {
+        if (theme === 'bayou') {
+          // A little red mushroom.
+          const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 0.2, 6), basic(0xfff6e0));
+          stem.position.set(x, 0.1, z);
+          const cap = new THREE.Mesh(new THREE.SphereGeometry(0.12, 8, 5, 0, Math.PI * 2, 0, Math.PI / 2), capMat);
+          cap.position.set(x, 0.18, z);
+          statics.add(stem, cap);
+        } else {
+          for (let i = 0; i < 3; i++) {
+            const b = new THREE.Mesh(bloomGeo, flowerMats[Math.floor(R() * flowerMats.length)]);
+            b.position.set(x + (R() - 0.5) * 0.5, 0.18 + R() * 0.1, z + (R() - 0.5) * 0.5);
+            statics.add(b);
+          }
+        }
+      } else {
+        // Somebody dropped a chip.
+        const c = new THREE.Mesh(chipGeo, chipMats[Math.floor(R() * chipMats.length)]);
+        c.position.set(x, 0.03, z);
+        c.rotation.set((R() - 0.5) * 0.3, 0, (R() - 0.5) * 0.3);
+        statics.add(c);
+      }
+    }, () => false);
+  }
+
   const clearSpot = (x, z, r, minTop) => {
     if (!solidAt(x, z, r, minTop)) return null;
     for (let d = 3; d <= 45; d += 3) {
@@ -1148,6 +1435,7 @@ export function buildMap(scene, mapId = 'vegas') {
       const wallMat = toon(color);
       const trimMat = toon(trim);
       const doorX = x - w / 4;
+      clearScenery(minX - 2, maxX + 2, minZ - 2, maxZ + 4);
       // Outer walls (full height, so the top makes a parapet around the roof).
       slab(minX, maxX, minZ, minZ + T, 0, top, wallMat);
       slab(minX, minX + T, minZ, maxZ, 0, top, wallMat);
@@ -1211,6 +1499,7 @@ export function buildMap(scene, mapId = 'vegas') {
     // A raised plaza with stairs up the south side, for monuments to stand on.
     function plaza(x, z, size, mat) {
       const h = 3;
+      clearScenery(x - size / 2 - 1.5, x + size / 2 + 1.5, z - size / 2 - 1.5, z + size / 2 + 9);
       slab(x - size / 2, x + size / 2, z - size / 2, z + size / 2, 0, h, mat);
       stairs(x - 3, x + 3, z + size / 2 + 6.6, -1, 0, h, mat, 11);
       return h;
@@ -2379,7 +2668,7 @@ function frostbitePeaks(k) {
   const {
     H, THREE, statics, zones, minimap, slotSpots, part, toon, neonSign, flat, box, circle,
     car, rock, streetLight, billboard, crateStack, building, container, enemies, casino,
-    pine, snowman, scatter, fire, yard, watchtower, waterTower, tent,
+    pine, snowman, scatter, fire, yard, watchtower, waterTower, tent, addCollider,
   } = k;
   const path = toon(0xb8c4d6);
   flat(0, (10 + H) / 2, 14, H - 10, path);
@@ -2621,26 +2910,109 @@ function frostbitePeaks(k) {
   }
 
   // ----- Old Mine (far south-west by the frozen creek) -----
+  // A rocky hillside with a timber-framed shaft you can walk into: rails, lanterns, and the good
+  // stuff at the back where nobody's been in years.
   {
     const mx = -175;
     const mz = 4;
-    const rockFace = part(new THREE.BoxGeometry(14, 12, 18), 0x64748b, { ink: 0.06 });
-    rockFace.position.set(mx - 10, 6, mz);
-    const mouth = part(new THREE.BoxGeometry(1, 4.5, 5), 0x111827, { ink: 0 });
-    mouth.position.set(mx - 2.6, 2.25, mz);
-    statics.add(rockFace, mouth);
-    box(mx - 10, mz, 14, 18, 12);
+    const rock = 0x64748b;
+    const rockDark = 0x475569;
+    // The hill: x from mx-20 to mx-3, z from mz-10 to mz+10, 9 tall. The shaft runs west from the
+    // east face at z = mz, 4.4 wide and 4 tall, 13 deep.
+    const HX0 = mx - 20;
+    const HX1 = mx - 3;
+    const SW = 4.4;
+    const SH = 4;
+    const SD = 13;
+    const block = (x0, x1, z0, z1, y0, y1, color, collide = true) => {
+      const m = part(new THREE.BoxGeometry(x1 - x0, y1 - y0, z1 - z0), color, { ink: 0.05 });
+      m.position.set((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2);
+      statics.add(m);
+      if (collide) addCollider({ type: 'box', minX: x0, maxX: x1, minZ: z0, maxZ: z1, top: y1, bottom: y0 > 0.5 ? y0 : undefined });
+    };
+    block(HX0, HX1, mz - 10, mz - SW / 2, 0, 9, rock); // north of the shaft
+    block(HX0, HX1, mz + SW / 2, mz + 10, 0, 9, rock); // south of the shaft
+    block(HX0, HX1 - SD, mz - SW / 2, mz + SW / 2, 0, 9, rock); // the back wall
+    block(HX1 - SD, HX1, mz - SW / 2, mz + SW / 2, SH, 9, rockDark); // the roof over the shaft
+    // Rough boulders on top and around the base so it reads as a hill, not a box.
+    const boulders = [[-4, 9.2, -6, 3.2], [-10, 9.5, 4, 3.8], [-15, 9, -3, 3], [-7, 8.8, 7, 2.6], [-1.5, 1.2, -9.5, 1.8], [-1.2, 1, 9.6, 1.6], [-18, 2, 9, 2.4], [-12, 9.6, -8, 2.2]];
+    for (const [dx, y, dz, r] of boulders) {
+      const b = part(new THREE.DodecahedronGeometry(r, 0), dx % 2 ? rock : rockDark, { ink: 0.05 });
+      b.position.set(mx + dx, y, mz + dz);
+      b.rotation.set(dx, dz, r);
+      statics.add(b);
+    }
+    // Snow caps.
+    for (const [dx, dz, w, d] of [[-11, -5, 14, 8], [-12, 5, 12, 7]]) {
+      const cap = part(new THREE.BoxGeometry(w, 0.4, d), 0xf8fafc, { ink: 0.03 });
+      cap.position.set(mx + dx, 9.2, mz + dz);
+      statics.add(cap);
+    }
+    // Inside: a dark floor, rails, and timber frames every few steps.
+    const floorM = part(new THREE.BoxGeometry(SD, 0.06, SW), 0x1f1a17, { ink: 0 });
+    floorM.position.set(HX1 - SD / 2, 0.03, mz);
+    const ceil = part(new THREE.BoxGeometry(SD, 0.1, SW), 0x2a2420, { ink: 0 });
+    ceil.position.set(HX1 - SD / 2, SH - 0.05, mz);
+    statics.add(floorM, ceil);
+    for (const side of [-0.55, 0.55]) {
+      const rail = part(new THREE.BoxGeometry(SD + 6, 0.08, 0.1), 0x9ca3af, { ink: 0 });
+      rail.position.set(HX1 - SD / 2 + 3, 0.1, mz + side);
+      statics.add(rail);
+    }
+    for (let i = 0; i < 9; i++) {
+      const tie = part(new THREE.BoxGeometry(0.25, 0.06, 1.6), 0x5b3a1e, { ink: 0 });
+      tie.position.set(HX1 + 2.5 - i * 1.9, 0.07, mz);
+      statics.add(tie);
+    }
+    const timber = 0x8b5a2b;
+    for (const dx of [0.3, 4.5, 8.7, 12.6]) {
+      const x = HX1 - dx;
+      for (const side of [-1, 1]) {
+        const post = part(new THREE.BoxGeometry(0.35, SH, 0.35), timber, { ink: 0.03 });
+        post.position.set(x, SH / 2, mz + side * (SW / 2 - 0.2));
+        statics.add(post);
+      }
+      const beam = part(new THREE.BoxGeometry(0.4, 0.4, SW + (dx < 1 ? 0.8 : 0)), timber, { ink: 0.03 });
+      beam.position.set(x, SH - 0.2, mz);
+      statics.add(beam);
+      // A lantern on every other frame.
+      if (dx > 1 && dx < 12) {
+        const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.16, 10, 8), new THREE.MeshBasicMaterial({ color: 0xffc56b }));
+        lamp.position.set(x - 0.3, SH - 0.55, mz + SW / 2 - 0.45);
+        const glow = new THREE.Mesh(new THREE.SphereGeometry(0.4, 10, 8), new THREE.MeshBasicMaterial({ color: 0xffb347, transparent: true, opacity: 0.22, depthWrite: false }));
+        glow.position.copy(lamp.position);
+        statics.add(lamp, glow);
+      }
+    }
+    // The sign over the entrance.
+    const signTex = canvasTexture(256, 64, (c, w, h) => {
+      c.fillStyle = '#5b3a1e'; c.fillRect(0, 0, w, h);
+      c.fillStyle = '#fde68a'; c.font = "bold 34px 'Luckiest Guy', 'Arial Black', sans-serif"; c.textAlign = 'center'; c.textBaseline = 'middle';
+      c.fillText('OLD MINE', w / 2, h / 2 + 2);
+    });
+    const sign = new THREE.Mesh(new THREE.PlaneGeometry(3.6, 0.9), new THREE.MeshBasicMaterial({ map: signTex }));
+    sign.position.set(HX1 + 0.32, SH + 0.75, mz);
+    sign.rotation.y = Math.PI / 2;
+    statics.add(sign);
+    // Carts out front (one on the rails), a lamp post and a water tower.
     waterTower(mx + 8, mz - 16, 0x94a3b8);
     for (let i = 0; i < 3; i++) {
-      const cart = part(new THREE.BoxGeometry(2, 1.4, 3), 0x78350f, { ink: 0.03 });
-      cart.position.set(mx + 4 + i * 4, 0.9, mz + 8);
-      statics.add(cart);
-      box(mx + 4 + i * 4, mz + 8, 2, 3, 1.6);
+      const cx = i === 0 ? HX1 + 2 : mx + 6 + i * 3.5;
+      const cz = i === 0 ? mz : mz + 8;
+      const cart = part(new THREE.BoxGeometry(2.2, 1.1, 1.5), 0x78350f, { ink: 0.03 });
+      cart.position.set(cx, 0.85, cz);
+      const ore = part(new THREE.DodecahedronGeometry(0.55, 0), i === 1 ? 0xffd23f : 0x334155, { ink: 0.03 });
+      ore.position.set(cx, 1.45, cz);
+      statics.add(cart, ore);
+      box(cx, cz, 2.2, 1.5, 1.4);
     }
-    zones.push({ name: 'Old Mine', x: mx, z: mz, w: 30, d: 36, tier: 1 });
-    minimap.push({ x: mx - 10, z: mz, w: 14, d: 18, color: '#64748b', label: 'Old Mine', tier: 1 });
-    container('crate', mx + 2, mz - 6, 1);
-    container('crate', mx + 2, mz + 4, 2);
+    zones.push({ name: 'Old Mine', x: mx - 8, z: mz, w: 34, d: 36, tier: 2 });
+    minimap.push({ x: mx - 11.5, z: mz, w: 17, d: 20, color: '#64748b', label: 'Old Mine', tier: 2 });
+    // The loot: a crate at each side of the entrance, better stuff deeper in.
+    container('crate', HX1 + 3, mz - 5, 1);
+    container('crate', HX1 + 3, mz + 5, 1);
+    container('locker', HX1 - 7, mz + 1.4, 2, -Math.PI / 2);
+    container('safe', HX1 - SD + 1.2, mz, 3, -Math.PI / 2);
     enemies('slotbot', mx + 10, mz, 1);
   }
 
@@ -3123,15 +3495,41 @@ function theLounge(k) {
   statics.add(ceiling);
 
   // ----- The Pit: a glass-walled arena in the middle -----
+  // Duelists drop in on opposite pads, each behind a giant playing card, with a chip tower in the
+  // middle so nobody gets a clean shot off the bell: you have to move to find the angle.
   const R = 14;
-  const mat = new THREE.Mesh(new THREE.CircleGeometry(R, 48), new THREE.MeshBasicMaterial({ color: 0x7a1028 }));
+  // A roulette-wheel floor: red and black wedges round a gold ring.
+  const wedges = canvasTexture(1024, 1024, (c, w) => {
+    const r = w / 2;
+    for (let i = 0; i < 24; i++) {
+      c.beginPath();
+      c.moveTo(r, r);
+      c.arc(r, r, r, (i / 24) * Math.PI * 2, ((i + 1) / 24) * Math.PI * 2);
+      c.closePath();
+      c.fillStyle = i % 2 ? '#1b0f2b' : '#8c1230';
+      c.fill();
+    }
+    c.lineWidth = 10;
+    c.strokeStyle = '#d4a63a';
+    for (const rr of [r * 0.98, r * 0.47, r * 0.2]) { c.beginPath(); c.arc(r, r, rr, 0, Math.PI * 2); c.stroke(); }
+    c.fillStyle = '#2a1748';
+    c.beginPath(); c.arc(r, r, r * 0.2, 0, Math.PI * 2); c.fill();
+  });
+  const mat = new THREE.Mesh(new THREE.CircleGeometry(R, 64), new THREE.MeshBasicMaterial({ map: wedges }));
   mat.rotation.x = -Math.PI / 2;
   mat.position.y = 0.06;
-  const inner = new THREE.Mesh(new THREE.RingGeometry(R * 0.45, R * 0.48, 48), new THREE.MeshBasicMaterial({ color: 0xffd23f }));
-  inner.rotation.x = -Math.PI / 2;
-  inner.position.y = 0.07;
-  statics.add(mat, inner);
-  const glass = new THREE.Mesh(new THREE.CylinderGeometry(R, R, 4.5, 48, 1, true), new THREE.MeshBasicMaterial({ color: 0x9be7ff, transparent: true, opacity: 0.16, side: THREE.DoubleSide, depthWrite: false }));
+  statics.add(mat);
+  // Spawn pads: red on the west, blue on the east.
+  for (const [side, col] of [[-1, 0xff3f5f], [1, 0x3fa9ff]]) {
+    const pad = new THREE.Mesh(new THREE.CircleGeometry(1.6, 32), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.55 }));
+    pad.rotation.x = -Math.PI / 2;
+    pad.position.set(side * (R - 4), 0.08, 0);
+    const ring = new THREE.Mesh(new THREE.RingGeometry(1.6, 1.85, 32), new THREE.MeshBasicMaterial({ color: col }));
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.set(side * (R - 4), 0.09, 0);
+    statics.add(pad, ring);
+  }
+  const glass = new THREE.Mesh(new THREE.CylinderGeometry(R, R, 4.5, 48, 1, true), new THREE.MeshBasicMaterial({ color: 0x9be7ff, transparent: true, opacity: 0.14, side: THREE.DoubleSide, depthWrite: false }));
   glass.position.y = 2.25;
   const rim = part(new THREE.TorusGeometry(R, 0.18, 8, 64), 0xd4a63a, { ink: 0.01, shadow: false });
   rim.rotation.x = Math.PI / 2;
@@ -3140,22 +3538,72 @@ function theLounge(k) {
   base.rotation.x = Math.PI / 2;
   base.position.y = 0.3;
   statics.add(glass, rim, base);
+  // Neon posts round the glass, alternating pink and gold.
+  const postGeo = new THREE.CylinderGeometry(0.12, 0.12, 4.4, 8);
+  for (let i = 0; i < 16; i++) {
+    const a = (i / 16) * Math.PI * 2;
+    const post = new THREE.Mesh(postGeo, new THREE.MeshBasicMaterial({ color: i % 2 ? 0xff3fa4 : 0xffd23f }));
+    post.position.set(Math.cos(a) * (R + 0.05), 2.25, Math.sin(a) * (R + 0.05));
+    statics.add(post);
+  }
   // The glass is solid: nobody walks in or shoots in. Duelists get dropped in.
   for (let i = 0; i < 32; i++) {
     const a = (i / 32) * Math.PI * 2;
     circle(Math.cos(a) * R, Math.sin(a) * R, 1.5, 4.5);
   }
-  // Cover inside: four short pillars and a center block.
-  for (const [x, z] of [[-6, -6], [6, 6], [-6, 6], [6, -6]]) {
-    const p = part(new THREE.BoxGeometry(1.8, 2.2, 1.8), 0x3a1d5c, { ink: 0.03 });
-    p.position.set(x, 1.1, z);
-    statics.add(p);
-    box(x, z, 1.8, 1.8, 2.2);
+  // Giant playing cards standing in front of each spawn.
+  const cardTex = (suit, red) => canvasTexture(256, 360, (c, w, h) => {
+    c.fillStyle = '#fffdf5'; c.fillRect(0, 0, w, h);
+    c.strokeStyle = '#1b0f2b'; c.lineWidth = 14; c.strokeRect(7, 7, w - 14, h - 14);
+    c.fillStyle = red ? '#d62828' : '#1b0f2b';
+    c.textAlign = 'center'; c.textBaseline = 'middle';
+    c.font = 'bold 170px serif'; c.fillText(suit, w / 2, h / 2 + 8);
+    c.font = "bold 54px 'Luckiest Guy', 'Arial Black', sans-serif"; c.fillText('A', 40, 46);
+    c.save(); c.translate(w - 40, h - 46); c.rotate(Math.PI); c.fillText('A', 0, 0); c.restore();
+  });
+  for (const [side, suit, red] of [[-1, '♥', true], [1, '♠', false]]) {
+    const cx = side * 6.8;
+    const face = new THREE.MeshBasicMaterial({ map: cardTex(suit, red) });
+    const edge = toon(0xfffdf5);
+    // Thin along x, so the two big faces look east and west.
+    const card = new THREE.Mesh(new THREE.BoxGeometry(0.35, 3.0, 4.4), [face, face, edge, edge, edge, edge]);
+    card.position.set(cx, 1.6, 0);
+    card.castShadow = true;
+    statics.add(card);
+    const stand = part(new THREE.BoxGeometry(1.2, 0.3, 4.6), 0x1b0f2b, { ink: 0.02 });
+    stand.position.set(cx, 0.15, 0);
+    statics.add(stand);
+    box(cx, 0, 0.6, 4.6, 3.0);
   }
-  const block = part(new THREE.CylinderGeometry(1.6, 1.6, 1.3, 16), 0xd4a63a, { ink: 0.03 });
-  block.position.set(0, 0.65, 0);
-  statics.add(block);
-  circle(0, 0, 1.6, 1.3);
+  // The chip tower in the middle: taller than anyone, so you can't see across it.
+  const chipCols = [0xe63946, 0x1b0f2b, 0x2a9d8f, 0x7b2cbf, 0xffd23f, 0xe63946, 0xfff6e0];
+  for (let i = 0; i < 7; i++) {
+    const chip = part(new THREE.CylinderGeometry(2.0, 2.0, 0.5, 28), chipCols[i], { ink: 0.02 });
+    chip.position.set(Math.sin(i * 2.1) * 0.1, 0.25 + i * 0.52, Math.cos(i * 2.1) * 0.1);
+    statics.add(chip);
+  }
+  circle(0, 0, 2.05, 3.7);
+  // Giant dice to duck behind on the way round.
+  for (const [x, z, ry] of [[-4.5, -7, 0.4], [4.5, 7, -0.5], [4.5, -7, 0.9], [-4.5, 7, -0.2]]) {
+    const die = part(new THREE.BoxGeometry(2.2, 2.2, 2.2), 0xfff6e0, { ink: 0.03 });
+    die.position.set(x, 1.1, z);
+    die.rotation.y = ry;
+    statics.add(die);
+    for (const [px, py] of [[-0.5, 0.5], [0, 0], [0.5, -0.5]]) {
+      for (const f of [1, -1]) {
+        const pip = new THREE.Mesh(new THREE.CircleGeometry(0.18, 12), new THREE.MeshBasicMaterial({ color: 0xd62828 }));
+        pip.position.set(px, 1.1 + py, f * 1.115);
+        if (f < 0) pip.rotation.y = Math.PI;
+        const holder = new THREE.Group();
+        holder.position.set(x, 0, z);
+        holder.rotation.y = ry;
+        pip.position.y = 1.1 + py;
+        holder.add(pip);
+        statics.add(holder);
+      }
+    }
+    circle(x, z, 1.35, 2.2);
+  }
   const pitSign = neonSign('THE PIT', '#ff3fa4', 14);
   pitSign.position.set(0, 7.5, 0);
   statics.add(pitSign);

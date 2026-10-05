@@ -11,6 +11,10 @@
 <body>
   <div id="app"></div>
 
+  <!-- Title screen (first thing you see) and the sign-in window -->
+  <div id="title" hidden><div class="titlebg"></div><div id="titleBody" class="titlebody"></div></div>
+  <div id="authModal" hidden><div id="authCard" class="card authcard"></div></div>
+
   <!-- The Hub: between raids -->
   <div id="hub">
     <header class="hubhead">
@@ -58,7 +62,8 @@
     <div id="packbar" class="panel"></div>
 
     <div id="crosshair"><i></i><i></i><i></i><i></i></div>
-    <div id="cdRing" hidden><svg viewBox="0 0 64 64"><circle class="bg" cx="32" cy="32" r="26"></circle><circle class="fg" id="cdArc" cx="32" cy="32" r="26"></circle></svg><b id="cdText"></b></div>
+    <div id="cdRing" hidden><svg viewBox="0 0 80 80"><defs><linearGradient id="cdGradShot" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#2ee6d6"/></linearGradient><linearGradient id="cdGradReload" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fff1a8"/><stop offset="1" stop-color="#ff9f1c"/></linearGradient></defs><circle class="ticks" cx="40" cy="40" r="33"></circle><circle class="bg" cx="40" cy="40" r="27"></circle><circle class="fg" id="cdArc" cx="40" cy="40" r="27"></circle><circle class="spin" cx="40" cy="40" r="37"></circle></svg><b id="cdText"></b></div>
+    <div id="cdPop"></div>
     <div id="hitmarker">✕</div>
     <div id="prompt" hidden></div>
     <div id="progress" hidden><div id="progressLabel"></div><div class="bar"><div id="progressFill"></div></div></div>

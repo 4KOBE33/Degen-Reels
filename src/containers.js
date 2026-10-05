@@ -9,10 +9,10 @@ const ICONS = { register: '💵', crate: '📦', locker: '🗄️', safe: '🔒'
 // Loot tier colors, matching item rarity: common, rare, epic, legendary.
 export const TIER_COLORS = ['#cbd5e1', '#cbd5e1', '#4ea8ff', '#b56cff', '#ffc83d'];
 const TIER_DARK = ['#64748b', '#64748b', '#1d4ed8', '#6d28d9', '#b45309'];
-const TIER_NAMES = ['', '', 'RARE', 'EPIC', 'LEGENDARY'];
 
 // One badge texture per kind + tier, shared by every container: the whole badge is the rarity
-// color (so you can tell a gold one from across the map), with the container's icon on it.
+// color (so you can tell a gold one from across the map), with the container's icon on it. No
+// words: the color says it.
 const badgeCache = new Map();
 function badgeTexture(kind, tier) {
   const key = `${kind}:${tier}`;
@@ -66,14 +66,6 @@ function badgeTexture(kind, tier) {
   g.textAlign = 'center';
   g.textBaseline = 'middle';
   g.fillText(ICONS[kind] || '📦', 128, 116);
-  if (TIER_NAMES[tier]) {
-    g.font = "bold 30px 'Luckiest Guy', 'Arial Black', sans-serif";
-    g.lineWidth = 7;
-    g.strokeStyle = '#1b0f2b';
-    g.strokeText(TIER_NAMES[tier], 128, 190);
-    g.fillStyle = col;
-    g.fillText(TIER_NAMES[tier], 128, 190);
-  }
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   badgeCache.set(key, tex);

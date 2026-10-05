@@ -281,10 +281,21 @@ export class Hud {
     $('cdRing').hidden = !cdOn;
     if (cdOn) {
       const k = Math.max(0, Math.min(1, 1 - p.cooldown / p.cdMax));
-      $('cdArc').style.strokeDashoffset = `${(163.4 * (1 - k)).toFixed(1)}`;
+      $('cdArc').style.strokeDashoffset = `${(169.65 * (1 - k)).toFixed(1)}`;
       const reloading = p.cdKind === 'reload';
       $('cdRing').classList.toggle('reload', reloading);
-      $('cdText').textContent = reloading ? `RELOADING ${p.cooldown.toFixed(1)}s` : `${p.cooldown.toFixed(1)}s`;
+      $('cdRing').classList.toggle('almost', k > 0.82);
+      const txt = reloading ? `RELOAD ${p.cooldown.toFixed(1)}s` : `${p.cooldown.toFixed(1)}s`;
+      if ($('cdText').textContent !== txt) $('cdText').textContent = txt;
+      this.cdWas = reloading ? 'reload' : 'shot';
+    } else if (this.cdWas) {
+      // Ready again: a quick ring pops out from the crosshair.
+      const pop = $('cdPop');
+      pop.classList.remove('go', 'reload');
+      void pop.offsetWidth;
+      pop.classList.add('go');
+      if (this.cdWas === 'reload') pop.classList.add('reload');
+      this.cdWas = null;
     }
     // The crosshair opens up when your aim is worse (running, jumping) and tightens when aiming.
     const gap = 8 * p.aimPenalty();

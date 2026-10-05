@@ -420,6 +420,8 @@ function openTable(game) {
 }
 hub.onTableClose = () => setOverlay(null);
 $('buildTag').textContent = `Build ${BUILD}`;
+// The title screen, unless this page load is getting back into a party's raid.
+if (!(net.seat || net.resume)) hub.showTitle();
 
 hud.onLeave = () => {
   spectate(null);

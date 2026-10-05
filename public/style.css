@@ -1282,3 +1282,121 @@ body.showdownup #toast { opacity: 0 !important; }
 .rlhist i { font: 400 15px var(--display); font-style: normal; min-width: 26px; padding: 2px 4px; border-radius: 6px; color: #fff; text-align: center; }
 .rlhist i.r { background: #d62828; } .rlhist i.b { background: #2b2140; } .rlhist i.g { background: #16a34a; }
 .rlhist i:first-child { outline: 2px solid var(--gold); }
+/* Cooldown / reload ring */
+#cdRing { width: 92px; height: 92px; filter: drop-shadow(0 0 6px rgba(46, 230, 214, 0.35)); }
+#cdRing.reload { filter: drop-shadow(0 0 7px rgba(255, 159, 28, 0.45)); }
+#cdRing svg { transform: rotate(-90deg); overflow: visible; }
+#cdRing circle { fill: none; }
+#cdRing .ticks { stroke: rgba(255, 246, 224, 0.35); stroke-width: 4; stroke-dasharray: 1.6 15.67; }
+#cdRing .bg { stroke: rgba(27, 15, 43, 0.72); stroke-width: 8; }
+#cdRing .fg { stroke: url(#cdGradShot); stroke-width: 6; stroke-linecap: round; stroke-dasharray: 169.65; filter: none; transition: stroke-dashoffset 0.05s linear; }
+#cdRing.reload .fg { stroke: url(#cdGradReload); }
+#cdRing .spin { stroke: #ff9f1c; stroke-width: 2.5; stroke-dasharray: 9 20.05; stroke-linecap: round; opacity: 0; transform-box: fill-box; transform-origin: center; }
+#cdRing.reload .spin { opacity: 0.8; animation: cdspin 1.1s linear infinite; }
+#cdRing.almost svg { animation: cdpulse 0.35s ease-in-out infinite alternate; }
+@keyframes cdspin { to { transform: rotate(360deg); } }
+@keyframes cdpulse { to { transform: rotate(-90deg) scale(1.08); } }
+#cdRing b { top: calc(100% + 2px); font: 400 13px var(--display); letter-spacing: 1px; padding: 2px 9px 1px; border-radius: 10px; background: rgba(27, 15, 43, 0.85); border: 2px solid #2ee6d6; color: #e6fffc; text-shadow: none; }
+#cdRing.reload b { border-color: #ff9f1c; color: #fff1a8; }
+#cdPop { position: absolute; left: 50%; top: 50%; width: 76px; height: 76px; margin: -38px 0 0 -38px; border-radius: 50%; border: 4px solid #e6fffc; opacity: 0; pointer-events: none; }
+#cdPop.go { animation: cdpop 0.4s ease-out; }
+#cdPop.reload { border-color: #ffc83d; }
+@keyframes cdpop { from { opacity: 0.95; transform: scale(0.75); } to { opacity: 0; transform: scale(1.5); } }
+/* ---------- Title screen ---------- */
+#title { position: fixed; inset: 0; z-index: 200; display: grid; place-items: center; overflow: hidden; background: radial-gradient(ellipse at 30% 20%, #6a2c91 0%, #3a1d5c 45%, #1b0f2b 100%); }
+#title[hidden] { display: none; }
+.titlebg { position: absolute; inset: -20%; background:
+  repeating-conic-gradient(from 0deg at 50% 120%, rgba(255, 210, 63, 0.06) 0deg 6deg, transparent 6deg 12deg);
+  animation: titlespin 60s linear infinite; }
+@keyframes titlespin { to { transform: rotate(360deg); } }
+.titlebody { position: relative; display: grid; grid-template-columns: minmax(260px, 420px) minmax(300px, 520px); gap: 28px; align-items: center; padding: 24px; max-width: 100vw; }
+.titlechar { display: grid; justify-items: center; gap: 8px; }
+.titlecharslot { width: min(400px, 40vw); height: min(440px, 56vh); }
+.titlecharslot canvas { width: 100%; height: 100%; display: block; }
+.titletag { display: grid; justify-items: center; background: rgba(27, 15, 43, 0.85); border: 3px solid var(--gold); border-radius: 14px; padding: 6px 18px; color: var(--cream); }
+.titletag b { font: 400 22px var(--display); color: var(--gold); letter-spacing: 1px; }
+.titletag span { font: 800 13px var(--body); opacity: 0.85; }
+.titlemain { display: grid; gap: 14px; justify-items: start; }
+.titlelogo { font-size: clamp(56px, 8vw, 104px); margin-bottom: 6px; }
+.tagline { margin: 0; font: 800 18px var(--body); color: var(--cream); max-width: 440px; }
+.titleplay { font-size: 34px !important; padding: 14px 64px !important; margin: 6px 0 0; animation: titlepulse 1.6s ease-in-out infinite; }
+@keyframes titlepulse { 50% { transform: scale(1.04); box-shadow: 0 0 0 6px rgba(255, 210, 63, 0.25); } }
+.titleacct { display: flex; gap: 10px; flex-wrap: wrap; }
+.titleacct .btn { margin: 0; width: auto; padding: 10px 22px; font-size: 18px; }
+.acctline { margin: 0; font: 700 14px var(--body); color: var(--cream); opacity: 0.85; max-width: 440px; }
+.acctline.in { color: #5ee27a; opacity: 1; }
+.titlever { position: fixed; left: 12px; bottom: 8px; color: var(--cream); opacity: 0.5; font: 800 12px var(--body); }
+@media (max-width: 760px) {
+  .titlebody { grid-template-columns: 1fr; justify-items: center; text-align: center; gap: 8px; }
+  .titlemain { justify-items: center; }
+  .titlecharslot { width: 70vw; height: 32vh; }
+  .titleplay { padding: 12px 40px !important; }
+}
+
+/* ---------- Sign-in window ---------- */
+#authModal { position: fixed; inset: 0; z-index: 220; display: grid; place-items: center; background: rgba(10, 5, 20, 0.7); backdrop-filter: blur(3px); padding: 16px; }
+#authModal[hidden] { display: none; }
+.authcard { position: relative; width: min(440px, 100%); display: grid; gap: 10px; padding: 22px 24px 18px; text-align: left; }
+.authcard h2 { margin: 0; text-align: center; }
+.authx { position: absolute; right: 10px; top: 8px; background: none; border: 0; color: var(--cream); font-size: 20px; cursor: pointer; opacity: 0.7; }
+.authx:hover { opacity: 1; }
+.authtabs { display: grid; grid-template-columns: 1fr 1fr; background: rgba(27, 15, 43, 0.8); border-radius: 12px; padding: 4px; gap: 4px; }
+.authtabs button { border: 0; border-radius: 9px; padding: 8px; font: 400 17px var(--display); letter-spacing: 0.5px; color: var(--cream); background: transparent; cursor: pointer; }
+.authtabs button.on { background: var(--gold); color: var(--ink); }
+.authcard .hint { margin: 0; }
+.field { display: grid; gap: 4px; font: 800 14px var(--body); color: var(--cream); }
+.field small { opacity: 0.7; font-weight: 700; }
+.field input { width: 100%; box-sizing: border-box; font: 800 18px var(--body); padding: 10px 12px; border-radius: 10px; border: 3px solid var(--ink); background: #fff6e0; color: var(--ink); }
+.field input:focus { outline: none; border-color: var(--gold); box-shadow: 0 0 0 3px rgba(255, 210, 63, 0.35); }
+.pinrow { display: flex; gap: 6px; }
+.pinrow input { flex: 1; letter-spacing: 4px; }
+.pinshow { margin: 0 !important; width: auto !important; padding: 0 12px !important; font-size: 18px !important; }
+.autherr { margin: 0; padding: 8px 10px; border-radius: 10px; background: rgba(230, 57, 70, 0.2); border: 2px solid #e63946; color: #ffd6da; font: 800 14px var(--body); }
+.authwait { margin: 0; font: 700 13px var(--body); color: var(--gold); }
+.authgo { margin: 4px 0 0 !important; width: 100%; }
+.authcard .dim { margin: 0; font: 700 12px var(--body); color: var(--cream); opacity: 0.65; text-align: center; }
+.authcard .resbtns .btn { width: auto; }
+
+/* ---------- Account chip in the header ---------- */
+.acctchip { display: flex; align-items: center; gap: 10px; background: rgba(27, 15, 43, 0.9); border: 4px solid var(--ink); border-radius: 16px; padding: 6px 14px 6px 12px; color: var(--cream); cursor: pointer; font: inherit; text-align: left; }
+.acctchip:hover { border-color: var(--gold); }
+.acctchip span { display: grid; }
+.acctchip b { font: 400 17px var(--display); letter-spacing: 0.5px; }
+.acctchip small { font: 800 11px var(--body); opacity: 0.8; }
+.acctchip .dot { width: 10px; height: 10px; border-radius: 50%; background: #ff9f1c; box-shadow: 0 0 8px #ff9f1c; }
+.acctchip.in .dot { background: #5ee27a; box-shadow: 0 0 8px #5ee27a; }
+.acctchip:not(.in) { border-color: #ff9f1c; animation: chipglow 2.4s ease-in-out infinite; }
+@keyframes chipglow { 50% { box-shadow: 0 0 0 3px rgba(255, 159, 28, 0.3); } }
+
+/* The new-player guide can be dismissed. */
+.newbie { position: relative; }
+.newbiex { position: absolute; right: 10px; top: 8px; background: none; border: 0; color: var(--cream); font-size: 18px; cursor: pointer; opacity: 0.7; }
+.newbiex:hover { opacity: 1; }
+/* ---------- Daily Contracts ---------- */
+.contracts { margin-bottom: 12px; padding: 10px 12px; border-radius: 16px; background: rgba(27, 15, 43, 0.6); border: 3px solid rgba(255, 210, 63, 0.35); }
+.cthead { display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px; color: var(--cream); }
+.cthead b { font: 400 20px var(--display); color: var(--gold); letter-spacing: 0.5px; }
+.cthead small { font: 700 12px var(--body); opacity: 0.75; }
+.ctgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.ctcard { position: relative; display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 12px; background: rgba(255, 255, 255, 0.05); border: 2px solid rgba(255, 255, 255, 0.1); color: var(--cream); }
+.ctcard.t1 { border-color: rgba(78, 168, 255, 0.45); }
+.ctcard.t2 { border-color: rgba(181, 108, 255, 0.55); }
+.ctcard.ready { border-color: #5ee27a; background: rgba(94, 226, 122, 0.12); animation: ctready 1.6s ease-in-out infinite; }
+.ctcard.claimed { opacity: 0.55; }
+@keyframes ctready { 50% { box-shadow: 0 0 0 3px rgba(94, 226, 122, 0.3); } }
+.cticon { font-size: 28px; }
+.ctbody { flex: 1; display: grid; gap: 3px; min-width: 0; }
+.ctbody b { font: 800 14px var(--body); line-height: 1.15; }
+.ctdiff { font: 900 10px var(--body); letter-spacing: 1px; text-transform: uppercase; opacity: 0.7; }
+.ctcard.t1 .ctdiff { color: #8cc8ff; opacity: 1; }
+.ctcard.t2 .ctdiff { color: #d4a5ff; opacity: 1; }
+.ctbar { position: relative; height: 14px; border-radius: 7px; background: rgba(0, 0, 0, 0.4); overflow: hidden; }
+.ctbar i { position: absolute; left: 0; top: 0; bottom: 0; background: linear-gradient(90deg, #ffd23f, #ff9f1c); border-radius: 7px; }
+.ctcard.ready .ctbar i, .ctcard.claimed .ctbar i { background: linear-gradient(90deg, #5ee27a, #2ee6d6); }
+.ctbar span { position: relative; display: block; text-align: center; font: 900 10px/14px var(--body); color: #fff; text-shadow: 0 1px 0 #000; }
+.ctrew { font: 800 11px var(--body); color: var(--gold); }
+.ctclaim { margin: 0 !important; width: auto !important; padding: 8px 12px !important; font-size: 15px !important; background: #5ee27a !important; }
+.ctreroll { background: none; border: 0; font-size: 20px; cursor: pointer; opacity: 0.6; padding: 4px; }
+.ctreroll:hover { opacity: 1; transform: rotate(20deg); }
+.ctdone { font: 900 12px var(--body); color: #5ee27a; white-space: nowrap; }
+@media (max-width: 900px) { .ctgrid { grid-template-columns: 1fr; } }

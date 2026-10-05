@@ -22,6 +22,7 @@ import { LookPreview } from './preview.js';
 import { BUILD } from './version.js';
 import { Shoe, cardValue, handValue, isNatural } from './cards.js';
 import { MOB_MIN, MOB_MAX, mobDebt, borrow, repay } from './mob.js';
+import { contracts, contractView, claim as claimContract, reroll as rerollContract, resetsIn, readyCount } from './contracts.js';
 
 const $ = (id) => document.getElementById(id);
 const LOADOUT_SLOTS = 8;
@@ -210,6 +211,11 @@ export class Hub {
       this.render();
     });
     $('hubWallet').addEventListener('click', (e) => {
+      if (e.target.closest('.acctchip')) {
+        initAudio();
+        if (cloud.user) { this.tab = 'settings'; this.render(); } else this.openAuth();
+        return;
+      }
       if (!e.target.closest('.prof')) return;
       this.tab = 'records';
       this.recTab = 'overview';
@@ -230,13 +236,50 @@ export class Hub {
     }
     $('deploy').addEventListener('click', () => this.deploy());
     $('tableClose').addEventListener('click', () => this.closeTable());
-    cloud.onUpdate(() => { if (!$('hub').hidden && ['settings', 'leaders'].includes(this.tab)) this.render(); else this.renderHeader(); });
+    cloud.onUpdate(() => {
+      if (!$('hub').hidden && ['settings', 'leaders'].includes(this.tab)) this.render(); else this.renderHeader();
+      if (!$('title').hidden) this.renderTitle();
+      if (!$('authModal').hidden) this.renderAuth();
+    });
+    // The title screen and the sign-in window.
+    $('title').addEventListener('click', (e) => {
+      const b = e.target.closest('[data-act]');
+      if (!b) return;
+      initAudio();
+      if (b.dataset.act === 'titleplay') this.closeTitle();
+      else if (b.dataset.act === 'auth') this.openAuth(b.dataset.mode);
+    });
+    $('authModal').addEventListener('click', (e) => {
+      if (e.target.id === 'authModal') { this.closeAuth(); return; }
+      const b = e.target.closest('[data-act]');
+      if (!b) return;
+      switch (b.dataset.act) {
+        case 'authtab': this.keepAuthFields(); this.authMode = b.dataset.mode; this.cloudError = ''; this.renderAuth(); break;
+        case 'authgo': this.cloudAction(this.authMode === 'reg' ? 'reg' : 'in'); break;
+        case 'authclose': this.closeAuth(); break;
+        case 'pinshow': this.keepAuthFields(); this.pinShown = !this.pinShown; this.renderAuth(); break;
+        case 'cloudsync': cloud.push(); this.toast('☁️ Saving…'); break;
+        case 'cloudout': cloud.logout(); this.toast('Logged out. Progress on this device stays here.'); this.renderAuth(); this.render(); break;
+        default: break;
+      }
+    });
+    $('authModal').addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') { e.stopPropagation(); this.closeAuth(); }
+      if (e.key === 'Enter' && e.target.tagName === 'INPUT') this.cloudAction(this.authMode === 'reg' ? 'reg' : 'in');
+    });
     this.board = null;
     this.boardBy = 'worth';
     this.render();
   }
 
-  show() { $('hub').hidden = false; this.render(); }
+  show() {
+    $('hub').hidden = false;
+    this.render();
+    // Back from a raid with a contract finished: say so.
+    const ready = readyCount();
+    if (ready > (this.ctReady || 0)) setTimeout(() => this.toast(`📋 ${ready} contract${ready > 1 ? 's' : ''} ready to claim on the Loadout page!`), 600);
+    this.ctReady = ready;
+  }
 
   // Playing a Back Room game at a table in the Lounge: just the game, and a way back.
   openTable(game) {
@@ -251,7 +294,12 @@ export class Hub {
     this.hide();
     if (this.onTableClose) this.onTableClose();
   }
-  hide() { $('hub').hidden = true; }
+  hide() {
+    $('hub').hidden = true;
+    // Pulled into a raid (a party leader deployed) while still on the title screen: get out of the way.
+    if (!$('title').hidden) { $('title').hidden = true; document.body.classList.remove('titleup'); }
+    this.closeAuth();
+  }
 
   get data() { return save.get(); }
 
@@ -363,7 +411,11 @@ export class Hub {
     const look = wornLook(d.look);
     const hat = LOOKS.hat.find((h) => h.id === look.hat);
     const stashValue = d.stash.items.reduce((n, it) => n + itemInfo(it).value, 0);
+    const u = cloud.user;
     $('hubWallet').innerHTML = `
+      <button class="acctchip ${u ? 'in' : ''}" title="${u ? 'Cloud save: account and settings' : 'Log in or make an account to save your progress'}">
+        <span class="dot"></span><span><b>${u ? `☁️ ${escapeHtml(u.name)}` : '👤 Guest'}</b><small>${u ? 'progress saved' : 'Sign in to save'}</small></span>
+      </button>
       <button class="prof" title="Your records">
         <span class="avatar" style="--c:${hex(look.color)}">${hat && hat.id !== 'none' ? hat.icon : '🙂'}</span>
         <span class="pinfo"><b>${escapeHtml((d.look.name || '').trim() || 'High Roller')}</b>
@@ -395,15 +447,17 @@ export class Hub {
     const selId = MAPS[d.selectedMap] ? d.selectedMap : 'vegas';
     const sel = MAPS[selId];
     const facts = sel.safe ? ['🛡️ No machines, no raiders', '🥊 1v1s in The Pit', '🎲 Every casino game'] : [`⏱️ ${Math.round((sel.raidTime || 1080) / 60)} min raids`, `📏 ${sel.size} map`, sel.indoor ? `🏚️ All indoors · 👑 ${bossTheme(selId).name}` : `👑 ${bossTheme(selId).name} at 4:00`];
-    const newbie = (d.stats.raids || 0) === 0;
-    const guide = newbie ? `<section class="newbie"><b>👋 New to Beat the House? Here's the deal:</b>
+    let hideGuide = false;
+    try { hideGuide = localStorage.getItem('bth.hideGuide') === '1'; } catch (e) { /* private mode */ }
+    const newbie = (d.stats.raids || 0) === 0 && !hideGuide;
+    const guide = newbie ? `<section class="newbie"><button class="newbiex" data-act="hidenewbie" title="Got it">✕</button><b>👋 New to Beat the House? Here's the deal:</b>
       <ol><li><b>Pack a gun.</b> No gear? Grab the 🎁 FREE LOADOUT below.</li>
       <li><b>Pick a map and DEPLOY.</b> Search crates, bust machines, grab everything shiny.</li>
       <li><b>Get to a green exit</b> and survive while your ride comes. Die, and you lose what you brought.</li>
       <li><b>Sell your loot</b> at the 💰 Fence, then gamble it in the 🎰 Back Room, or gear up for a bigger raid.</li></ol>
       <small>Tips will walk you through your first raids. Play with friends using the party panel below.</small></section>` : '';
     const packed = lo.weapons.filter(Boolean).length + lo.items.length;
-    return `${guide}${this.renderParty()}
+    return `${guide}${this.renderContracts()}${this.renderParty()}
       <div class="lotop">
       <div class="lcol">
       <section class="raidpick">
@@ -670,18 +724,119 @@ export class Hub {
         <div class="prow"><button class="btn ghost" data-act="cloudsync">Save now</button><button class="btn ghost" data-act="cloudout">Log out</button></div></section>`;
     }
     const last = cloud.lastName();
-    const nameVal = this.cloudName !== undefined && this.cloudName !== null && this.cloudName !== '' ? this.cloudName : last;
-    const loginBtn = `<button class="btn ${last ? '' : 'ghost'}" data-act="cloudin" ${this.cloudBusy ? 'disabled' : ''}>${this.cloudBusy === 'in' ? 'Logging in…' : 'Log in'}</button>`;
-    const regBtn = `<button class="btn ${last ? 'ghost' : ''}" data-act="cloudreg" ${this.cloudBusy ? 'disabled' : ''}>${this.cloudBusy === 'reg' ? 'Creating…' : 'Create account'}</button>`;
     return `<section class="account"><b>☁️ Cloud save</b>
-      <small>${last ? `Welcome back! Log in as <b>${escapeHtml(last)}</b> with your PIN.` : 'Make an account to keep your progress if you clear your browser or switch computers, and to show up on the 👑 leaderboard.'}</small>
-      <div class="prow"><input id="cloudName" maxlength="16" placeholder="Name" autocomplete="username" value="${escapeHtml(nameVal || '')}">
-      <input id="cloudPin" maxlength="8" placeholder="PIN (4-8 numbers)" inputmode="numeric" pattern="[0-9]*" type="password" autocomplete="current-password" value="${escapeHtml(this.cloudPin || '')}">
-      ${last ? loginBtn + regBtn : regBtn + loginBtn}</div>
-      ${this.cloudBusy && cloudNet.waking ? '<small class="warn">⏳ Waking up the server. Free servers nap when nobody\'s playing, so this can take up to a minute…</small>' : ''}
-      ${this.cloudError ? `<small class="warn">⚠️ ${escapeHtml(this.cloudError)}</small>` : ''}
-      ${cloud.storage === 'file' ? '<small class="warn">⚠️ The game server has no database set up, so it forgets accounts when it restarts. Your progress is safe on this device and your account is put back automatically when you log in here.</small>' : ''}
-      <small class="dim">Logging in replaces the progress on this device with your cloud save.</small></section>`;
+      <small>${last ? `Last played as <b>${escapeHtml(last)}</b>. Log in to load your cloud save.` : 'You\'re playing as a guest: progress saves on this device only. Make an account to keep it if you switch computers, and to show up on the 👑 leaderboard.'}</small>
+      <div class="prow"><button class="btn" data-act="auth" data-mode="in">Log in</button><button class="btn ghost" data-act="auth" data-mode="reg">Create account</button></div></section>`;
+  }
+
+  // ---------- daily contracts ----------
+
+  renderContracts() {
+    const cs = contracts();
+    const d = this.data;
+    const diff = ['Easy', 'Medium', 'Hard'];
+    const cards = cs.list.map((c, i) => {
+      const v = contractView(c, d);
+      const pct = Math.round((v.cur / v.goal) * 100);
+      const btn = v.claimed ? '<span class="ctdone">✓ Claimed</span>'
+        : v.done ? `<button class="btn ctclaim" data-act="claimct" data-i="${i}">CLAIM</button>`
+          : !cs.rerolled ? `<button class="ctreroll" data-act="rerollct" data-i="${i}" title="Swap this one for a different contract (one free swap a day)">🎲</button>` : '';
+      return `<div class="ctcard t${v.tier} ${v.done && !v.claimed ? 'ready' : ''} ${v.claimed ? 'claimed' : ''}">
+        <span class="cticon">${v.icon}</span>
+        <div class="ctbody"><small class="ctdiff">${diff[v.tier]}</small><b>${escapeHtml(v.text)}</b>
+          <div class="ctbar"><i style="width:${pct}%"></i><span>${fmt(v.cur)} / ${fmt(v.goal)}</span></div>
+          <small class="ctrew">🪙 ${fmt(v.chips)} · ⭐ ${v.xp} XP</small></div>${btn}</div>`;
+    }).join('');
+    return `<section class="contracts"><div class="cthead"><b>📋 Daily Contracts</b><small>New ones in ${resetsIn()}${cs.rerolled ? '' : ' · 🎲 one free swap today'}</small></div><div class="ctgrid">${cards}</div></section>`;
+  }
+
+  // ---------- title screen ----------
+
+  showTitle() {
+    this.renderTitle();
+    $('title').hidden = false;
+    document.body.classList.add('titleup');
+  }
+
+  closeTitle() {
+    $('title').hidden = true;
+    document.body.classList.remove('titleup');
+    this.render();
+  }
+
+  renderTitle() {
+    const d = this.data;
+    const u = cloud.user;
+    const last = cloud.lastName();
+    const lv = levelInfo(d.xp);
+    const name = (d.look.name || '').trim() || 'High Roller';
+    $('titleBody').innerHTML = `
+      <div class="titlechar"><div id="titleChar" class="titlecharslot"></div><div class="titletag"><b>${escapeHtml(name)}</b><span>LV ${lv.level} · 🪙 ${fmt(d.stash.chips)}</span></div></div>
+      <div class="titlemain">
+        <h1 class="logo titlelogo">BEAT THE<br>HOUSE</h1>
+        <p class="tagline">Raid the casinos. Bust the Pit Boss. Get out rich, or lose it all.</p>
+        <button class="btn big titleplay" data-act="titleplay">▶ PLAY</button>
+        ${u
+    ? `<p class="acctline in">☁️ Signed in as <b>${escapeHtml(u.name)}</b>. Your progress saves automatically.</p>`
+    : `<div class="titleacct"><button class="btn" data-act="auth" data-mode="in">Log in</button><button class="btn ghost" data-act="auth" data-mode="reg">Create account</button></div>
+          <p class="acctline">${last ? `Welcome back, <b>${escapeHtml(last)}</b>! Log in to load your cloud save.` : 'Playing as a guest saves on this device only. An account keeps your progress anywhere and puts you on the leaderboard.'}</p>`}
+      </div>
+      <small class="titlever">Build ${BUILD}</small>`;
+    this.preview.setLook(wornLook(d.look), d.loadout.weapons.find(Boolean));
+    this.preview.mount($('titleChar'));
+  }
+
+  // ---------- the sign-in window ----------
+
+  openAuth(mode) {
+    this.authMode = mode || (cloud.lastName() ? 'in' : 'reg');
+    this.cloudError = '';
+    if (this.cloudName === undefined || this.cloudName === null) this.cloudName = cloud.lastName() || '';
+    this.renderAuth();
+    $('authModal').hidden = false;
+    const first = $('cloudName') && !$('cloudName').value ? $('cloudName') : $('cloudPin');
+    if (first) setTimeout(() => first.focus(), 30);
+  }
+
+  closeAuth() {
+    $('authModal').hidden = true;
+    this.cloudError = '';
+  }
+
+  // Remember what's typed so a re-render doesn't wipe it.
+  keepAuthFields() {
+    if ($('cloudName')) this.cloudName = $('cloudName').value;
+    if ($('cloudPin')) this.cloudPin = $('cloudPin').value;
+    if ($('cloudPin2')) this.cloudPin2 = $('cloudPin2').value;
+  }
+
+  renderAuth() {
+    const u = cloud.user;
+    const card = $('authCard');
+    if (u) {
+      const when = cloud.syncedAt ? `last saved ${new Date(cloud.syncedAt).toLocaleTimeString()}` : 'syncing…';
+      card.innerHTML = `<button class="authx" data-act="authclose" title="Close">✕</button>
+        <h2>☁️ ${escapeHtml(u.name)}</h2>
+        <p class="hint">You're signed in. Your progress saves to the server automatically (${when}). Log in with the same name and PIN on any device.</p>
+        ${cloud.status && cloud.status !== 'saved' ? `<p class="autherr">⚠️ ${escapeHtml(cloud.status)}</p>` : ''}
+        <div class="resbtns"><button class="btn" data-act="authclose">Done</button><button class="btn ghost" data-act="cloudsync">Save now</button><button class="btn ghost" data-act="cloudout">Log out</button></div>`;
+      return;
+    }
+    const reg = this.authMode === 'reg';
+    const busy = this.cloudBusy;
+    const pinType = this.pinShown ? 'text' : 'password';
+    card.innerHTML = `<button class="authx" data-act="authclose" title="Close">✕</button>
+      <h2>${reg ? 'Create your account' : 'Welcome back'}</h2>
+      <div class="authtabs"><button class="${reg ? '' : 'on'}" data-act="authtab" data-mode="in">Log in</button><button class="${reg ? 'on' : ''}" data-act="authtab" data-mode="reg">Create account</button></div>
+      <p class="hint">${reg ? 'Pick a name and a PIN. Your progress (chips, stash, looks, level) saves to it, so you can play on any device and show up on the 👑 leaderboard.' : 'Log in with your name and PIN to load your cloud save onto this device.'}</p>
+      <label class="field"><span>Name</span><input id="cloudName" maxlength="16" placeholder="Your name" autocomplete="username" value="${escapeHtml(this.cloudName || '')}"></label>
+      <label class="field"><span>PIN <small>4-8 numbers</small></span><span class="pinrow"><input id="cloudPin" maxlength="8" placeholder="••••" inputmode="numeric" pattern="[0-9]*" type="${pinType}" autocomplete="${reg ? 'new-password' : 'current-password'}" value="${escapeHtml(this.cloudPin || '')}"><button class="btn ghost pinshow" data-act="pinshow" title="${this.pinShown ? 'Hide' : 'Show'} PIN">${this.pinShown ? '🙈' : '👁️'}</button></span></label>
+      ${reg ? `<label class="field"><span>PIN again</span><input id="cloudPin2" maxlength="8" placeholder="••••" inputmode="numeric" pattern="[0-9]*" type="${pinType}" autocomplete="new-password" value="${escapeHtml(this.cloudPin2 || '')}"></label>` : ''}
+      ${this.cloudError ? `<p class="autherr">⚠️ ${escapeHtml(this.cloudError)}</p>` : ''}
+      ${busy && cloudNet.waking ? '<p class="authwait">⏳ Waking up the server. Free servers nap when nobody\'s playing, so this can take up to a minute…</p>' : ''}
+      <button class="btn big authgo" data-act="authgo" ${busy ? 'disabled' : ''}>${busy ? (reg ? 'Creating…' : 'Logging in…') : reg ? 'CREATE ACCOUNT' : 'LOG IN'}</button>
+      <p class="dim">${reg ? 'Write your PIN down: there\'s no email to reset it. Whatever you\'ve got on this device comes with you.' : 'Logging in replaces the progress on this device with your cloud save.'}</p>
+      ${cloud.storage === 'file' ? '<p class="dim warn">⚠️ The game server has no database yet, so it can forget accounts when it restarts. This device puts yours back automatically.</p>' : ''}`;
   }
 
   // Richest players everywhere.
@@ -693,7 +848,7 @@ export class Hub {
       <td class="num">🪙 ${fmt(r.chips)}</td><td class="num">💰 ${fmt(r.worth)}</td></tr>`).join('') : '';
     return `<h3>👑 High Rollers</h3>
       <div class="subtabs"><button class="subtab ${this.boardBy === 'worth' ? 'on' : ''}" data-act="boardby" data-by="worth">Net worth</button><button class="subtab ${this.boardBy === 'chips' ? 'on' : ''}" data-act="boardby" data-by="chips">Chips</button><button class="subtab" data-act="boardrefresh">↻ Refresh</button></div>
-      <p class="hint">Net worth is your chips plus everything in your stash at Fence prices.${cloud.user ? '' : ' <b>Make a cloud save account in ⚙️ Settings to get on the board.</b>'}</p>
+      <p class="hint">Net worth is your chips plus everything in your stash at Fence prices.${cloud.user ? '' : ' <b>Make an account (the 👤 Guest button up top) to get on the board.</b>'}</p>
       ${b && b.error ? `<p class="hint">⚠️ Couldn't reach the leaderboard: ${escapeHtml(b.error)}</p>` : ''}
       ${!b ? `<p class="hint">${cloudNet.waking ? '⏳ Waking up the server. Free servers nap when nobody\'s playing, so this can take up to a minute…' : 'Loading…'}</p>` : rows ? `<table class="board"><tr><th></th><th>Player</th><th>Level</th><th class="num">Chips</th><th class="num">Net worth</th></tr>${rows}</table>` : (b.error ? '' : '<p class="hint">Nobody on the board yet. Be the first!</p>')}`;
   }
@@ -709,23 +864,31 @@ export class Hub {
 
   async cloudAction(kind) {
     if (this.cloudBusy) return;
-    const name = (($('cloudName') || {}).value || '').trim();
-    const pin = (($('cloudPin') || {}).value || '').trim();
-    this.cloudName = name;
-    this.cloudPin = pin;
+    this.keepAuthFields();
+    const name = (this.cloudName || '').trim();
+    const pin = (this.cloudPin || '').trim();
     this.cloudError = '';
-    if (!/^[A-Za-z0-9 _-]{3,16}$/.test(name)) { this.cloudError = 'Pick a name that\'s 3-16 letters or numbers (spaces, - and _ are fine).'; this.render(); return; }
-    if (!/^\d{4,8}$/.test(pin)) { this.cloudError = 'Your PIN has to be 4-8 numbers (no letters).'; this.render(); return; }
+    const fail = (msg) => { this.cloudError = msg; this.renderAuth(); };
+    if (!/^[A-Za-z0-9 _-]{3,16}$/.test(name)) { fail('Pick a name that\'s 3-16 letters or numbers (spaces, - and _ are fine).'); return; }
+    if (!/^\d{4,8}$/.test(pin)) { fail('Your PIN has to be 4-8 numbers (no letters).'); return; }
+    if (kind === 'reg' && (this.cloudPin2 || '').trim() !== pin) { fail('The two PINs don\'t match.'); return; }
     this.cloudBusy = kind;
-    this.render();
+    this.renderAuth();
     try {
       if (kind === 'reg') { await cloud.register(name, pin); this.toast(`☁️ Account made. Your progress is saved as ${name}.`); }
       else { await cloud.login(name, pin); this.toast(`☁️ Welcome back, ${cloud.user.name}! Cloud save loaded.`); }
       this.board = null;
       if (this.onSettings) this.onSettings();
       this.cloudPin = '';
-    } catch (e) { this.cloudError = e.message; this.toast(`⚠️ ${e.message}`); }
+      this.cloudPin2 = '';
+      this.cloudBusy = null;
+      this.closeAuth();
+      if (!$('title').hidden) this.renderTitle();
+      this.render();
+      return;
+    } catch (e) { this.cloudError = e.message; }
     this.cloudBusy = null;
+    this.renderAuth();
     this.render();
   }
 
@@ -1219,6 +1382,14 @@ export class Hub {
       case 'pcopy':
         try { navigator.clipboard.writeText(this.net.room.code); this.toast(`Copied ${this.net.room.code}. Send it to your friends!`); } catch (err) { this.toast(`Party code: ${this.net.room.code}`); }
         return;
+      case 'auth': this.openAuth(b.dataset.mode); return;
+      case 'claimct': {
+        const out = claimContract(i);
+        if (out) { sfx.jackpot(); this.toast(`📋 Contract done! +🪙 ${fmt(out.chips)} and ⭐ ${out.xp} XP`); this.announce(out); }
+        break;
+      }
+      case 'rerollct': if (rerollContract(i)) { sfx.tick(); this.toast('🎲 New contract!'); } break;
+      case 'hidenewbie': try { localStorage.setItem('bth.hideGuide', '1'); } catch (err) { /* private mode */ } break;
       case 'cloudreg': this.cloudAction('reg'); return;
       case 'cloudin': this.cloudAction('in'); return;
       case 'cloudout': cloud.logout(); this.toast('Logged out. Progress on this device stays here.'); break;
