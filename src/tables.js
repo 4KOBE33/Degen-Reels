@@ -396,7 +396,17 @@ const Slots = {
 };
 
 // Blackjack: dealt from a real six-deck shoe, card by card onto the felt.
+// Blackjack for up to three players against one dealer. The host runs the table (holds the shoe,
+// deals, says whose turn it is); everyone, the host included, sees the same cards fly out and
+// settles their own seat. Bets go in during a short countdown, then each seat plays in turn.
+const BJ_SEATS = 3;
+const SEAT_ANGLE = [-0.62, 0, 0.62];
+const BET_WAIT = 8; // seconds after the first bet before the cards come out
+const TURN_TIME = 20; // seconds to act before you stand
+const seatXZ = (s, r) => [Math.sin(SEAT_ANGLE[s]) * r, Math.cos(SEAT_ANGLE[s]) * r];
+const bjEmpty = () => ({ bet: 0, cards: [], doubled: false, done: false });
 const Blackjack = {
+  multi: true,
   build(t) {
     const g = t.group;
     const shoe = part(new THREE.BoxGeometry(0.5, 0.3, 0.7), 0x1b0f2b, { ink: 0.02 });
@@ -406,30 +416,47 @@ const Blackjack = {
     lip.position.set(1.36, TOP + 0.31, -0.42);
     lip.rotation.set(-1.0, -0.4, 0);
     g.add(shoe, lip);
-    // Painted lines on the felt: the dealer's arc and your betting box.
+    // Painted lines on the felt: the dealer's arc and a betting box for each seat.
     const arc = new THREE.Mesh(new THREE.RingGeometry(1.55, 1.6, 48, 1, Math.PI * 0.15, Math.PI * 0.7), new THREE.MeshBasicMaterial({ color: 0xffd23f }));
     arc.rotation.x = -Math.PI / 2;
     arc.position.y = TOP + 0.005;
-    const box = new THREE.Mesh(new THREE.RingGeometry(0.22, 0.26, 4), new THREE.MeshBasicMaterial({ color: 0xfff6e0 }));
-    box.rotation.set(-Math.PI / 2, 0, Math.PI / 4);
-    box.position.set(0, TOP + 0.005, 1.45);
-    g.add(arc, box);
+    g.add(arc);
+    t.stacks = [];
+    for (let s = 0; s < BJ_SEATS; s++) {
+      const [x, z] = seatXZ(s, 1.55);
+      const box = new THREE.Mesh(new THREE.RingGeometry(0.2, 0.24, 4), new THREE.MeshBasicMaterial({ color: 0xfff6e0 }));
+      box.rotation.set(-Math.PI / 2, 0, Math.PI / 4);
+      box.position.set(x, TOP + 0.005, z);
+      const stack = new THREE.Group();
+      stack.position.set(x, TOP + 0.02, z);
+      g.add(box, stack);
+      t.stacks.push(stack);
+    }
     t.shoeFrom = new THREE.Vector3(1.36, TOP + 0.35, -0.42);
     t.shoe = new Shoe();
-    t.bj = { phase: 'idle', p: [], d: [], bet: 0, meshes: [], anims: [], wait: 0 };
-    t.stack = new THREE.Group();
-    t.stack.position.set(0, TOP + 0.02, 1.45);
-    g.add(t.stack);
+    // Where each seat's player stands, in the world.
+    t.group.updateMatrixWorld(true);
+    t.seatSpots = Array.from({ length: BJ_SEATS }, (_, s) => {
+      const [x, z] = seatXZ(s, 3.3);
+      return t.group.localToWorld(new THREE.Vector3(x, 0, z)).setY(0);
+    });
+    // What everyone sees.
+    t.bj = { phase: 'bets', seats: [null, null, null], d: [], turn: -1, meshes: [], anims: [], wait: 0, hole: null, clockEnd: 0, left: t.shoe.left, settled: true };
+    // The host's own copy of the round.
+    t.bh = { phase: 'bets', seats: [null, null, null], d: [], turn: -1, timer: 0, check: 0 };
   },
   clear(t) {
     for (const m of t.bj.meshes) t.group.remove(m);
     t.bj.meshes = [];
-    t.stack.clear();
+    t.bj.anims = [];
+    t.bj.hole = null;
+    for (const st of t.stacks) st.clear();
   },
-  // Queue a card flying out of the shoe. who: 'p' | 'd'.
+  mySeat(t) { return t.bj.seats.findIndex((x) => x && x.o === t.T.me); },
+  // Queue a card flying out of the shoe. who: a seat number, or 'd' for the dealer.
   deal(t, c, who, hidden = false) {
     const b = t.bj;
-    const list = who === 'p' ? b.p : b.d;
+    const list = who === 'd' ? b.d : b.seats[who].cards;
     list.push(c);
     const i = list.length - 1;
     const mesh = cardMesh(c);
@@ -438,92 +465,327 @@ const Blackjack = {
     mesh.visible = false;
     t.group.add(mesh);
     b.meshes.push(mesh);
-    const to = new THREE.Vector3(-0.55 + i * 0.4, TOP + 0.012 + i * 0.002, who === 'p' ? 0.6 : -0.75);
-    b.anims.push({ mesh, from: t.shoeFrom.clone(), to, dur: 0.38, flip: !hidden, who, hidden });
+    let to;
+    if (who === 'd') to = new THREE.Vector3(-0.55 + i * 0.4, TOP + 0.012 + i * 0.002, -0.75);
+    else {
+      mesh.scale.setScalar(0.8);
+      const [x, z] = seatXZ(who, 0.85);
+      to = new THREE.Vector3(x - 0.2 + i * 0.2, TOP + 0.012 + i * 0.003, z - i * 0.06);
+    }
+    b.anims.push({ mesh, from: t.shoeFrom.clone(), to, dur: 0.34, flip: !hidden, who, hidden });
     if (who === 'd' && hidden) b.hole = mesh;
   },
-  panel(t, T) {
-    const b = t.bj;
-    const animating = b.anims.length > 0 || b.wait > 0 || b.peek;
-    const shoeNote = `<small class="tpnote">${t.shoe.decks}-deck shoe · ${t.shoe.left} cards left${t.shoe.reshuffle ? ' · shuffle next hand' : ''}</small>`;
-    // Only the player who dealt the hand can play it.
-    if (b.phase === 'play' && b.mine) {
-      const canDouble = b.p.length === 2 && !b.doubled;
-      return `<div class="tpscore">You <b>${handValue(b.p)}</b> · Dealer <b>${handValue([b.d[0]])}</b> + ?</div>
-        <div class="tprow"><button class="btn" data-act="hit" ${animating ? 'disabled' : ''}>Hit</button><button class="btn" data-act="stand" ${animating ? 'disabled' : ''}>Stand</button>${canDouble ? `<button class="btn" data-act="double" ${animating ? 'disabled' : ''}>Double · 🪙 ${fmt(b.bet)}</button>` : ''}</div>${shoeNote}`;
-    }
-    const busy = b.phase === 'dealer' || animating;
-    return `${T.chipsHtml(busy)}<div class="tprow"><button class="btn big" data-act="deal" ${busy ? 'disabled' : ''}>DEAL · 🪙 ${fmt(T.bet)}</button></div>${shoeNote}`;
-  },
-  act(t, a, arg, T) {
-    const b = t.bj;
-    if (b.anims.length || b.wait > 0) return null;
-    // A new hand: when the table's free, or when a hand somebody else left behind is stuck.
-    if (a === 'deal' && (b.phase === 'idle' || b.phase === 'done' || (b.phase === 'play' && !b.mine))) {
-      if (!T.spend(T.bet)) return null;
-      const shuffled = t.shoe.ready();
-      const s = t.shoe;
-      const p0 = s.draw(); const d0 = s.draw(); const p1 = s.draw(); const d1 = s.draw();
-      return { a: 'deal', bet: T.bet, p: [p0, p1], d: [d0, d1], sh: shuffled ? 1 : 0 };
-    }
-    if (b.phase !== 'play' || !b.mine) return null;
-    if (b.peek && a !== 'stand') return null;
-    if (a === 'hit') return { a: 'hit', c: t.shoe.draw() };
-    if (a === 'double' && b.p.length === 2 && !b.doubled) {
-      if (!T.spend(b.bet)) return null;
-      return { a: 'dbl', c: t.shoe.draw() };
-    }
-    if (a === 'stand') return Blackjack.standEvent(t);
-    return null;
-  },
-  // The dealer's whole hand, decided by whoever's playing (they hold the shoe).
-  standEvent(t) {
-    const b = t.bj;
-    const d = [...b.d];
-    const dealerBJ = handValue(d) === 21;
-    const live = !dealerBJ && handValue(b.p) <= 21 && !isNatural({ cards: b.p });
-    if (live) while (handValue(d) < 17) d.push(t.shoe.draw());
-    return { a: 'stand', d };
-  },
-  apply(t, e) {
-    const b = t.bj;
-    if (e.a === 'deal') {
-      Blackjack.clear(t);
-      Object.assign(b, { phase: 'play', p: [], d: [], bet: e.bet, doubled: false, mine: e.mine, who: e.n, anims: [], wait: 0, hole: null, peek: false });
-      Blackjack.deal(t, e.p[0], 'p');
-      Blackjack.deal(t, e.d[0], 'd');
-      Blackjack.deal(t, e.p[1], 'p');
-      Blackjack.deal(t, e.d[1], 'd', true);
-      Blackjack.chips(t, e.bet);
-      t.show(`${e.n} · 🪙 ${fmt(e.bet)}`, e.sh ? 'Fresh shuffle. Cards out!' : 'Cards out!');
-      sfx.tick(t.pos, t.T.raid.listener);
-      return;
-    }
-    if (b.phase !== 'play') return;
-    if (e.a === 'hit' || e.a === 'dbl') {
-      if (e.a === 'dbl') { b.bet *= 2; b.doubled = true; Blackjack.chips(t, b.bet); }
-      Blackjack.deal(t, e.c, 'p');
-      return;
-    }
-    if (e.a === 'stand') {
-      b.phase = 'dealer';
-      b.flipHole = true;
-      b.finalDealer = e.d;
-      b.wait = 0.5;
-    }
-  },
-  chips(t, bet) {
-    t.stack.clear();
+  chips(t, s, bet) {
+    const st = t.stacks[s];
+    st.clear();
+    if (!bet) return;
     const n = Math.min(10, 2 + Math.round(Math.log10(Math.max(10, bet)) * 1.5));
     const colors = [0xe63946, 0x2a9d8f, 0x1b0f2b, 0x7b2cbf, 0xffd23f];
     for (let i = 0; i < n; i++) {
-      const c = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 0.04, 16), new THREE.MeshBasicMaterial({ color: colors[i % colors.length] }));
+      const c = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.1, 0.04, 16), new THREE.MeshBasicMaterial({ color: colors[i % colors.length] }));
       c.position.y = i * 0.042;
-      t.stack.add(c);
+      st.add(c);
     }
+  },
+  // Seats and the whole table, as text.
+  handLine(x) {
+    if (!x.bet) return '<small>no bet</small>';
+    const v = handValue(x.cards);
+    const tag = x.res ? ` · <b class="${x.net > 0 ? 'w' : x.net < 0 ? 'l' : ''}">${x.res}</b>` : isNatural({ cards: x.cards }) ? ' · BLACKJACK' : v > 21 ? ' · BUST' : '';
+    return `🪙 ${fmt(x.bet)}${x.doubled ? ' (doubled)' : ''} · <b>${x.cards.length ? v : '–'}</b>${tag}`;
+  },
+  panel(t, T) {
+    const b = t.bj;
+    const me = Blackjack.mySeat(t);
+    const animating = b.anims.length > 0 || b.wait > 0;
+    const shoeNote = `<small class="tpnote">${t.shoe.decks}-deck shoe · ${b.left} cards left · up to ${BJ_SEATS} players</small>`;
+    const dealerV = b.phase === 'play' ? (b.d.length ? `${handValue([b.d[0]])} + ?` : '') : b.d.length ? handValue(b.d) : '';
+    const rows = b.seats.map((x, s) => (x ? `<div class="bjseat ${s === me ? 'me' : ''} ${b.turn === s && b.phase === 'play' ? 'turn' : ''}"><span>${b.turn === s && b.phase === 'play' ? '👉 ' : ''}${x.n}${s === me ? ' (you)' : ''}</span><span>${Blackjack.handLine(x)}</span></div>` : `<div class="bjseat open"><span>Seat ${s + 1}</span><span><small>open</small></span></div>`)).join('');
+    const table = `<div class="bjtable"><div class="bjseat dealer"><span>🎩 Dealer</span><span><b>${dealerV || '–'}</b></span></div>${rows}</div>`;
+    const clock = '<span id="bjClock"></span>';
+    if (me < 0) return `${table}<p class="tpnote">Finding you a seat…</p>${shoeNote}`;
+    const mine = b.seats[me];
+    if (b.phase === 'bets') {
+      if (mine.bet || b.pending) return `${table}<p class="tpnote">You're in for 🪙 ${fmt(mine.bet || b.pending)}. ${clock}</p>${shoeNote}`;
+      return `${table}${T.chipsHtml(false)}<div class="tprow"><button class="btn big" data-act="deal">BET · 🪙 ${fmt(T.bet)}</button></div><p class="tpnote">${clock || ''}</p>${shoeNote}`;
+    }
+    if (b.phase === 'play' && b.turn === me && !mine.done) {
+      const canDouble = mine.cards.length === 2 && !mine.doubled;
+      const dis = animating ? 'disabled' : '';
+      return `${table}<div class="tprow"><button class="btn" data-act="hit" ${dis}>Hit</button><button class="btn" data-act="stand" ${dis}>Stand</button>${canDouble ? `<button class="btn" data-act="double" ${dis}>Double · 🪙 ${fmt(mine.bet)}</button>` : ''}</div><p class="tpnote">Your turn. ${clock}</p>${shoeNote}`;
+    }
+    const waiting = b.phase === 'play' && b.turn >= 0 && b.seats[b.turn] ? `Waiting on ${b.seats[b.turn].n}… ${clock}` : b.phase === 'done' ? 'Next hand in a moment.' : 'Dealer\'s turn.';
+    return `${table}<p class="tpnote">${mine.bet ? '' : 'Sitting this hand out. '}${waiting}</p>${shoeNote}`;
+  },
+  // The player at this table asking the host to do something.
+  act(t, a, arg, T) {
+    const b = t.bj;
+    const me = Blackjack.mySeat(t);
+    if (me < 0) return null;
+    const mine = b.seats[me];
+    if (a === 'deal') {
+      if (b.phase !== 'bets' || mine.bet || b.pending) return null;
+      if (!T.spend(T.bet)) return null;
+      b.pending = T.bet;
+      b.pendingAt = performance.now();
+      return { a: 'qbet', bet: T.bet };
+    }
+    if (b.phase !== 'play' || b.turn !== me || mine.done || b.anims.length || b.wait > 0) return null;
+    if (a === 'hit') return { a: 'qhit' };
+    if (a === 'stand') return { a: 'qstand' };
+    if (a === 'double' && mine.cards.length === 2 && !mine.doubled) {
+      if (!T.spend(mine.bet)) return null;
+      return { a: 'qdbl' };
+    }
+    return null;
+  },
+
+  // ---------- the host runs the table ----------
+  host(t, e) {
+    const h = t.bh;
+    const T = t.T;
+    const cast = (x) => T.cast(t, x);
+    let s = h.seats.findIndex((x) => x && x.o === e.o);
+    if (e.a === 'qsit') {
+      if (s < 0) s = h.seats.findIndex((x) => !x);
+      if (s < 0) { cast({ a: 'bfull', o: e.o }); return; }
+      h.seats[s] = { o: e.o, n: e.n, ...bjEmpty() };
+      // The newcomer needs to know who else is here.
+      cast({ a: 'bseats', seats: h.seats.map((y) => (y ? { o: y.o, n: y.n, bet: h.phase === 'bets' ? y.bet : 0 } : null)) });
+      cast({ a: 'bsit', s, o: e.o, n: e.n });
+      return;
+    }
+    if (s < 0) { if (e.a === 'qbet' || e.a === 'qdbl') cast({ a: 'brefund', o: e.o, bet: e.bet || 0, why: 'not seated' }); return; }
+    const x = h.seats[s];
+    if (e.a === 'qup') {
+      if (h.phase === 'bets') {
+        if (x.bet) cast({ a: 'brefund', o: x.o, bet: x.bet, why: 'left' });
+        h.seats[s] = null;
+        cast({ a: 'bup', s });
+        Blackjack.hostMaybeDeal(t);
+      } else {
+        // Mid-hand: the hand stands as it is; the seat frees up after.
+        x.left = true;
+        if (h.turn === s) { x.done = true; Blackjack.hostNext(t); }
+      }
+      return;
+    }
+    if (e.a === 'qbet') {
+      const bet = Math.max(0, Math.floor(Number(e.bet) || 0));
+      if (h.phase !== 'bets' || x.bet || !bet) { cast({ a: 'brefund', o: x.o, bet, why: 'too late' }); return; }
+      x.bet = bet;
+      cast({ a: 'bbet', s, bet });
+      if (!h.timer) { h.timer = BET_WAIT; cast({ a: 'bclock', left: BET_WAIT }); }
+      Blackjack.hostMaybeDeal(t);
+      return;
+    }
+    if (h.phase !== 'play' || h.turn !== s || x.done) { if (e.a === 'qdbl') cast({ a: 'brefund', o: x.o, bet: x.bet, why: 'too late' }); return; }
+    if (e.a === 'qhit') {
+      const c = t.shoe.draw();
+      x.cards.push(c);
+      cast({ a: 'bcard', s, c });
+      if (handValue(x.cards) >= 21) { x.done = true; Blackjack.hostNext(t); }
+    } else if (e.a === 'qdbl') {
+      if (x.cards.length !== 2 || x.doubled) { cast({ a: 'brefund', o: x.o, bet: x.bet, why: 'too late' }); return; }
+      x.doubled = true;
+      x.bet *= 2;
+      const c = t.shoe.draw();
+      x.cards.push(c);
+      cast({ a: 'bcard', s, c, dbl: 1 });
+      x.done = true;
+      Blackjack.hostNext(t);
+    } else if (e.a === 'qstand') {
+      x.done = true;
+      Blackjack.hostNext(t);
+    }
+  },
+  hostMaybeDeal(t) {
+    const h = t.bh;
+    const seated = h.seats.filter(Boolean);
+    const bet = seated.filter((x) => x.bet);
+    if (!bet.length) { h.timer = 0; return; }
+    // Everybody's in: don't make them wait.
+    if (bet.length === seated.length && h.timer > 1.5) { h.timer = 1.5; t.T.cast(t, { a: 'bclock', left: 1.5 }); }
+  },
+  hostDeal(t) {
+    const h = t.bh;
+    const sh = t.shoe.ready();
+    const s = t.shoe;
+    const playing = h.seats.map((x, i) => (x && x.bet ? i : -1)).filter((i) => i >= 0);
+    if (!playing.length) { h.timer = 0; return; }
+    const hands = {};
+    for (const i of playing) hands[i] = [s.draw()];
+    const d0 = s.draw();
+    for (const i of playing) hands[i].push(s.draw());
+    const d1 = s.draw();
+    h.d = [d0, d1];
+    h.phase = 'play';
+    h.timer = 0;
+    for (const i of playing) { h.seats[i].cards = hands[i]; h.seats[i].done = isNatural({ cards: hands[i] }); }
+    for (const x of h.seats) if (x && !x.bet) x.done = true;
+    t.T.cast(t, { a: 'bdeal', hands, d: h.d, sh: sh ? 1 : 0, left: s.left });
+    h.turn = -1;
+    // The dealer peeks: a dealer blackjack ends the hand right there.
+    if (handValue(h.d) === 21) { Blackjack.hostDealer(t); return; }
+    Blackjack.hostNext(t);
+  },
+  hostNext(t) {
+    const h = t.bh;
+    let n = h.turn + 1;
+    while (n < BJ_SEATS && !(h.seats[n] && h.seats[n].bet && !h.seats[n].done && !h.seats[n].left)) n++;
+    if (n >= BJ_SEATS) { Blackjack.hostDealer(t); return; }
+    h.turn = n;
+    h.timer = TURN_TIME;
+    t.T.cast(t, { a: 'bturn', s: n, left: TURN_TIME });
+  },
+  hostDealer(t) {
+    const h = t.bh;
+    const d = [...h.d];
+    const live = handValue(d) !== 21 && h.seats.some((x) => x && x.bet && handValue(x.cards) <= 21 && !isNatural({ cards: x.cards }));
+    if (live) while (handValue(d) < 17) d.push(t.shoe.draw());
+    h.phase = 'done';
+    h.turn = -1;
+    // Time for everyone to watch it play out before the felt is cleared.
+    h.timer = 5 + d.length * 0.6;
+    t.T.cast(t, { a: 'bdealer', d, left: t.shoe.left });
+  },
+  hostUpdate(t, dt) {
+    const h = t.bh;
+    // Seats whose player is gone (left the Lounge, dropped out).
+    h.check -= dt;
+    if (h.check <= 0) {
+      h.check = 2;
+      const raid = t.T.raid;
+      h.seats.forEach((x, s) => {
+        if (!x || x.o === t.T.me) return;
+        if (raid.combatants.some((c) => c.human && c.owner === x.o)) return;
+        if (h.phase === 'bets') { h.seats[s] = null; t.T.cast(t, { a: 'bup', s }); } else { x.left = true; if (h.turn === s) { x.done = true; Blackjack.hostNext(t); } }
+      });
+    }
+    if (!h.timer) return;
+    h.timer = Math.max(0, h.timer - dt);
+    if (h.timer > 0) return;
+    if (h.phase === 'bets') Blackjack.hostDeal(t);
+    else if (h.phase === 'play') { const x = h.seats[h.turn]; if (x) x.done = true; Blackjack.hostNext(t); }
+    else if (h.phase === 'done') {
+      h.phase = 'bets';
+      h.d = [];
+      h.seats.forEach((x, s) => { if (!x) return; if (x.left) { h.seats[s] = null; t.T.cast(t, { a: 'bup', s }); } else Object.assign(x, bjEmpty()); });
+      t.T.cast(t, { a: 'bclear' });
+    }
+  },
+
+  // ---------- everyone plays it out ----------
+  apply(t, e) {
+    const b = t.bj;
+    const T = t.T;
+    const mine = e.o === T.me;
+    const seatsLine = () => `${b.seats.filter(Boolean).length} / ${BJ_SEATS} seats`;
+    switch (e.a) {
+      case 'bsit':
+        b.seats[e.s] = { o: e.o, n: e.n, ...bjEmpty() };
+        if (mine) T.seatAt(t, t.seatSpots[e.s]);
+        t.show(`${e.n} sits down`, `${seatsLine()} · place your bets`);
+        break;
+      case 'bseats':
+        e.seats.forEach((y, i) => { if (y && !b.seats[i]) { b.seats[i] = { o: y.o, n: y.n, ...bjEmpty() }; if (y.bet && b.phase === 'bets') { b.seats[i].bet = y.bet; Blackjack.chips(t, i, y.bet); } } });
+        break;
+      case 'bfull':
+        if (mine && T.seat === t) { T.raid.hud.toast('All three seats are taken. Watch, or come back next hand.'); T.raid.setOverlay(null); }
+        break;
+      case 'bup':
+        b.seats[e.s] = null;
+        if (!b.seats.some(Boolean)) t.show('Open seats', `Hold ${keyName('use')} to play`);
+        break;
+      case 'bbet': {
+        const x = b.seats[e.s];
+        if (!x) break;
+        x.bet = e.bet;
+        if (x.o === T.me) b.pending = 0;
+        Blackjack.chips(t, e.s, e.bet);
+        t.show(`${x.n} bets 🪙 ${fmt(e.bet)}`, 'Cards out soon');
+        sfx.tick(t.pos, T.raid.listener);
+        break;
+      }
+      case 'brefund':
+        if (mine && e.bet) {
+          T.hub.earn(e.bet);
+          b.pending = 0;
+          T.raid.hud.toast(`🃏 🪙 ${fmt(e.bet)} back: ${e.why === 'too late' ? 'the cards were already out' : 'you left the table'}.`);
+        }
+        break;
+      case 'bclock':
+        b.clockEnd = performance.now() + e.left * 1000;
+        break;
+      case 'bdeal': {
+        Blackjack.clear(t);
+        Object.assign(b, { phase: 'play', d: [], turn: -1, wait: 0, settled: false, left: e.left, pending: 0 });
+        const order = Object.keys(e.hands).map(Number).sort();
+        for (const s of order) {
+          if (!b.seats[s]) b.seats[s] = { o: '', n: 'Player', ...bjEmpty() };
+          Object.assign(b.seats[s], { cards: [], doubled: false, done: false, res: '', net: 0 });
+          Blackjack.chips(t, s, b.seats[s].bet);
+        }
+        for (const s of order) Blackjack.deal(t, e.hands[s][0], s);
+        Blackjack.deal(t, e.d[0], 'd');
+        for (const s of order) Blackjack.deal(t, e.hands[s][1], s);
+        Blackjack.deal(t, e.d[1], 'd', true);
+        t.show(`🃏 ${order.length} player${order.length > 1 ? 's' : ''} in`, e.sh ? 'Fresh shuffle. Cards out!' : 'Cards out!');
+        break;
+      }
+      case 'bturn': {
+        b.turn = e.s;
+        b.clockEnd = performance.now() + e.left * 1000;
+        const x = b.seats[e.s];
+        if (x) t.show(`${x.n}'s turn`, `${handValue(x.cards)} · Dealer ${b.d.length ? handValue([b.d[0]]) : '?'} + ?`);
+        if (x && x.o === T.me) sfx.alert();
+        break;
+      }
+      case 'bcard': {
+        const x = b.seats[e.s];
+        if (!x) break;
+        if (e.dbl) { x.bet *= 2; x.doubled = true; Blackjack.chips(t, e.s, x.bet); }
+        Blackjack.deal(t, e.c, e.s);
+        break;
+      }
+      case 'bdealer':
+        b.phase = 'dealer';
+        b.turn = -1;
+        b.left = e.left;
+        b.finalDealer = e.d;
+        b.flipHole = true;
+        b.wait = 0.5;
+        break;
+      case 'bclear':
+        // Anyone still watching it play out gets their result now.
+        if (!b.settled) Blackjack.finish(t);
+        Blackjack.clear(t);
+        Object.assign(b, { phase: 'bets', d: [], turn: -1, wait: 0, clockEnd: 0, flipHole: false });
+        b.seats.forEach((x) => { if (x) Object.assign(x, bjEmpty(), { res: '', net: 0 }); });
+        t.show(`🃏 ${seatsLine()}`, 'Place your bets!');
+        break;
+      default: break;
+    }
+    T.refresh(t);
+  },
+  busy(t) { return t.bj.phase !== 'bets'; },
+  // Leaving mid-hand would walk out on chips that are on the felt.
+  holdsSeat(t) {
+    const b = t.bj;
+    const me = Blackjack.mySeat(t);
+    return me >= 0 && ((b.pending && performance.now() - b.pendingAt < 10000) || (b.seats[me].bet && b.phase !== 'bets' && !b.settled));
   },
   update(t, dt) {
     const b = t.bj;
+    if (!t.T.raid.isClient) Blackjack.hostUpdate(t, dt);
+    if (t.T.seat === t) {
+      const el = $('bjClock');
+      if (el) {
+        const left = Math.max(0, Math.ceil((b.clockEnd - performance.now()) / 1000));
+        const txt = b.phase === 'bets' ? (b.clockEnd && left ? `Cards out in ${left}s.` : 'Waiting for the first bet.') : b.phase === 'play' && left ? `${left}s on the clock.` : '';
+        if (el.textContent !== txt) el.textContent = txt;
+      }
+    }
     if (b.anims.length) {
       const an = b.anims[0];
       an.t = (an.t || 0) + dt;
@@ -555,47 +817,52 @@ const Blackjack = {
       }
     }
   },
-  // After each card lands: where does that leave the hand?
+  // After the last queued card lands.
   settled(t) {
     const b = t.bj;
-    if (b.phase === 'play') {
-      const v = handValue(b.p);
-      t.show(`${b.who} · 🪙 ${fmt(b.bet)}`, `${b.who} ${v}${isNatural({ cards: b.p }) ? ' BLACKJACK' : ''} · Dealer ${handValue([b.d[0]])} + ?`);
-      // The dealer peeks: a dealer blackjack is shown straight away. And our hand is over by
-      // itself on 21, a bust or a double: stand for us.
-      const dealerBJ = b.d.length === 2 && handValue(b.d) === 21;
-      b.peek = dealerBJ; // no buttons while the dealer turns over their blackjack
-      if (b.mine && (v >= 21 || b.doubled || dealerBJ)) setTimeout(() => t.T.act(t, 'stand'), dealerBJ ? 150 : 350);
-    } else if (b.phase === 'dealer') Blackjack.dealerStep(t);
+    if (b.phase === 'dealer' && b.wait <= 0) Blackjack.dealerStep(t);
   },
   dealerStep(t) {
     const b = t.bj;
+    if (b.phase !== 'dealer' || !b.finalDealer) return;
     if (b.d.length < b.finalDealer.length) {
       Blackjack.deal(t, b.finalDealer[b.d.length], 'd');
       b.anims[b.anims.length - 1].dur = 0.45;
       return;
     }
-    // The dealer's done: settle it.
+    Blackjack.finish(t);
+  },
+  // The dealer's done: every seat gets its result; you settle your own.
+  finish(t) {
+    const b = t.bj;
+    if (b.settled) return;
+    b.settled = true;
+    if (b.finalDealer) b.d = [...b.finalDealer];
     b.phase = 'done';
-    const p = handValue(b.p);
     const dv = handValue(b.d);
     const dealerBJ = dv === 21 && b.d.length === 2;
-    const natural = isNatural({ cards: b.p });
-    let pay = 0;
-    let text;
-    if (dealerBJ) {
-      if (natural) { pay = b.bet; text = 'Both blackjack · PUSH'; }
-      else { pay = 0; text = 'Dealer BLACKJACK'; }
-    } else if (p > 21) text = `${p} · BUST`;
-    else if (natural) { pay = Math.floor(b.bet * 2.5); text = 'BLACKJACK! Pays 3 to 2'; }
-    else if (dv > 21) { pay = b.bet * 2; text = `Dealer busts (${dv})`; }
-    else if (p > dv) { pay = b.bet * 2; text = `${p} beats ${dv}`; }
-    else if (p === dv) { pay = b.bet; text = `${p} each · PUSH`; }
-    else text = `${dv} beats ${p}`;
-    const net = pay - b.bet;
-    t.show(text, net > 0 ? `${b.who} WINS 🪙 ${fmt(net)}` : net < 0 ? `${b.who} loses 🪙 ${fmt(-net)}` : `${b.who} gets the bet back`, net > 0 ? '#5ee27a' : net < 0 ? '#ff7b85' : '#fff6e0');
-    t.T.pop(t, net > 0 ? `+${fmt(net)}` : net < 0 ? `-${fmt(-net)}` : 'PUSH', net > 0 ? '#5ee27a' : net < 0 ? '#ff7b85' : '#fff6e0', natural && !dealerBJ);
-    if (b.mine) t.T.settle('🃏', b.bet, pay, (s) => { if (natural && !dealerBJ) s.blackjacks++; });
+    let best = 0;
+    let bigWin = false;
+    b.seats.forEach((x) => {
+      if (!x || !x.bet || !x.cards.length) return;
+      const p = handValue(x.cards);
+      const natural = isNatural({ cards: x.cards });
+      let pay = 0;
+      if (dealerBJ) { if (natural) { pay = x.bet; x.res = 'PUSH'; } else x.res = 'Dealer BJ'; }
+      else if (p > 21) x.res = 'BUST';
+      else if (natural) { pay = Math.floor(x.bet * 2.5); x.res = 'BLACKJACK'; }
+      else if (dv > 21) { pay = x.bet * 2; x.res = 'WIN'; }
+      else if (p > dv) { pay = x.bet * 2; x.res = 'WIN'; }
+      else if (p === dv) { pay = x.bet; x.res = 'PUSH'; }
+      else x.res = 'LOSE';
+      x.net = pay - x.bet;
+      best = Math.max(best, x.net);
+      if (natural && !dealerBJ) bigWin = true;
+      if (x.o === t.T.me) t.T.settle('🃏', x.bet, pay, (st) => { if (natural && !dealerBJ) st.blackjacks++; });
+    });
+    t.show(dealerBJ ? 'Dealer BLACKJACK' : dv > 21 ? `Dealer busts (${dv})` : `Dealer ${dv}`,
+      b.seats.filter((x) => x && x.res).map((x) => `${x.n} ${x.res}`).join(' · ') || 'No bets', best > 0 ? '#5ee27a' : '#ff7b85');
+    if (best > 0) t.T.pop(t, `+${fmt(best)}`, '#5ee27a', bigWin);
     t.T.refresh(t);
   },
 };
@@ -1049,6 +1316,11 @@ export class LoungeTables {
     this.spots = this.tables.map((t) => ({
       spot: t.seatPos, range: 3.2, searchTime: 0.2, searchLabel: 'Taking a seat…',
       prompt: () => {
+        if (GAMES[t.game].multi) {
+          const n = t.bj.seats.filter(Boolean).length;
+          if (Blackjack.mySeat(t) < 0 && n >= BJ_SEATS) return `🍿 ${TITLES[t.game]} is full (${n}/${BJ_SEATS}). Watch, or wait for a seat.`;
+          return `<b>Hold ${keyName('use')}</b> Play ${TITLES[t.game]}${n ? ` · ${n}/${BJ_SEATS} seats taken` : ''}`;
+        }
         if (this.takenByOther(t)) return `🍿 <b>${t.user}</b> is playing ${TITLES[t.game]}. Pull up and watch!`;
         return `<b>Hold ${keyName('use')}</b> Play ${TITLES[t.game]}`;
       },
@@ -1115,7 +1387,12 @@ export class LoungeTables {
   takenByOther(t) { return !!t.owner && t.owner !== this.me && !t.stale; }
 
   sit(t) {
-    if (this.takenByOther(t)) {
+    const multi = !!(GAMES[t.game] && GAMES[t.game].multi);
+    if (multi && Blackjack.mySeat(t) < 0 && t.bj.seats.filter(Boolean).length >= BJ_SEATS) {
+      this.raid.hud.toast('All the seats are taken. Watch, or wait for one to open.');
+      return;
+    }
+    if (!multi && this.takenByOther(t)) {
       this.raid.hud.toast(`${t.user} is at that table. Watch, or try another one.`);
       return;
     }
@@ -1135,7 +1412,8 @@ export class LoungeTables {
     this.camPos.copy(t.pos).setY(0).addScaledVector(t.front, dist).setY(camY);
     this.camLook.copy(t.pos).setY(0).addScaledVector(t.front, lookFwd).setY(lookY);
     if (t.board) t.board.sprite.visible = false; // the panel says it all
-    if (t.game !== 'armory') this.share(t, { a: 'sit' });
+    if (multi) this.share(t, { a: 'qsit' });
+    else if (t.game !== 'armory') this.share(t, { a: 'sit' });
     this.raid.setOverlay('seat');
     document.body.classList.add('seated');
     this.render();
@@ -1145,7 +1423,7 @@ export class LoungeTables {
   canLeave() {
     const t = this.seat;
     if (!t) return true;
-    const busy = (t.bj && t.bj.mine && (t.bj.phase === 'play' || t.bj.phase === 'dealer'))
+    const busy = (GAMES[t.game] && GAMES[t.game].holdsSeat && GAMES[t.game].holdsSeat(t))
       || (t.mn && t.mn.run && t.mn.run.live && t.mn.run.mine)
       || (t.cr && t.cr.run && t.cr.run.mine && !t.cr.run.cashed && !t.cr.run.crashed);
     if (busy) this.raid.hud.toast('Finish this round first.');
@@ -1161,7 +1439,24 @@ export class LoungeTables {
     if (t.board) t.board.sprite.visible = true;
     const p = this.raid.player;
     if (p && p.alive) p.char.root.visible = true;
-    if (t.game !== 'armory') this.share(t, { a: 'up' });
+    if (GAMES[t.game] && GAMES[t.game].multi) this.share(t, { a: 'qup' });
+    else if (t.game !== 'armory') this.share(t, { a: 'up' });
+  }
+
+  // A multi-seat table gave us a seat: stand there, facing the table.
+  seatAt(t, pos) {
+    const p = this.raid.player;
+    if (!p || this.seat !== t) return;
+    p.pos.copy(pos);
+    p.vel.set(0, 0, 0);
+    p.yaw = Math.atan2(pos.x - t.pos.x, pos.z - t.pos.z);
+  }
+
+  // The host, running a multi-seat table: tell everyone (and play it here).
+  cast(t, e) {
+    e.t = t.index;
+    if (this.raid.isHost) this.raid.net.rel({ k: 'tgs', own: '', e });
+    this.apply(e);
   }
 
   // Where the camera goes while we're seated.
@@ -1225,6 +1520,8 @@ export class LoungeTables {
   // From the host: a friend's move (host only), passed on to everyone else.
   relay(e, own) {
     if (!e || !this.tables[e.t]) return;
+    // A request for the table we run: it's from whoever sent it, and it isn't passed on.
+    if (typeof e.a === 'string' && e.a[0] === 'q' && GAMES[this.tables[e.t].game].multi) { this.apply({ ...e, o: own, mine: false }); return; }
     this.raid.net.rel({ k: 'tgs', own, e });
     this.apply({ ...e, mine: false });
   }
@@ -1233,6 +1530,11 @@ export class LoungeTables {
     const t = this.tables[e.t];
     if (!t) return;
     t.userAt = performance.now();
+    if (GAMES[t.game].multi) {
+      if (e.a[0] === 'q') { if (!this.raid.isClient) GAMES[t.game].host(t, e); return; }
+      GAMES[t.game].apply(t, e);
+      return;
+    }
     if (e.a === 'sit') { t.user = e.n; t.owner = e.o; t.show(`${e.n} sits down`, 'Place your bets!'); return; }
     if (e.a === 'up') {
       if (t.owner === e.o) { t.user = null; t.owner = null; }

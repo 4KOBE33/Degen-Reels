@@ -1263,3 +1263,13 @@ body.showdownup #toast { opacity: 0 !important; }
 #tablePanel .tprow.tp3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 #tablePanel .tprow.tp3 .btn { margin: 0; width: 100%; padding: 10px 6px; font-size: 16px; }
 #tablePanel .tprow.tp3 .btn[disabled] { opacity: 0.45; }
+/* Blackjack table with seats */
+.bjtable { display: grid; gap: 4px; margin: 4px 0 6px; }
+.bjseat { display: flex; justify-content: space-between; gap: 10px; padding: 5px 10px; border-radius: 10px; background: rgba(255, 255, 255, 0.06); font: 800 14px var(--body); }
+.bjseat b { font: 400 17px var(--display); color: var(--gold); }
+.bjseat b.w { color: #5ee27a; }
+.bjseat b.l { color: #ff7b85; }
+.bjseat.dealer { background: rgba(255, 210, 63, 0.12); }
+.bjseat.me { outline: 2px solid rgba(94, 226, 122, 0.6); }
+.bjseat.turn { background: rgba(94, 226, 122, 0.2); }
+.bjseat.open { opacity: 0.5; }
