@@ -1273,3 +1273,12 @@ body.showdownup #toast { opacity: 0 !important; }
 .bjseat.me { outline: 2px solid rgba(94, 226, 122, 0.6); }
 .bjseat.turn { background: rgba(94, 226, 122, 0.2); }
 .bjseat.open { opacity: 0.5; }
+/* Roulette with everyone's bets */
+#tablePanel .rlpicks { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+#tablePanel .rlpicks .tpick { padding: 6px 4px; font-size: 15px; margin: 0; }
+#tablePanel .tpick.low, #tablePanel .tpick.high, #tablePanel .tpick.odd, #tablePanel .tpick.even { background: #3a2a5c; color: var(--cream); }
+#tablePanel .tpick.doz { background: #7b5a12; color: var(--cream); }
+.rlhist { display: flex; gap: 4px; justify-content: center; margin: 2px 0 4px; }
+.rlhist i { font: 400 15px var(--display); font-style: normal; min-width: 26px; padding: 2px 4px; border-radius: 6px; color: #fff; text-align: center; }
+.rlhist i.r { background: #d62828; } .rlhist i.b { background: #2b2140; } .rlhist i.g { background: #16a34a; }
+.rlhist i:first-child { outline: 2px solid var(--gold); }

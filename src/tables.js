@@ -122,6 +122,21 @@ function cardMesh(c) {
 // for the player sitting there, act(t, a, arg) is that player doing something (returns the event to
 // share, or null), apply(t, e) plays an event out for everyone, update(t, dt) animates.
 
+const RL_SEATS = 6;
+const RL_BET_TIME = 15; // seconds after the first bet before the ball drops
+const RL_SPIN = 5.2;
+const RL_PICKS = {
+  red: { label: 'Red', pays: 2, hit: (n) => RED.has(n) },
+  black: { label: 'Black', pays: 2, hit: (n) => n !== 0 && !RED.has(n) },
+  odd: { label: 'Odd', pays: 2, hit: (n) => n % 2 === 1 },
+  even: { label: 'Even', pays: 2, hit: (n) => n !== 0 && n % 2 === 0 },
+  low: { label: '1-18', pays: 2, hit: (n) => n >= 1 && n <= 18, cls: 'low' },
+  high: { label: '19-36', pays: 2, hit: (n) => n >= 19, cls: 'high' },
+  d1: { label: '1st 12', pays: 3, hit: (n) => n >= 1 && n <= 12, cls: 'doz' },
+  d2: { label: '2nd 12', pays: 3, hit: (n) => n >= 13 && n <= 24, cls: 'doz' },
+  d3: { label: '3rd 12', pays: 3, hit: (n) => n >= 25, cls: 'doz' },
+  green: { label: 'Green 0', pays: 14, hit: (n) => n === 0 },
+};
 const Roulette = {
   build(t) {
     const g = t.group;
@@ -181,29 +196,202 @@ const Roulette = {
     const ball = new THREE.Mesh(new THREE.SphereGeometry(0.055, 12, 8), new THREE.MeshBasicMaterial({ color: 0xffffff }));
     ball.position.set(0.8, TOP + 0.27, 0);
     g.add(ball);
-    t.rl = { spin, ball, W: 0, run: null, seg };
+    t.rl = { spin, ball, W: 0, run: null, seg, seats: Array(RL_SEATS).fill(null), phase: 'bets', clockEnd: 0, settled: true, history: [] };
+    t.rh = { phase: 'bets', seats: Array(RL_SEATS).fill(null), timer: 0, check: 0 };
+    // Chairs around the front of the wheel.
+    g.updateMatrixWorld(true);
+    t.seatSpots = Array.from({ length: RL_SEATS }, (_, i) => {
+      const a = (i - (RL_SEATS - 1) / 2) * 0.42;
+      return g.localToWorld(new THREE.Vector3(Math.sin(a) * 3.3, 0, Math.cos(a) * 3.3)).setY(0);
+    });
   },
-  busy(t) { return !!t.rl.run; },
+  // ---------- one spin, everyone's bets ----------
+  // The host runs the wheel: bets go in while the clock runs (or until everyone says spin), then
+  // one ball decides every bet on the table. Each player settles their own chips.
+  multi: true,
+  max: RL_SEATS,
+  seatsOf(t) { return t.rl.seats; },
+  mySeat(t) { return t.rl.seats.findIndex((x) => x && x.o === t.T.me); },
   pocketAngle(t, n) { return (WHEEL.indexOf(n) + 0.5) * t.rl.seg; },
+  betLine(x) {
+    if (!x.bets.length) return '<small>no bets</small>';
+    // Same pick twice adds up.
+    const by = {};
+    for (const b of x.bets) by[b.pick] = (by[b.pick] || 0) + b.bet;
+    const res = x.res ? ` · <b class="${x.net > 0 ? 'w' : x.net < 0 ? 'l' : ''}">${x.net > 0 ? `+${fmt(x.net)}` : x.net < 0 ? `−${fmt(-x.net)}` : 'even'}</b>` : x.ready ? ' ✓' : '';
+    return `${Object.entries(by).map(([k, v]) => `🪙 ${fmt(v)} ${RL_PICKS[k].label}`).join(' · ')}${res}`;
+  },
   panel(t, T) {
-    const busy = !!t.rl.run;
-    const picks = [['red', 'Red', '2x'], ['black', 'Black', '2x'], ['odd', 'Odd', '2x'], ['even', 'Even', '2x'], ['green', 'Green 0', '14x']];
-    return `${T.chipsHtml(busy)}<div class="tprow">${picks.map(([k, l, x]) => `<button class="btn tpick ${k}" data-act="spin" data-arg="${k}" ${busy ? 'disabled' : ''}>${l} <small>${x}</small></button>`).join('')}</div>`;
+    const rl = t.rl;
+    const me = Roulette.mySeat(t);
+    const rows = rl.seats.map((x, s) => (x ? `<div class="bjseat ${s === me ? 'me' : ''}"><span>${x.n}${s === me ? ' (you)' : ''}</span><span>${Roulette.betLine(x)}</span></div>` : '')).join('');
+    const last = rl.history.length ? `<div class="rlhist">${rl.history.map((n) => `<i class="${n === 0 ? 'g' : RED.has(n) ? 'r' : 'b'}">${n}</i>`).join('')}</div>` : '';
+    const table = `${last}<div class="bjtable">${rows || '<div class="bjseat open"><span>No one betting yet</span></div>'}</div>`;
+    if (me < 0) return `${table}<p class="tpnote">Finding you a spot…</p>`;
+    const mine = rl.seats[me];
+    if (rl.phase !== 'bets') return `${table}<p class="tpnote">${rl.phase === 'spin' ? 'No more bets… the ball is rolling.' : 'Next spin in a moment.'}</p>`;
+    const picks = Object.entries(RL_PICKS).map(([k, p]) => `<button class="btn tpick ${p.cls || k}" data-act="pick" data-arg="${k}">${p.label} <small>${p.pays}x</small></button>`).join('');
+    const spin = mine.bets.length && !mine.ready ? `<button class="btn big" data-act="ready">SPIN ✓ <small>I'm done betting</small></button>` : '';
+    return `${table}${T.chipsHtml(false)}<div class="tprow rlpicks">${picks}</div><div class="tprow">${spin}</div><p class="tpnote"><span id="rlClock"></span> Click a bet as many times as you like; everyone's bets ride on the same spin.</p>`;
   },
   act(t, a, arg, T) {
-    if (a !== 'spin' || t.rl.run) return null;
-    if (!T.spend(T.bet)) return null;
-    return { a: 'spin', bet: T.bet, pick: arg, num: Math.floor(Math.random() * 37) };
+    const rl = t.rl;
+    const me = Roulette.mySeat(t);
+    if (me < 0 || rl.phase !== 'bets') return null;
+    if (a === 'pick' && RL_PICKS[arg]) {
+      if (!T.spend(T.bet)) return null;
+      rl.pendingAt = performance.now();
+      return { a: 'qbet', pick: arg, bet: T.bet };
+    }
+    if (a === 'ready' && rl.seats[me].bets.length) return { a: 'qready' };
+    return null;
+  },
+  host(t, e) {
+    const h = t.rh;
+    const cast = (x) => t.T.cast(t, x);
+    let s = h.seats.findIndex((x) => x && x.o === e.o);
+    if (e.a === 'qsit') {
+      if (s < 0) s = h.seats.findIndex((x) => !x);
+      if (s < 0) { cast({ a: 'rfull', o: e.o }); return; }
+      if (!h.seats[s]) h.seats[s] = { o: e.o, n: e.n, bets: [], ready: false };
+      cast({ a: 'rseats', seats: h.seats.map((y) => (y ? { o: y.o, n: y.n, bets: h.phase === 'bets' ? y.bets : [] } : null)) });
+      cast({ a: 'rsit', s, o: e.o, n: e.n });
+      return;
+    }
+    if (s < 0) { if (e.a === 'qbet') cast({ a: 'rrefund', o: e.o, bet: e.bet || 0 }); return; }
+    const x = h.seats[s];
+    if (e.a === 'qup') {
+      if (h.phase === 'bets') {
+        const back = x.bets.reduce((n, b) => n + b.bet, 0);
+        if (back) cast({ a: 'rrefund', o: x.o, bet: back, why: 'left' });
+        h.seats[s] = null;
+        cast({ a: 'rup', s });
+        Roulette.hostMaybeSpin(t);
+      } else x.left = true;
+      return;
+    }
+    if (e.a === 'qbet') {
+      const bet = Math.max(0, Math.floor(Number(e.bet) || 0));
+      if (h.phase !== 'bets' || !RL_PICKS[e.pick] || !bet || x.bets.length >= 20) { cast({ a: 'rrefund', o: x.o, bet, why: 'too late' }); return; }
+      x.bets.push({ pick: e.pick, bet });
+      x.ready = false;
+      cast({ a: 'rbet', s, pick: e.pick, bet });
+      if (!h.timer) { h.timer = RL_BET_TIME; cast({ a: 'rclock', left: RL_BET_TIME }); }
+      Roulette.hostMaybeSpin(t);
+      return;
+    }
+    if (e.a === 'qready' && h.phase === 'bets' && x.bets.length) {
+      x.ready = true;
+      cast({ a: 'rready', s });
+      Roulette.hostMaybeSpin(t);
+    }
+  },
+  // Everybody who's bet says spin, and nobody seated is still empty-handed: spin now.
+  hostMaybeSpin(t) {
+    const h = t.rh;
+    const seated = h.seats.filter(Boolean);
+    const betting = seated.filter((x) => x.bets.length);
+    if (!betting.length) { h.timer = 0; return; }
+    if (betting.every((x) => x.ready) && h.timer > 1) { h.timer = 1; t.T.cast(t, { a: 'rclock', left: 1 }); }
+  },
+  hostUpdate(t, dt) {
+    const h = t.rh;
+    h.check -= dt;
+    if (h.check <= 0) {
+      h.check = 2;
+      const raid = t.T.raid;
+      h.seats.forEach((x, s) => {
+        if (!x || x.o === t.T.me || raid.combatants.some((c) => c.human && c.owner === x.o)) return;
+        if (h.phase === 'bets') { h.seats[s] = null; t.T.cast(t, { a: 'rup', s }); Roulette.hostMaybeSpin(t); } else x.left = true;
+      });
+    }
+    if (!h.timer) return;
+    h.timer = Math.max(0, h.timer - dt);
+    if (h.timer > 0) return;
+    if (h.phase === 'bets') {
+      if (!h.seats.some((x) => x && x.bets.length)) return;
+      h.phase = 'spin';
+      h.timer = RL_SPIN + 4;
+      t.T.cast(t, { a: 'rspin', num: Math.floor(Math.random() * 37) });
+    } else {
+      h.phase = 'bets';
+      h.seats.forEach((x, s) => { if (!x) return; if (x.left) { h.seats[s] = null; t.T.cast(t, { a: 'rup', s }); } else { x.bets = []; x.ready = false; } });
+      t.T.cast(t, { a: 'rclear' });
+    }
   },
   apply(t, e) {
-    if (e.a !== 'spin') return;
     const rl = t.rl;
-    rl.run = { t: 0, dur: 5.2, W0: rl.W, n: e.num, bet: e.bet, pick: e.pick, mine: e.mine, who: e.n, ticked: 0 };
-    t.show(`${e.n} · 🪙 ${fmt(e.bet)} on ${e.pick.toUpperCase()}`, 'No more bets…');
-    sfx.lever(t.pos, t.T.raid.listener);
+    const T = t.T;
+    const mine = e.o === T.me;
+    switch (e.a) {
+      case 'rseats':
+        e.seats.forEach((y, i) => { if (y && !rl.seats[i]) rl.seats[i] = { o: y.o, n: y.n, bets: [...(y.bets || [])], ready: false }; });
+        break;
+      case 'rsit':
+        rl.seats[e.s] = rl.seats[e.s] && rl.seats[e.s].o === e.o ? rl.seats[e.s] : { o: e.o, n: e.n, bets: [], ready: false };
+        if (mine) T.seatAt(t, t.seatSpots[e.s]);
+        if (rl.phase === 'bets' && !rl.clockEnd) t.show(`${e.n} pulls up a chair`, 'Place your bets!');
+        break;
+      case 'rfull':
+        if (mine && T.seat === t) { T.raid.hud.toast('The wheel is crowded. Watch this spin, then try again.'); T.raid.setOverlay(null); }
+        break;
+      case 'rup':
+        rl.seats[e.s] = null;
+        break;
+      case 'rrefund':
+        if (mine && e.bet) { T.hub.earn(e.bet); rl.pendingAt = 0; T.raid.hud.toast(`🎡 🪙 ${fmt(e.bet)} back: ${e.why === 'left' ? 'you left the wheel' : 'the ball was already rolling'}.`); }
+        break;
+      case 'rbet': {
+        const x = rl.seats[e.s];
+        if (!x) break;
+        x.bets.push({ pick: e.pick, bet: e.bet });
+        x.ready = false;
+        if (x.o === T.me) rl.pendingAt = 0;
+        const total = rl.seats.reduce((n, y) => n + (y ? y.bets.reduce((m, b) => m + b.bet, 0) : 0), 0);
+        t.show(`${x.n}: 🪙 ${fmt(e.bet)} on ${RL_PICKS[e.pick].label}`, `🪙 ${fmt(total)} on the table`);
+        sfx.tick(t.pos, T.raid.listener);
+        break;
+      }
+      case 'rready': if (rl.seats[e.s]) rl.seats[e.s].ready = true; break;
+      case 'rclock': rl.clockEnd = performance.now() + e.left * 1000; break;
+      case 'rspin':
+        rl.phase = 'spin';
+        rl.settled = false;
+        rl.clockEnd = 0;
+        rl.run = { t: 0, dur: RL_SPIN, W0: rl.W, n: e.num, ticked: 0 };
+        t.show('No more bets!', `${rl.seats.filter((x) => x && x.bets.length).length} player${rl.seats.filter((x) => x && x.bets.length).length === 1 ? '' : 's'} riding on this spin`);
+        sfx.lever(t.pos, T.raid.listener);
+        break;
+      case 'rclear':
+        if (!rl.settled && rl.run) { rl.run.t = rl.run.dur; Roulette.update(t, 0); }
+        rl.phase = 'bets';
+        rl.clockEnd = 0;
+        rl.seats.forEach((x) => { if (x) Object.assign(x, { bets: [], ready: false, res: '', net: 0 }); });
+        t.show('🎡 Place your bets!', `${rl.seats.filter(Boolean).length} at the wheel`);
+        break;
+      default: break;
+    }
+    T.refresh(t);
+  },
+  busy(t) { return t.rl.phase !== 'bets'; },
+  holdsSeat(t) {
+    const rl = t.rl;
+    const me = Roulette.mySeat(t);
+    if (me < 0) return false;
+    if (rl.pendingAt && performance.now() - rl.pendingAt < 10000) return true;
+    return rl.phase === 'spin' && !rl.settled && rl.seats[me].bets.length > 0;
   },
   update(t, dt) {
     const rl = t.rl;
+    if (!t.T.raid.isClient) Roulette.hostUpdate(t, dt);
+    if (t.T.seat === t) {
+      const el = $('rlClock');
+      if (el) {
+        const left = Math.max(0, Math.ceil((rl.clockEnd - performance.now()) / 1000));
+        const txt = rl.clockEnd && left ? `Ball drops in ${left}s.` : 'Waiting for the first bet.';
+        if (el.textContent !== txt) el.textContent = txt;
+      }
+    }
     const run = rl.run;
     if (!run) {
       rl.W += dt * 0.35;
@@ -229,14 +417,38 @@ const Roulette = {
     if (k < 1) return;
     rl.run = null;
     rl.rest = theta;
-    const n = run.n;
+    Roulette.finish(t, run.n);
+  },
+  // The ball's in: pay every bet on the table (you settle your own).
+  finish(t, n) {
+    const rl = t.rl;
+    if (rl.settled) return;
+    rl.settled = true;
+    rl.phase = 'done';
+    rl.history = [n, ...rl.history].slice(0, 8);
     const color = n === 0 ? 'green' : RED.has(n) ? 'red' : 'black';
-    const won = run.pick === color || (n !== 0 && ((run.pick === 'odd' && n % 2 === 1) || (run.pick === 'even' && n % 2 === 0)));
-    const pays = run.pick === 'green' ? 14 : 2;
-    const win = won ? run.bet * pays : 0;
-    t.show(`${n} ${color.toUpperCase()}`, won ? `${run.who} WINS 🪙 ${fmt(win)}` : `${run.who} loses 🪙 ${fmt(run.bet)}`, won ? '#5ee27a' : '#ff7b85');
-    t.T.pop(t, won ? `+${fmt(win)}` : `${n}`, won ? '#5ee27a' : color === 'red' ? '#ff5d5d' : color === 'green' ? '#5ee27a' : '#fff6e0', won && pays > 2);
-    if (run.mine) t.T.settle('🎡', run.bet, win, (s) => { if (won && run.pick === 'green') s.rouletteGreens++; });
+    let best = 0;
+    let bigWin = false;
+    const lines = [];
+    rl.seats.forEach((x) => {
+      if (!x || !x.bets.length) return;
+      let wager = 0;
+      let pay = 0;
+      let green = false;
+      for (const b of x.bets) {
+        wager += b.bet;
+        if (RL_PICKS[b.pick].hit(n)) { pay += b.bet * RL_PICKS[b.pick].pays; if (b.pick === 'green') green = true; }
+      }
+      x.res = true;
+      x.net = pay - wager;
+      best = Math.max(best, x.net);
+      if (green) bigWin = true;
+      lines.push(`${x.n} ${x.net > 0 ? `+${fmt(x.net)}` : x.net < 0 ? `−${fmt(-x.net)}` : 'even'}`);
+      if (x.o === t.T.me) t.T.settle('🎡', wager, pay, (st) => { if (green) st.rouletteGreens++; });
+    });
+    t.show(`${n} ${color.toUpperCase()}`, lines.join(' · ') || 'No bets', best > 0 ? '#5ee27a' : '#ff7b85');
+    t.T.pop(t, best > 0 ? `+${fmt(best)}` : `${n}`, best > 0 ? '#5ee27a' : color === 'red' ? '#ff5d5d' : color === 'green' ? '#5ee27a' : '#fff6e0', bigWin);
+    t.T.refresh(t);
   },
 };
 
@@ -407,6 +619,8 @@ const seatXZ = (s, r) => [Math.sin(SEAT_ANGLE[s]) * r, Math.cos(SEAT_ANGLE[s]) *
 const bjEmpty = () => ({ bet: 0, cards: [], doubled: false, done: false });
 const Blackjack = {
   multi: true,
+  max: BJ_SEATS,
+  seatsOf(t) { return t.bj.seats; },
   build(t) {
     const g = t.group;
     const shoe = part(new THREE.BoxGeometry(0.5, 0.3, 0.7), 0x1b0f2b, { ink: 0.02 });
@@ -1317,9 +1531,10 @@ export class LoungeTables {
       spot: t.seatPos, range: 3.2, searchTime: 0.2, searchLabel: 'Taking a seat…',
       prompt: () => {
         if (GAMES[t.game].multi) {
-          const n = t.bj.seats.filter(Boolean).length;
-          if (Blackjack.mySeat(t) < 0 && n >= BJ_SEATS) return `🍿 ${TITLES[t.game]} is full (${n}/${BJ_SEATS}). Watch, or wait for a seat.`;
-          return `<b>Hold ${keyName('use')}</b> Play ${TITLES[t.game]}${n ? ` · ${n}/${BJ_SEATS} seats taken` : ''}`;
+          const G = GAMES[t.game];
+          const n = G.seatsOf(t).filter(Boolean).length;
+          if (G.mySeat(t) < 0 && n >= G.max) return `🍿 ${TITLES[t.game]} is full (${n}/${G.max}). Watch, or wait for a seat.`;
+          return `<b>Hold ${keyName('use')}</b> Play ${TITLES[t.game]}${n ? ` · ${n} playing` : ''}`;
         }
         if (this.takenByOther(t)) return `🍿 <b>${t.user}</b> is playing ${TITLES[t.game]}. Pull up and watch!`;
         return `<b>Hold ${keyName('use')}</b> Play ${TITLES[t.game]}`;
@@ -1388,7 +1603,7 @@ export class LoungeTables {
 
   sit(t) {
     const multi = !!(GAMES[t.game] && GAMES[t.game].multi);
-    if (multi && Blackjack.mySeat(t) < 0 && t.bj.seats.filter(Boolean).length >= BJ_SEATS) {
+    if (multi && GAMES[t.game].mySeat(t) < 0 && GAMES[t.game].seatsOf(t).filter(Boolean).length >= GAMES[t.game].max) {
       this.raid.hud.toast('All the seats are taken. Watch, or wait for one to open.');
       return;
     }
