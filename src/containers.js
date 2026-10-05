@@ -6,38 +6,74 @@ import { sfx } from './audio.js';
 import { keyName } from './keys.js';
 
 const ICONS = { register: '💵', crate: '📦', locker: '🗄️', safe: '🔒', vault: '💎' };
-// Loot tier colors: everyday, good, great, jackpot.
-export const TIER_COLORS = ['#e5e7eb', '#e5e7eb', '#4ea8ff', '#c77dff', '#ffd23f'];
+// Loot tier colors, matching item rarity: common, rare, epic, legendary.
+export const TIER_COLORS = ['#cbd5e1', '#cbd5e1', '#4ea8ff', '#b56cff', '#ffc83d'];
+const TIER_DARK = ['#64748b', '#64748b', '#1d4ed8', '#6d28d9', '#b45309'];
+const TIER_NAMES = ['', '', 'RARE', 'EPIC', 'LEGENDARY'];
 
-// One badge texture per kind + tier, shared by every container.
+// One badge texture per kind + tier, shared by every container: the whole badge is the rarity
+// color (so you can tell a gold one from across the map), with the container's icon on it.
 const badgeCache = new Map();
 function badgeTexture(kind, tier) {
   const key = `${kind}:${tier}`;
   if (badgeCache.has(key)) return badgeCache.get(key);
   const c = document.createElement('canvas');
-  c.width = 128;
-  c.height = 128;
+  c.width = 256;
+  c.height = 256;
   const g = c.getContext('2d');
   const col = TIER_COLORS[tier] || TIER_COLORS[1];
+  const dark = TIER_DARK[tier] || TIER_DARK[1];
+  // Glow for the good stuff.
+  if (tier >= 3) {
+    const glow = g.createRadialGradient(128, 112, 60, 128, 112, 124);
+    glow.addColorStop(0, `${col}aa`);
+    glow.addColorStop(1, `${col}00`);
+    g.fillStyle = glow;
+    g.fillRect(0, 0, 256, 256);
+  }
+  // Pointer so it reads as "down here".
   g.beginPath();
-  g.arc(64, 58, 46, 0, Math.PI * 2);
+  g.moveTo(98, 196);
+  g.lineTo(158, 196);
+  g.lineTo(128, 246);
+  g.closePath();
   g.fillStyle = '#1b0f2b';
   g.fill();
-  g.lineWidth = 9;
-  g.strokeStyle = col;
-  g.stroke();
-  // A little pointer so it reads as "down here".
   g.beginPath();
-  g.moveTo(50, 100);
-  g.lineTo(78, 100);
-  g.lineTo(64, 122);
+  g.moveTo(108, 196);
+  g.lineTo(148, 196);
+  g.lineTo(128, 232);
   g.closePath();
   g.fillStyle = col;
   g.fill();
-  g.font = '52px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
+  // The disc: rarity color, darker rim, ink outline.
+  g.beginPath();
+  g.arc(128, 112, 88, 0, Math.PI * 2);
+  g.fillStyle = '#1b0f2b';
+  g.fill();
+  const fill = g.createLinearGradient(0, 30, 0, 200);
+  fill.addColorStop(0, col);
+  fill.addColorStop(1, dark);
+  g.beginPath();
+  g.arc(128, 112, 78, 0, Math.PI * 2);
+  g.fillStyle = fill;
+  g.fill();
+  g.beginPath();
+  g.arc(128, 112, 62, 0, Math.PI * 2);
+  g.fillStyle = 'rgba(27,15,43,0.55)';
+  g.fill();
+  g.font = '82px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
   g.textAlign = 'center';
   g.textBaseline = 'middle';
-  g.fillText(ICONS[kind] || '📦', 64, 60);
+  g.fillText(ICONS[kind] || '📦', 128, 116);
+  if (TIER_NAMES[tier]) {
+    g.font = "bold 30px 'Luckiest Guy', 'Arial Black', sans-serif";
+    g.lineWidth = 7;
+    g.strokeStyle = '#1b0f2b';
+    g.strokeText(TIER_NAMES[tier], 128, 190);
+    g.fillStyle = col;
+    g.fillText(TIER_NAMES[tier], 128, 190);
+  }
   const tex = new THREE.CanvasTexture(c);
   tex.colorSpace = THREE.SRGBColorSpace;
   badgeCache.set(key, tex);
@@ -319,7 +355,8 @@ export class Container {
     // Make it easy to spot: a floating badge and a glowing ring until it's been searched.
     const col = new THREE.Color(TIER_COLORS[this.tier] || TIER_COLORS[1]);
     this.badge = new THREE.Sprite(new THREE.SpriteMaterial({ map: badgeTexture(kind, this.tier), transparent: true, depthWrite: false }));
-    this.badge.scale.set(1.1, 1.1, 1);
+    this.badge.scale.set(1.2 + (this.tier - 1) * 0.1, 1.2 + (this.tier - 1) * 0.1, 1);
+    this.badgeScale = this.badge.scale.x;
     this.badgeY = y + h + 1.3;
     this.badge.position.set(x, this.badgeY, z);
     this.badge.renderOrder = 5;
@@ -403,7 +440,8 @@ export class Container {
       const t = performance.now() / 1000 + this.phase;
       this.badge.position.y = this.badgeY + Math.sin(t * 2.2) * 0.18;
       // Grow a bit with distance so far-off crates still read.
-      const s = 1.3 + Math.min(2.4, Math.hypot(dx, dz) / 16);
+      // Rarer chests get a slightly bigger badge.
+      const s = (1.3 + Math.min(2.4, Math.hypot(dx, dz) / 16)) * (1 + (this.tier - 1) * 0.08);
       this.badge.scale.set(s, s, 1);
       this.ring.material.opacity = 0.35 + Math.sin(t * 3) * 0.2;
     }

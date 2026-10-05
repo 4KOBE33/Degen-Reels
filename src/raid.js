@@ -29,6 +29,7 @@ import { keyName } from './keys.js';
 import { recordRaid } from './progress.js';
 import { randomLook } from './looks.js';
 import { Duel } from './duel.js';
+import { Booth } from './booths.js';
 import { Kidnap, mobDebt } from './mob.js';
 
 const raycaster = new THREE.Raycaster();
@@ -87,6 +88,8 @@ export class Raid {
     this.slots = this.map.slotSpots.map((s) => new SlotMachine(this, s));
     this.containers = this.map.containers.map((c) => new Container(this, c));
     this.gunWheels = this.map.safe ? [] : this.wheelSpots().map((s) => new GunWheel(this, s));
+    // Dice tables and coin flips beside more of the slot machines.
+    this.booths = this.map.safe ? [] : this.boothSpots().map((s) => new Booth(this, s));
     this.drawDist = 115;
     this.buildVaultDoor();
     this.buildBossLock();
@@ -334,6 +337,7 @@ export class Raid {
     for (const k of this.containers) k.reset();
     for (const s of this.slots) s.user = null;
     for (const w of this.gunWheels) { w.spin = null; w.pending = null; }
+    for (const b of this.booths || []) { b.run = null; b.pending = null; }
     this.closeVault();
     if (this.player) {
       this.scene.remove(this.player.char.root);
@@ -727,7 +731,7 @@ export class Raid {
   // ---------- interaction ----------
 
   get interactables() {
-    const list = [...this.slots, ...this.gunWheels, ...this.pickups, this.vaultLock];
+    const list = [...this.slots, ...this.gunWheels, ...(this.booths || []), ...this.pickups, this.vaultLock];
     if (this.duel) list.push(...this.duel.interactables());
     for (const k of this.containers) if (!k.opened) list.push(k);
     for (const c of this.combatants) if (c.downed && c.alive && c.reviveSpot) list.push(c.reviveSpot);
@@ -913,6 +917,54 @@ export class Raid {
     return out;
   }
 
+  // Spots for the dice tables and coin flips: beside slot machines the Gun Wheels didn't take,
+  // clear of crates, wheels and each other. Same for everyone in a party (no randomness).
+  boothSpots() {
+    const spots = this.map.slotSpots;
+    const out = [];
+    const want = Math.min(6, Math.max(2, Math.floor(spots.length * 0.6)));
+    const order = [];
+    for (let k = 0; k < spots.length; k++) order.push((k * 7 + 3) % spots.length);
+    for (const idx of [...new Set(order)]) {
+      if (out.length >= want) break;
+      const s = spots[idx];
+      const rot = s.rot || 0;
+      const fx = Math.sin(rot);
+      const fz = Math.cos(rot);
+      for (const side of [-1, 1]) {
+        const x = s.x + side * fz * 3.4 + fx * 0.6;
+        const z = s.z - side * fx * 3.4 + fz * 0.6;
+        if (!this.map.isFree(x, z, 1.6) || !this.map.isFree(x + fx * 1.7, z + fz * 1.7, 0.6)) continue;
+        if (this.slots.some((sl) => Math.hypot(sl.spot.x - x, sl.spot.z - z) < 2.6 || Math.hypot(sl.position.x - x, sl.position.z - z) < 2.6)) continue;
+        if (this.gunWheels.some((w) => Math.hypot(w.position.x - x, w.position.z - z) < 4)) continue;
+        if (this.containers.some((k) => k.spot.y < 0.5 && Math.hypot(k.spot.x - x, k.spot.z - z) < 3.4)) continue;
+        if (out.some((o) => Math.hypot(o.x - x, o.z - z) < 8)) continue;
+        out.push({ x, z, rot, kind: out.length % 2 ? 'coin' : 'dice' });
+        break;
+      }
+    }
+    // Not enough room right beside the machines (tight swamp shacks): try a ring around them,
+    // facing out into the open.
+    for (const idx of [...new Set(order)]) {
+      if (out.length >= want) break;
+      const s = spots[idx];
+      for (let k = 0; k < 12; k++) {
+        const a = (k / 12) * Math.PI * 2;
+        const x = s.x + Math.cos(a) * 5.5;
+        const z = s.z + Math.sin(a) * 5.5;
+        const rot = Math.atan2(Math.cos(a), Math.sin(a));
+        if (!this.map.isFree(x, z, 1.6) || !this.map.isFree(x + Math.cos(a) * 1.7, z + Math.sin(a) * 1.7, 0.6)) continue;
+        if (this.slots.some((sl) => Math.hypot(sl.spot.x - x, sl.spot.z - z) < 2.6 || Math.hypot(sl.position.x - x, sl.position.z - z) < 2.6)) continue;
+        if (this.gunWheels.some((w) => Math.hypot(w.position.x - x, w.position.z - z) < 4)) continue;
+        if (this.containers.some((c) => c.spot.y < 0.5 && Math.hypot(c.spot.x - x, c.spot.z - z) < 3.4)) continue;
+        if (out.some((o) => Math.hypot(o.x - x, o.z - z) < 8)) continue;
+        out.push({ x, z, rot, kind: out.length % 2 ? 'coin' : 'dice' });
+        break;
+      }
+    }
+    return out;
+  }
+
   openSpot(x, z, pad = 0.7) {
     if (this.map.isFree(x, z, pad)) return [x, z];
     for (let r = 1.5; r <= 12; r += 1.5) {
@@ -1089,6 +1141,8 @@ export class Raid {
       return true;
     }
     c.cooldown = w.rate;
+    c.cdMax = w.rate;
+    c.cdKind = 'shot';
     if (c.isPlayer) c.firedAt = performance.now();
     // Bots swing a bit softer than people do, so the melee buff doesn't turn every raider into a blender.
     const damage = w.damage * RARITIES[c.rarity].damage * (w.melee && c.brain ? 0.6 : 1);
@@ -1531,6 +1585,7 @@ export class Raid {
     this.machines = kept.concat(all.slice(n));
     for (const c of this.combatants) if (!c.isPlayer) c.char.root.visible = c.pos.distanceToSquared(this.focus) < this.drawDist * this.drawDist;
     for (const s of this.slots) s.update(dt);
+    for (const b of this.booths || []) b.update(dt);
     for (const w of this.gunWheels) w.update(dt);
     for (const k of this.containers) k.cull(this.focus);
     for (const pk of this.pickups) pk.update(dt);

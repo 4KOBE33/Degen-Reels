@@ -275,6 +275,17 @@ export class Hud {
     this.toastTimer -= dt;
     if (this.toastTimer <= 0) $('toast').classList.remove('show');
     $('crosshair').hidden = !p.alive || !raid.active;
+    // Slow guns (sniper, rifle, shotguns, rocket) and reloads: a ring that fills back up around
+    // the crosshair until you can fire again.
+    const cdOn = p.alive && raid.active && p.cooldown > 0.05 && (p.cdMax || 0) >= 0.5;
+    $('cdRing').hidden = !cdOn;
+    if (cdOn) {
+      const k = Math.max(0, Math.min(1, 1 - p.cooldown / p.cdMax));
+      $('cdArc').style.strokeDashoffset = `${(163.4 * (1 - k)).toFixed(1)}`;
+      const reloading = p.cdKind === 'reload';
+      $('cdRing').classList.toggle('reload', reloading);
+      $('cdText').textContent = reloading ? `RELOADING ${p.cooldown.toFixed(1)}s` : `${p.cooldown.toFixed(1)}s`;
+    }
     // The crosshair opens up when your aim is worse (running, jumping) and tightens when aiming.
     const gap = 8 * p.aimPenalty();
     this.gap = (this.gap || gap) + (gap - (this.gap || gap)) * Math.min(1, dt * 12);

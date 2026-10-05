@@ -451,6 +451,12 @@ export class Session {
         // A friend played a Lounge table: show it here and pass it on.
         if (raid.duel) raid.duel.tables.relay(d.e, from);
         break;
+      case 'gm': {
+        // A friend paid at a dice table or coin flip: we roll it.
+        const b = raid.booths[d.i];
+        if (b && !b.run) b.roll(pup, Math.max(0, Number(d.stake) || 0));
+        break;
+      }
       case 'gw': {
         // A friend bet a gun on a Gun Wheel: we spin it.
         const w = raid.gunWheels[d.i];
@@ -747,6 +753,11 @@ export class Session {
       case 'ss': {
         const s = raid.slots[e.i];
         if (s) s.startSpin(null, e.finals, e.jackpot);
+        break;
+      }
+      case 'gms': {
+        const b = raid.booths[e.i];
+        if (b) b.start(e.r, e.stake, e.owner, e.name);
         break;
       }
       case 'gws': {

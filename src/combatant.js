@@ -130,6 +130,8 @@ export class Combatant {
     if (!this.takeOne('ammo')) return 'Out of ammo, and no Ammo Boxes';
     g.ammo = Math.min(full, g.ammo + Math.ceil(full * 0.5));
     this.cooldown = Math.max(this.cooldown, 1.2);
+    this.cdMax = this.cooldown;
+    this.cdKind = 'reload';
     this.char.recoil(2);
     return null;
   }

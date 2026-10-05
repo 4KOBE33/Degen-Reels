@@ -1218,3 +1218,16 @@ body.showdownup #prompt, body.showdownup #duelInvite { display: none !important;
 #duelInvite { bottom: 320px; }
 body.showdownup #toast { opacity: 0 !important; }
 #prompt .pname { display: inline-block; background: var(--ink); color: var(--rc, var(--cream)); padding: 1px 10px; border-radius: 9px; margin-left: 2px; }
+
+/* Cooldown ring around the crosshair: slow guns and reloads. */
+#cdRing { position: absolute; left: 50%; top: 50%; width: 64px; height: 64px; transform: translate(-50%, -50%); pointer-events: none; }
+#cdRing svg { width: 100%; height: 100%; transform: rotate(-90deg); }
+#cdRing circle { fill: none; stroke-width: 6; }
+#cdRing .bg { stroke: rgba(27, 15, 43, 0.55); }
+#cdRing .fg { stroke: #fff6e0; stroke-linecap: round; stroke-dasharray: 163.4; filter: drop-shadow(0 0 2px #1b0f2b); }
+#cdRing.reload .fg { stroke: var(--gold); }
+#cdRing b { position: absolute; left: 50%; top: calc(100% + 4px); transform: translateX(-50%); white-space: nowrap; font: 400 14px var(--display); letter-spacing: 1px; color: #fff6e0; text-shadow: 0 2px 0 var(--ink); }
+#cdRing.reload b { color: var(--gold); }
+#cdRing { width: 72px; height: 72px; }
+#cdRing circle { stroke-width: 7; }
+#cdRing .bg { stroke: rgba(27, 15, 43, 0.7); }
