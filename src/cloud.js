@@ -49,13 +49,19 @@ class Cloud {
     // Upload a few seconds after anything changes.
     save.onChange(() => { if (this.user && !this.applying) this.queue(); });
     if (this.user) this.queue(500);
+    // Does the server keep accounts in a database, or in a file a restart wipes?
+    this.storage = '';
+    call('/status').then((st) => { this.storage = st.storage || ''; this.changed(); }).catch(() => {});
   }
 
   onUpdate(fn) { this.handlers.push(fn); }
   changed() { for (const fn of this.handlers) fn(); }
 
   remember() {
-    try { localStorage.setItem(KEY, JSON.stringify(this.user)); } catch (e) { /* blocked */ }
+    try {
+      localStorage.setItem(KEY, JSON.stringify(this.user));
+      if (this.user) localStorage.setItem(`${KEY}-name`, this.user.name);
+    } catch (e) { /* blocked */ }
   }
 
   queue(wait = 3000) {
@@ -71,26 +77,64 @@ class Cloud {
       this.status = 'saved';
     } catch (e) {
       this.status = `not saved: ${e.message}`;
-      if (/log in/i.test(e.message)) { this.user = null; this.remember(); }
-      else this.queue(20000);
+      if (/log in/i.test(e.message)) {
+        // The free server forgets accounts when it restarts (unless it has a database). We still
+        // have your progress and PIN here, so put the account back instead of logging you out.
+        if (!(await this.recover())) { this.user = null; this.remember(); }
+      } else this.queue(20000);
     }
     this.changed();
+  }
+
+  // Re-make the account from this device (same name, same PIN, this device's progress).
+  async recover() {
+    const u = this.user;
+    if (!u || !u.pin) return false;
+    try {
+      const out = await call('/account', { name: u.name, pin: u.pin, mode: 'register', save: save.get() });
+      this.user = { name: out.name, token: out.token, pin: u.pin };
+      this.remember();
+      this.syncedAt = Date.now();
+      this.status = 'saved';
+      return true;
+    } catch (e) {
+      this.status = /taken/i.test(e.message) ? 'Someone else took your name while the server was asleep. Log in again or pick a new name.' : `not saved: ${e.message}`;
+      return /taken/i.test(e.message) ? false : true; // offline: keep trying later
+    }
   }
 
   // Make an account from this device's progress.
   async register(name, pin) {
     const out = await call('/account', { name, pin, mode: 'register', save: save.get() });
-    this.user = { name: out.name, token: out.token };
+    // The PIN stays on this device so the account can be put back if the server forgets it.
+    this.user = { name: out.name, token: out.token, pin: String(pin) };
     this.remember();
     this.syncedAt = Date.now();
     this.status = 'saved';
     this.changed();
   }
 
-  // Log in: the cloud save replaces what's on this device.
+  // Log in: the cloud save replaces what's on this device. If the server has no such account
+  // (it forgot everyone when it restarted) and this device was logged in as you, put it back.
   async login(name, pin) {
+    const last = this.lastName();
+    if (last && last.toLowerCase() === String(name).trim().toLowerCase()) {
+      try { return await this.loginOnly(name, pin); } catch (e) {
+        if (!/wrong name or pin/i.test(e.message)) throw e;
+        return this.register(name, pin);
+      }
+    }
+    return this.loginOnly(name, pin);
+  }
+
+  // The name this device was last logged in as (kept after logging out, to fill in the form).
+  lastName() {
+    try { return localStorage.getItem(`${KEY}-name`) || ''; } catch (e) { return ''; }
+  }
+
+  async loginOnly(name, pin) {
     const out = await call('/account', { name, pin, mode: 'login' });
-    this.user = { name: out.name, token: out.token };
+    this.user = { name: out.name, token: out.token, pin: String(pin) };
     this.remember();
     if (out.save) {
       this.applying = true;

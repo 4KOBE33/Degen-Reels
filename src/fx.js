@@ -113,9 +113,10 @@ export class Fx {
   // Floating "-14" style numbers.
   number(pos, text, color = '#ff5d5d', size = 1) {
     const canvas = document.createElement('canvas');
-    canvas.width = 160;
-    canvas.height = 80;
+    canvas.width = 320;
+    canvas.height = 160;
     const c = canvas.getContext('2d');
+    c.scale(2, 2); // 2x for sharp text
     c.font = "56px 'Luckiest Guy', 'Arial Black', sans-serif";
     c.textAlign = 'center';
     c.textBaseline = 'middle';

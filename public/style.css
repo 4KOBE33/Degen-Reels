@@ -1179,3 +1179,42 @@ body.kidnapfade::after { content: '🤌'; position: fixed; inset: 0; z-index: 50
 @media (hover: none) { .islot .qdrop { opacity: 0.85; transform: scale(1); } }
 #bag.dropout { background: rgba(70, 10, 20, 0.82); }
 #bag.dropout::after { content: '🗑️ Let go to drop it'; position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%); padding: 10px 18px; border-radius: 12px; background: var(--red); color: #fff; font: 400 20px var(--display); letter-spacing: 1px; border: 3px solid var(--ink); pointer-events: none; }
+
+/* ---------- High Roller Lounge: clearer gambling screens ---------- */
+/* Every chip amount gets its own color, so the stakes read at a glance. */
+.cchip.c0 { width: auto; min-width: 100px; padding: 0 14px; border-radius: 24px; background: #3a2a5c; font-size: 14px; }
+.cchip.c10000 { background: #0891b2; } .cchip.c25000 { background: #65a30d; } .cchip.c50000 { background: #9333ea; } .cchip.c100000 { background: #b91c1c; }
+#duelPanel .cchip, #betPanel .cchip { width: 54px; height: 54px; font-size: 15px; border-style: dashed; }
+#duelPanel .cchip.c0 { width: auto; }
+#duelPanel .cchip:disabled, #betPanel .cchip:disabled { opacity: 0.3; filter: grayscale(0.7); }
+#duelPanel .card, #betPanel .card { background: linear-gradient(180deg, #2d1850, #1f1137); border: 4px solid var(--ink); outline: 3px solid var(--gold); }
+#duelPanel h2, #betPanel h2 { font-size: 34px; line-height: 1.1; margin: 0 0 8px; }
+#duelPanel .hint, #betPanel .hint { font-size: 14px; opacity: 0.85; }
+#duelGame .subtab { font-size: 17px; padding: 8px 16px; }
+.duelguns { display: flex; align-items: center; gap: 10px; justify-content: center; padding: 10px 12px; border-radius: 12px; background: rgba(255, 210, 63, 0.08); border: 2px solid rgba(255, 210, 63, 0.35); cursor: pointer; text-align: left; }
+.duelguns input { width: 24px; height: 24px; accent-color: var(--gold); flex: none; cursor: pointer; }
+#betWho button { border-width: 4px; }
+#betWho button.on, #betWho .on { box-shadow: 0 0 0 3px var(--gold), 0 0 22px rgba(255, 210, 63, 0.45); }
+/* Messages at the top stay out of each other's way while a fight is on. */
+body.duelbar #toast { top: 215px; }
+#duelInvite { top: auto; bottom: 150px; padding: 14px 22px; font-size: 16px; border-width: 3px; background: rgba(27, 15, 43, 0.97); max-width: min(640px, calc(100vw - 32px)); }
+#duelInvite small { font-size: 15px; }
+#duelInvite small b { display: inline-block; padding: 1px 8px; border-radius: 6px; background: var(--gold); color: var(--ink); margin: 0 2px; }
+#duelStatus .dline { font-size: 15px; padding: 6px 18px; border: 2px solid rgba(255, 210, 63, 0.5); }
+#duelStatus .dbets { margin-top: 10px; padding: 6px 16px 8px; border-radius: 14px; background: rgba(16, 10, 30, 0.82); }
+/* The Poker Showdown: centered, both hands easy to read, nothing showing through. */
+#showdown { top: 50%; transform: translate(-50%, -50%); padding: 18px 20px; min-width: min(560px, calc(100vw - 32px)); box-shadow: 0 16px 50px rgba(0, 0, 0, 0.6); border-width: 4px; background: rgba(16, 10, 30, 0.98); }
+#showdown .sdhead { font-size: 26px; }
+#showdown .sdrow { grid-template-columns: minmax(150px, 1fr) auto; padding: 10px 12px; }
+#showdown .sdwho { display: grid; gap: 4px; }
+#showdown .sdwho b { font-size: 17px; }
+#showdown .sdwho i { font-style: normal; font: 400 18px var(--display); color: var(--gold); opacity: 1; grid-column: auto; }
+#showdown .sdrow.lose { opacity: 0.85; }
+#showdown .sdrow.lose .sdwho i { color: #ff9aa2; }
+#showdown .pcard { width: 56px; height: 78px; }
+#showdown .pcard em { font-size: 28px; }
+#showdown .sdfoot { font-size: 24px; }
+body.showdownup #prompt, body.showdownup #duelInvite { display: none !important; }
+#duelInvite { bottom: 320px; }
+body.showdownup #toast { opacity: 0 !important; }
+#prompt .pname { display: inline-block; background: var(--ink); color: var(--rc, var(--cream)); padding: 1px 10px; border-radius: 9px; margin-left: 2px; }

@@ -72,7 +72,8 @@ export class ItemPickup {
   }
 
   prompt() {
-    return `<b>${keyName('use')}</b> Take <span style="color:${itemInfo(this.item).css}">${itemTitle(this.item)}</span>`;
+    // The name sits on a dark tag in its rarity color, so light colors read on the cream prompt.
+    return `<b>${keyName('use')}</b> Take <span class="pname" style="--rc:${itemInfo(this.item).css}">${itemTitle(this.item)}</span>`;
   }
 
   use(c) {

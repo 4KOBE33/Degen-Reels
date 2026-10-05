@@ -19,7 +19,7 @@ import { Recorder, Replay } from './replay.js';
 import { RaiderBrain } from './bots.js';
 import { ItemPickup } from './pickups.js';
 import {
-  makeGun, makeItem, rollLoot, randInt, pick, addToList, itemInfo, isGun, rollRarity, fullAmmo,
+  makeGun, makeItem, rollLoot, randInt, pick, addToList, itemInfo, isGun, rollRarity, fullAmmo, holdRoom, holdLimitText,
   addToStash, isConsumable,
 } from './items.js';
 import { part, toon } from './toon.js';
@@ -838,6 +838,8 @@ export class Raid {
   takeItem(c, pickup) {
     if (!this.pickups.includes(pickup)) return null;
     const item = pickup.item;
+    // One Second Chance Token at a time.
+    if (holdRoom(c.backpack, item) <= 0) return c.isPlayer ? holdLimitText(item) : 'full';
     // Multiplayer client: ask the host for it (first come, first served).
     if (this.isClient && c.isPlayer) {
       if (!isGun(item) && !c.hasRoom(item)) return isConsumable(item) ? `Belt and backpack full. Press ${keyName('bag')} and drop something.` : `Backpack full. Press ${keyName('bag')} and drop something.`;

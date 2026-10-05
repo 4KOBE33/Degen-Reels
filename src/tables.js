@@ -34,13 +34,15 @@ const HOUSE_GUNS = ['pistol', 'smg', 'shotgun', 'revolver', 'dbarrel', 'ar'];
 
 // The board over a table: who's playing and what's happening. A sprite, so it faces everyone.
 function makeBoard(title, color) {
-  const tex = canvasTexture(512, 200, () => {});
+  const tex = canvasTexture(1024, 400, () => {});
   const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }));
   sprite.scale.set(3.4, 1.33, 1);
   sprite.renderOrder = 5;
   const draw = (line1, line2 = '', tint = '#fff6e0') => {
     const { ctx: c } = tex.userData;
-    c.clearRect(0, 0, 512, 200);
+    c.setTransform(1, 0, 0, 1, 0, 0);
+    c.clearRect(0, 0, 1024, 400);
+    c.setTransform(2, 0, 0, 2, 0, 0); // drawn at 2x for sharp text
     c.fillStyle = 'rgba(20,10,34,0.86)';
     c.beginPath();
     if (c.roundRect) c.roundRect(6, 6, 500, 188, 26); else c.rect(6, 6, 500, 188);

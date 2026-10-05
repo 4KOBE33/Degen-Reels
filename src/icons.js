@@ -217,10 +217,11 @@ export function gunIcon(kind, rarity = 0) {
   const key = `${kind}:${rarity}`;
   if (cache.has(key)) return cache.get(key);
   const canvas = document.createElement('canvas');
-  canvas.width = W;
-  canvas.height = H;
+  canvas.width = W * 2; // drawn at 2x so big slots stay sharp
+  canvas.height = H * 2;
   const c = canvas.getContext('2d');
   if (!c || !DRAW[kind]) { cache.set(key, null); return null; }
+  c.scale(2, 2);
   let body = RARITY_BODY[rarity] || DEFAULT_BODY[kind];
   if (kind === 'spoon' && rarity === 0) body = DEFAULT_BODY.spoon;
   // Legendary guns get a soft gold glow behind them.

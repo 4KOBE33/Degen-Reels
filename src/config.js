@@ -115,7 +115,7 @@ export const ITEMS = {
   trophy: { name: 'Jackpot Trophy', icon: '🏆', desc: 'Worth a fortune to the Fence.', kind: 'valuable', value: 1800 },
   cocoa: { name: 'Hot Cocoa', icon: '☕', desc: 'Warms you right up (+70 warmth) and heals 10. Lifesaver in the snow.', kind: 'warm', warmth: 70, heal: 10, useTime: 1.6, value: 80, stack: 3 },
   tooth: { name: 'Gator Tooth', icon: '🦷', desc: 'Pulled from a bayou gator. The Fence loves these.', kind: 'valuable', value: 220, stack: 5 },
-  token: { name: 'Second Chance Token', icon: '🎟️', desc: 'When you go down, hold the use key to pick yourself back up. Used up on the spot. The House hates these.', kind: 'revive', value: 650, stack: 2 },
+  token: { name: 'Second Chance Token', icon: '🎟️', desc: 'When you go down, hold the use key to pick yourself back up. Used up on the spot. You can only carry one. The House hates these.', kind: 'revive', value: 650, stack: 1 },
   keycard: { name: 'Vault Keycard', icon: '💳', desc: 'Opens the casino vault. Used up on swipe.', kind: 'key', value: 700 },
   clover: { name: 'Four-Leaf Clover', icon: '🍀', desc: 'Legendary. Almost nobody finds one.', kind: 'valuable', value: 6000, legendary: true },
   crown: { name: "The House's Crown", icon: '👑', desc: 'Legendary. Taken from the Pit Boss himself.', kind: 'valuable', value: 25000, legendary: true },
@@ -167,8 +167,9 @@ export const SETTINGS_DEFAULT = { sensitivity: 1, fov: 72, volume: 0.6, music: 0
 
 // Graphics levels. 'auto' starts on high and steps down if the game can't keep up.
 export const QUALITY = {
-  low: { label: 'Low', pixelRatio: 0.75, shadows: 0, drawDist: 70 },
-  medium: { label: 'Medium', pixelRatio: 1, shadows: 1024, drawDist: 95 },
+  // Pixel ratio is capped at the screen's own, and never goes below 1 (that's what made it blurry).
+  low: { label: 'Low', pixelRatio: 1, shadows: 0, drawDist: 70 },
+  medium: { label: 'Medium', pixelRatio: 1.5, shadows: 1024, drawDist: 95 },
   high: { label: 'High', pixelRatio: 2, shadows: 2048, drawDist: 115 },
 };
 

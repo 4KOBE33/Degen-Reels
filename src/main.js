@@ -59,11 +59,12 @@ function povLabel() {
 
 // Graphics: sharpness, shadows and how far away things get drawn.
 let autoLevel = 'high'; // where 'auto' has settled
+let fastFor = 0;
 function applyQuality() {
   const want = save.get().settings.quality || 'auto';
   const q = QUALITY[want === 'auto' ? autoLevel : want] || QUALITY.high;
   const dpr = Math.min(window.devicePixelRatio || 1, 2);
-  renderer.setPixelRatio(q.pixelRatio >= 2 ? dpr : Math.min(dpr, 1) * q.pixelRatio);
+  renderer.setPixelRatio(Math.max(1, Math.min(dpr, q.pixelRatio)));
   raid.drawDist = q.drawDist;
   const sun = raid.map.sun;
   if (sun) {
@@ -80,6 +81,13 @@ let slowFor = 0;
 function autoQuality(dt, rawDt) {
   if ((save.get().settings.quality || 'auto') !== 'auto' || !raid.active || document.hidden) { slowFor = 0; return; }
   slowFor = rawDt > 1 / 38 ? slowFor + dt : Math.max(0, slowFor - dt * 2);
+  // Running smoothly for a good while after a drop: try the better setting again.
+  fastFor = rawDt < 1 / 55 ? fastFor + dt : 0;
+  if (fastFor > 30 && autoLevel !== 'high') {
+    autoLevel = autoLevel === 'low' ? 'medium' : 'high';
+    fastFor = 0;
+    applyQuality();
+  }
   if (slowFor > 4 && autoLevel !== 'low') {
     autoLevel = autoLevel === 'high' ? 'medium' : 'low';
     slowFor = 0;

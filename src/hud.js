@@ -284,6 +284,8 @@ export class Hud {
 
   drawMinimap(raid) {
     const ctx = this.mini;
+    // The canvas is drawn at twice its on-screen size so it stays sharp.
+    ctx.setTransform(2, 0, 0, 2, 0, 0);
     const size = 180;
     const c = size / 2;
     const p = raid.player;

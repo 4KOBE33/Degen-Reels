@@ -140,11 +140,38 @@ function buildHat(kind) {
 
 // ---------- face and outfit pieces (see looks.js for the list) ----------
 
+// Pupils are flat shapes sitting on the front of the eye (local -z), with a little shine.
+const EYE_FRONT = -0.172;
+function shine(r, x, y) {
+  const m = new THREE.Mesh(new THREE.CircleGeometry(r, 12), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+  m.position.set(x, y, -0.004);
+  m.rotation.y = Math.PI;
+  return m;
+}
+function starShape(outer, inner) {
+  const sh = new THREE.Shape();
+  for (let i = 0; i < 10; i++) {
+    const a = Math.PI / 2 + (i * Math.PI) / 5;
+    const r = i % 2 ? inner : outer;
+    const x = Math.cos(a) * r;
+    const y = Math.sin(a) * r;
+    if (i) sh.lineTo(x, y); else sh.moveTo(x, y);
+  }
+  sh.closePath();
+  return sh;
+}
 function buildPupil(style) {
+  const g = new THREE.Group();
+  g.position.set(0, 0, EYE_FRONT);
   if (style === 'stars') {
-    const star = new THREE.Mesh(new THREE.OctahedronGeometry(0.085, 0), toon(0xffd23f));
-    star.scale.z = 0.4;
-    return star;
+    // Starstruck: a big gold star with a dark rim.
+    const rim = new THREE.Mesh(new THREE.ShapeGeometry(starShape(0.14, 0.065)), new THREE.MeshBasicMaterial({ color: INK }));
+    rim.rotation.y = Math.PI;
+    const star = new THREE.Mesh(new THREE.ShapeGeometry(starShape(0.11, 0.05)), new THREE.MeshBasicMaterial({ color: 0xffd23f }));
+    star.rotation.y = Math.PI;
+    star.position.z = -0.002;
+    g.add(rim, star, shine(0.02, -0.025, 0.03));
+    return g;
   }
   if (style === 'dollar') {
     const tex = canvasTexture(64, 64, (c, w, h) => {
@@ -154,30 +181,44 @@ function buildPupil(style) {
       c.font = 'bold 46px sans-serif'; c.textAlign = 'center'; c.textBaseline = 'middle';
       c.fillText('$', w / 2, h / 2 + 3);
     });
-    const m = new THREE.Mesh(new THREE.CircleGeometry(0.085, 16), new THREE.MeshBasicMaterial({ map: tex }));
+    const m = new THREE.Mesh(new THREE.CircleGeometry(0.09, 20), new THREE.MeshBasicMaterial({ map: tex }));
     m.rotation.y = Math.PI;
-    return m;
+    g.add(m);
+    return g;
   }
-  const r = style === 'big' ? 0.11 : 0.075;
-  return new THREE.Mesh(new THREE.SphereGeometry(r, 12, 8), toon(INK));
+  // Classic: a round pupil. Big pupils: a huge cute one with two shines.
+  const big = style === 'big';
+  const r = big ? 0.12 : 0.072;
+  const disc = new THREE.Mesh(new THREE.CircleGeometry(r, 24), new THREE.MeshBasicMaterial({ color: INK }));
+  disc.rotation.y = Math.PI;
+  g.add(disc, shine(big ? 0.035 : 0.022, -r * 0.35, r * 0.4));
+  if (big) g.add(shine(0.016, r * 0.35, -r * 0.35));
+  return g;
 }
 
 function addEyeExtras(eye, style, side, color) {
   if (style === 'sleepy') {
-    // A heavy lid in the body color over the top half.
-    const lid = new THREE.Mesh(new THREE.SphereGeometry(0.18, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2.1), toon(color));
-    lid.rotation.x = -0.35;
-    eye.add(lid);
+    // A heavy lid in the body color covering the top half, with a dark lash line along its edge,
+    // and the pupil peeking out underneath.
+    const lid = new THREE.Mesh(new THREE.SphereGeometry(0.178, 20, 10, 0, Math.PI * 2, 0, Math.PI * 0.52), toon(color));
+    lid.rotation.x = -0.12;
+    const lash = new THREE.Mesh(new THREE.TorusGeometry(0.165, 0.018, 6, 24, Math.PI), toon(INK));
+    lash.rotation.set(Math.PI / 2 - 0.12, 0, 0);
+    lash.position.set(0, -0.005, 0);
+    lash.rotation.z = Math.PI;
+    eye.add(lid, lash);
+    eye.userData.pupilY = -0.06;
   } else if (style === 'angry') {
     const brow = new THREE.Mesh(new THREE.BoxGeometry(0.26, 0.06, 0.06), toon(INK));
     brow.position.set(0, 0.17, -0.1);
     brow.rotation.z = side * 0.45;
     eye.add(brow);
   } else if (style === 'happy') {
-    // ^ ^ eyes: hide the pupil behind a curved line.
-    eye.scale.y = 0.75;
-    const arc = new THREE.Mesh(new THREE.TorusGeometry(0.07, 0.022, 6, 12, Math.PI), toon(INK));
-    arc.position.set(0, -0.02, -0.15);
+    // ^ ^ : eyes closed in a smile. The white goes, a thick dark arch stays.
+    eye.userData.closed = true;
+    const arc = new THREE.Mesh(new THREE.TorusGeometry(0.105, 0.036, 8, 18, Math.PI), new THREE.MeshBasicMaterial({ color: INK }));
+    arc.position.set(0, -0.045, -0.2);
+    arc.scale.z = 2.5;
     eye.add(arc);
     eye.userData.hidePupil = true;
   }
@@ -503,7 +544,7 @@ export function buildGun(kind, tint = null) {
 }
 
 function makeNameTag() {
-  const tex = canvasTexture(256, 80, () => {});
+  const tex = canvasTexture(512, 160, () => {});
   const mat = new THREE.SpriteMaterial({ map: tex, depthWrite: false, transparent: true });
   const sprite = new THREE.Sprite(mat);
   sprite.scale.set(2.2, 0.69, 1);
@@ -514,7 +555,9 @@ function makeNameTag() {
     if (key === last) return;
     last = key;
     const { ctx } = tex.userData;
-    ctx.clearRect(0, 0, 256, 80);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.clearRect(0, 0, 512, 160);
+    ctx.setTransform(2, 0, 0, 2, 0, 0); // drawn at 2x for sharp text
     ctx.textAlign = 'center';
     ctx.lineJoin = 'round';
     ctx.font = "34px 'Luckiest Guy', 'Arial Black', sans-serif";
@@ -557,9 +600,15 @@ export function createCharacter({ color = 0xff5d5d, hat = 'top', eyes: eyeStyle 
     eye.scale.z = 0.7;
     eye.position.set(side * 0.19, 0.38, -0.4);
     const pupil = buildPupil(eyeStyle);
-    pupil.position.set(0, 0, -0.14);
     eye.add(pupil);
     addEyeExtras(eye, eyeStyle, side, color);
+    if (eye.userData.pupilY) pupil.position.y = eye.userData.pupilY;
+    if (eye.userData.closed) {
+      // Closed eyes: no white ball (or its outline), just the arch on the face.
+      eye.material = toon(color);
+      eye.scale.z = 0.3;
+      for (const ch of eye.children) if (ch.material && ch.material.side === THREE.BackSide) ch.visible = false;
+    }
     const cross = new THREE.Group();
     for (const r of [0.785, -0.785]) {
       const bar = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.05, 0.05), toon(INK));
@@ -569,7 +618,7 @@ export function createCharacter({ color = 0xff5d5d, hat = 'top', eyes: eyeStyle 
     cross.position.z = -0.13;
     cross.visible = false;
     eye.add(cross);
-    eye.userData = { pupil, cross };
+    Object.assign(eye.userData, { pupil, cross });
     body.add(eye);
     eyes.push(eye);
   }

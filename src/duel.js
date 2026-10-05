@@ -109,6 +109,7 @@ export class Duel {
     this.tables.dispose();
     $('duelInvite').hidden = true;
     $('duelStatus').hidden = true;
+    document.body.classList.remove('duelbar', 'showdownup');
     $('duelPanel').hidden = true;
     $('betPanel').hidden = true;
     $('showdown').hidden = true;
@@ -195,7 +196,7 @@ export class Duel {
     $('duelGame').innerHTML = [['pit', '🥊 Fight in The Pit'], ['poker', '🃏 Poker Showdown']].map(([g, l]) => `<button class="subtab ${this.game === g ? 'on' : ''}" data-g="${g}">${l}</button>`).join('');
     $('duelGame').onclick = (e) => { const b = e.target.closest('[data-g]'); if (b) { this.game = b.dataset.g; this.renderPanel(); } };
     const champ = this.target && this.target.champion;
-    $('duelChips').innerHTML = STAKES.map((v) => `<button class="cchip ${v === this.stake ? 'on' : ''}" data-v="${v}" ${v > chips ? 'disabled' : ''}>${v ? (v >= 1000 ? `${v / 1000}K` : v) : 'Just for fun'}</button>`).join('');
+    $('duelChips').innerHTML = STAKES.map((v) => `<button class="cchip c${v} ${v === this.stake ? 'on' : ''}" data-v="${v}" ${v > chips ? 'disabled' : ''}>${v ? (v >= 1000 ? `${v / 1000}K` : v) : 'Just for fun'}</button>`).join('');
     $('duelChips').onclick = (e) => { const b = e.target.closest('[data-v]'); if (b && !b.disabled) { this.stake = Number(b.dataset.v); this.renderPanel(); } };
     const mine = this.betGun();
     const theirs = champ ? this.target.gun : null;
@@ -361,15 +362,16 @@ export class Duel {
     const el = $('showdown');
     const me = this.raid.player && this.raid.player.name;
     el.innerHTML = `<div class="sdhead">🃏 POKER SHOWDOWN${r.chips ? ` · 🪙 ${fmt(r.chips * 2)} pot` : ''}${r.guns ? ' + 🔫 pink slips' : ''}</div>
-      ${[[r.a, r.ha, r.ra], [r.b, r.hb, r.rb]].map(([n, h, rank]) => `<div class="sdrow ${r.w === n ? 'win' : r.w ? 'lose' : ''}"><b>${n}${n === me ? ' (you)' : ''}</b><span class="cards">${h.map(cardHtml).join('')}</span><i>${rank}</i></div>`).join('')}
+      ${[[r.a, r.ha, r.ra], [r.b, r.hb, r.rb]].map(([n, h, rank]) => `<div class="sdrow ${r.w === n ? 'win' : r.w ? 'lose' : ''}"><div class="sdwho"><b>${r.w === n ? '🏆 ' : ''}${n}${n === me ? ' (you)' : ''}</b><i>${rank}</i></div><span class="cards">${h.map(cardHtml).join('')}</span></div>`).join('')}
       <div class="sdfoot">${r.w ? `🏆 ${r.w} wins` : 'Split pot!'}</div>`;
     el.hidden = false;
+    document.body.classList.add('showdownup');
     el.classList.remove('show');
     void el.offsetWidth;
     el.classList.add('show');
     sfx.lever();
     clearTimeout(this.revealTimer);
-    this.revealTimer = setTimeout(() => { el.hidden = true; }, 7000);
+    this.revealTimer = setTimeout(() => { el.hidden = true; document.body.classList.remove('showdownup'); }, 7000);
   }
 
   // ---------- betting on The Pit ----------
@@ -400,7 +402,7 @@ export class Duel {
     const chips = save.get().stash.chips;
     $('betWho').innerHTML = [['a', v.a], ['b', v.b]].map(([k, n]) => `<button class="betside ${this.betSide === k ? 'on' : ''}" data-s="${k}"><b>${n}</b><small>🪙 ${fmt(k === 'a' ? v.pa || 0 : v.pb || 0)} bet so far</small></button>`).join('');
     $('betWho').onclick = (e) => { const b = e.target.closest('[data-s]'); if (b) { this.betSide = b.dataset.s; this.renderBet(); } };
-    $('betChips').innerHTML = BETS.map((x) => `<button class="cchip ${x === this.betAmt ? 'on' : ''}" data-v="${x}" ${x > chips ? 'disabled' : ''}>${x >= 1000 ? `${x / 1000}K` : x}</button>`).join('');
+    $('betChips').innerHTML = BETS.map((x) => `<button class="cchip c${x} ${x === this.betAmt ? 'on' : ''}" data-v="${x}" ${x > chips ? 'disabled' : ''}>${x >= 1000 ? `${x / 1000}K` : x}</button>`).join('');
     $('betChips').onclick = (e) => { const b = e.target.closest('[data-v]'); if (b && !b.disabled) { this.betAmt = Number(b.dataset.v); this.renderBet(); } };
     $('betNote').textContent = `Pays 2x if you're right. Draws are refunded. Your bank: 🪙 ${fmt(chips)}. Bets close in ${Math.max(0, Math.ceil(BET_TIME - v.t))}s.`;
     $('betSend').onclick = () => this.sendBet();
@@ -646,8 +648,9 @@ export class Duel {
   render() {
     const v = this.view;
     const el = $('duelStatus');
-    if (!v || !this.raid.active) { el.hidden = true; return; }
+    if (!v || !this.raid.active) { el.hidden = true; document.body.classList.remove('duelbar'); return; }
     el.hidden = false;
+    document.body.classList.add('duelbar');
     const pot = v.chips ? `🪙 ${fmt(v.chips * 2)}` : 'bragging rights';
     let big = '';
     if (v.ph === 'bets') big = `<div class="dbets">🎟️ PLACE YOUR BETS · ${Math.max(0, Math.ceil(BET_TIME - v.t))}s<small>🪙 ${fmt(v.pa || 0)} on ${v.a} · 🪙 ${fmt(v.pb || 0)} on ${v.b}</small></div>`;

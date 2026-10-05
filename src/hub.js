@@ -3,7 +3,7 @@
 // Everything here is plain HTML on top of the 3D backdrop.
 import { GUN_TIERS, bossTheme, BACKPACK_SLOTS, BAG_UPGRADES, HUB_SLOTS, ITEMS, LOOT, QUALITY, RARITY_BY_TIER, WEAPONS, bagBonus } from './config.js';
 import {
-  itemInfo, isGun, rollLoot, addToList, addToStash, makeGun, makeItem, fullAmmo, weightedIndex,
+  itemInfo, isGun, rollLoot, addToList, addToStash, makeGun, makeItem, fullAmmo, weightedIndex, holdRoom, holdLimitText,
 } from './items.js';
 import { save } from './save.js';
 import { cloud, net as cloudNet } from './cloud.js';
@@ -666,15 +666,21 @@ export class Hub {
       const when = cloud.syncedAt ? `last saved ${new Date(cloud.syncedAt).toLocaleTimeString()}` : 'syncing…';
       return `<section class="account in"><b>☁️ Cloud save: ${escapeHtml(u.name)}</b>
         <small>${cloud.status && cloud.status !== 'saved' ? `⚠️ ${escapeHtml(cloud.status)}` : `Your progress saves to the server automatically (${when}). Log in with the same name and PIN on any device.`}</small>
+        ${cloud.storage === 'file' ? '<small class="warn">⚠️ The game server has no database set up, so it forgets accounts when it restarts. This device puts yours back automatically.</small>' : ''}
         <div class="prow"><button class="btn ghost" data-act="cloudsync">Save now</button><button class="btn ghost" data-act="cloudout">Log out</button></div></section>`;
     }
+    const last = cloud.lastName();
+    const nameVal = this.cloudName !== undefined && this.cloudName !== null && this.cloudName !== '' ? this.cloudName : last;
+    const loginBtn = `<button class="btn ${last ? '' : 'ghost'}" data-act="cloudin" ${this.cloudBusy ? 'disabled' : ''}>${this.cloudBusy === 'in' ? 'Logging in…' : 'Log in'}</button>`;
+    const regBtn = `<button class="btn ${last ? 'ghost' : ''}" data-act="cloudreg" ${this.cloudBusy ? 'disabled' : ''}>${this.cloudBusy === 'reg' ? 'Creating…' : 'Create account'}</button>`;
     return `<section class="account"><b>☁️ Cloud save</b>
-      <small>Make an account to keep your progress if you clear your browser or switch computers, and to show up on the 👑 leaderboard.</small>
-      <div class="prow"><input id="cloudName" maxlength="16" placeholder="Name" autocomplete="username" value="${escapeHtml(this.cloudName || '')}">
+      <small>${last ? `Welcome back! Log in as <b>${escapeHtml(last)}</b> with your PIN.` : 'Make an account to keep your progress if you clear your browser or switch computers, and to show up on the 👑 leaderboard.'}</small>
+      <div class="prow"><input id="cloudName" maxlength="16" placeholder="Name" autocomplete="username" value="${escapeHtml(nameVal || '')}">
       <input id="cloudPin" maxlength="8" placeholder="PIN (4-8 numbers)" inputmode="numeric" pattern="[0-9]*" type="password" autocomplete="current-password" value="${escapeHtml(this.cloudPin || '')}">
-      <button class="btn" data-act="cloudreg" ${this.cloudBusy ? 'disabled' : ''}>${this.cloudBusy === 'reg' ? 'Creating…' : 'Create account'}</button><button class="btn ghost" data-act="cloudin" ${this.cloudBusy ? 'disabled' : ''}>${this.cloudBusy === 'in' ? 'Logging in…' : 'Log in'}</button></div>
+      ${last ? loginBtn + regBtn : regBtn + loginBtn}</div>
       ${this.cloudBusy && cloudNet.waking ? '<small class="warn">⏳ Waking up the server. Free servers nap when nobody\'s playing, so this can take up to a minute…</small>' : ''}
       ${this.cloudError ? `<small class="warn">⚠️ ${escapeHtml(this.cloudError)}</small>` : ''}
+      ${cloud.storage === 'file' ? '<small class="warn">⚠️ The game server has no database set up, so it forgets accounts when it restarts. Your progress is safe on this device and your account is put back automatically when you log in here.</small>' : ''}
       <small class="dim">Logging in replaces the progress on this device with your cloud save.</small></section>`;
   }
 
@@ -1117,6 +1123,8 @@ export class Hub {
             if (slot < 0) { this.toast('Both weapon slots are full.'); return; }
             x.loadout.weapons[slot] = it;
             x.stash.items.splice(i, 1);
+          } else if (holdRoom(x.loadout.items, it) <= 0) {
+            this.toast(holdLimitText(it));
           } else if (itemInfo(it).stack > 1) {
             const copy = { ...it };
             addToList(x.loadout.items, copy, LOADOUT_SLOTS);

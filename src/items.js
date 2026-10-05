@@ -94,9 +94,28 @@ export function slotsUsed(list, belt) {
   return n;
 }
 
+// Some things you can only carry one of at a time (a second self-revive isn't fair).
+export const HOLD_LIMIT = { token: 1 };
+// How many more of this item a list can hold before hitting its carry limit (Infinity if none).
+export function holdRoom(list, item) {
+  const limit = HOLD_LIMIT[item.id];
+  if (!limit) return Infinity;
+  return Math.max(0, limit - list.filter((x) => x && x.id === item.id).reduce((n, x) => n + (x.qty || 1), 0));
+}
+export const holdLimitText = (item) => `You can only carry ${HOLD_LIMIT[item.id] === 1 ? 'one' : HOLD_LIMIT[item.id]} ${ITEMS[item.id] ? ITEMS[item.id].name : 'of those'}.`;
+
 // `capacity` is a number (one shared limit) or { pack, belt } (separate limits).
 export function addToList(list, item, capacity = Infinity) {
   const info = itemInfo(item);
+  // Carry limits: take what fits, leave the rest in `item`.
+  const room = holdRoom(list, item);
+  if (room <= 0) return false;
+  if (room < (item.qty || 1)) {
+    const part = { ...item, qty: room };
+    const ok = addToList(list, part, capacity);
+    item.qty -= room - (part.qty || 0);
+    return ok && item.qty <= 0;
+  }
   const split = typeof capacity === 'object';
   const consumable = isConsumable(item);
   // Where a new stack/slot can go: the belt first for consumables, then the backpack.
