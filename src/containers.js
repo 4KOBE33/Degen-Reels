@@ -398,9 +398,12 @@ export class Container {
     this.lid.rotation.x = -0.9;
     sfx.open(this.spot, this.raid.listener);
     const [a, b] = this.def.rolls;
-    const n = randInt(a, b) + (raid.map.lootRolls || 0);
+    // A crate set up with exactly what's in it (the tutorial's), otherwise a roll of the dice.
+    const fixed = this.fixedLoot;
+    this.fixedLoot = null;
+    const n = fixed ? fixed.length : randInt(a, b) + (raid.map.lootRolls || 0);
     for (let i = 0; i < n; i++) {
-      const loot = rollLoot(this.tier);
+      const loot = fixed ? fixed[i] : rollLoot(this.tier);
       const at = this.spot.clone().add(new THREE.Vector3((Math.random() - 0.5) * 2, 0, (Math.random() - 0.5) * 2));
       if (loot.chips) this.raid.chips.spawnBurst(at.setY(this.spot.y + this.h + 0.3), loot.chips, null, { speed: 1.5 });
       else {

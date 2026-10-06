@@ -157,6 +157,14 @@ export const MAPS = {
     mapGround: '#3a1d2c', hemi: [0xffe6f0, 0x3a2a4a, 2.4], sun: [0xffe0f0, 0.5], mountains: null, glow: 0xffd23f, tough: 1,
     raidTime: 7200, raiders: 0, hostile: 0, safe: true, noBoss: true,
   },
+  training: {
+    name: 'Training Floor', icon: '🎓', size: 'Tiny', danger: 'Safe', half: 52, wilds: 'Training Floor', tutorial: true,
+    blurb: 'A practice run through the basics: moving, looting, shooting, healing and getting out.',
+    sky: [0x2a1650, 0x7b3fa0, 0xf6a35c], fog: 0xb07ab0,
+    ground: { base: '#c9a46b', a: 'rgba(120,80,40,0.15)', b: 'rgba(255,230,180,0.2)' },
+    mapGround: '#c9a46b', hemi: [0xffe2c4, 0x6a4a6a, 1.8], sun: [0xffd2a1, 2.2], mountains: [0xa0522d, 0x8b4513], glow: 0xff3fa4, tough: 1,
+    raidTime: 1800, raiders: 0, hostile: 0, noBoss: true,
+  },
   bayou: {
     name: 'Bayou Royale', icon: '🐊', size: 'Huge', danger: 'Medium', half: 270, wilds: 'The Swamp',
     blurb: 'A muggy swamp town wrapped around the Riverboat Royale, a casino on a paddle steamer.',
@@ -1147,7 +1155,7 @@ export function buildMap(scene, mapId = 'vegas') {
   // ---------- dressing: props by the doors and little things on the ground ----------
   // Purely for looks (the bigger props are solid so you can't walk through them). Seeded like the
   // rest of the map, so everyone in a party gets the same props.
-  if (!def.indoor && !def.safe) {
+  if (!def.indoor && !def.safe && !def.tutorial) {
     const theme = { vegas: 'vegas', frost: 'frost', bayou: 'bayou', tequila: 'wine' }[mapId] || 'vegas';
     const R = Math.random;
     const add = (m, x, y, z, ry = 0) => { m.position.set(x, y, z); m.rotation.y = ry; statics.add(m); return m; };
@@ -1375,7 +1383,7 @@ export function buildMap(scene, mapId = 'vegas') {
   });
 
   // ---------- landmarks: towers you can climb and one giant monument per map ----------
-  if (!def.safe && !def.indoor) {
+  if (!def.safe && !def.indoor && !def.tutorial) {
     const used = [];
     // Somewhere open for a w×d footprint: off roads and buildings, away from exits and spawns.
     const findSpot = (w, d) => {
@@ -3710,6 +3718,87 @@ function theLounge(k) {
   };
 }
 
+// ---------- The Training Floor: the tutorial, one station after another up a fenced lane ----------
+
+function trainingFloor(k) {
+  const { H, THREE, statics, zones, minimap, part, toon, neonSign, flat, box, circle, container } = k;
+  const wallMat = toon(0x3a1d5c);
+  const trimMat = toon(0xffd23f);
+  // The lane: x from -11 to 11, spawn at the south end, the exit at the north end.
+  const L = 11;
+  const wall = (x0, x1, z0, z1, h, mat = wallMat) => {
+    const m = part(new THREE.BoxGeometry(x1 - x0, h, z1 - z0), mat, { ink: 0.03 });
+    m.position.set((x0 + x1) / 2, h / 2, (z0 + z1) / 2);
+    statics.add(m);
+    box((x0 + x1) / 2, (z0 + z1) / 2, x1 - x0, z1 - z0, h);
+  };
+  wall(-L - 1, -L, -48, 48, 3.2);
+  wall(L, L + 1, -48, 48, 3.2);
+  wall(-L - 1, L + 1, 48, 49, 3.2);
+  wall(-L - 1, L + 1, -49, -48, 3.2);
+  // Gold trim along the top and a striped runway down the middle.
+  for (const x of [-L - 0.5, L + 0.5]) {
+    const t = part(new THREE.BoxGeometry(1.2, 0.25, 97), trimMat, { ink: 0.02 });
+    t.position.set(x, 3.3, 0);
+    statics.add(t);
+  }
+  flat(0, 0, 2 * L, 96, toon(0x5a2a6a), 0.03);
+  for (let z = -44; z <= 44; z += 6) flat(0, z, 1.2, 3, toon(0xffd23f), 0.04);
+  // Station pads: a numbered circle on the floor and a sign over each one.
+  const stations = [
+    [32, '1 · MOVE', '#5ee27a'], [24, '2 · JUMP', '#2ee6d6'], [16, '3 · LOOT', '#ffd23f'], [4, '4 · SHOOT', '#ff3fa4'],
+    [-6, '5 · HEAL', '#ff7eb6'], [-16, '6 · THROW', '#ff9f1c'], [-28, '7 · FIGHT', '#e63946'], [-42, '8 · GET OUT', '#5ee27a'],
+  ];
+  for (const [z, label, color] of stations) {
+    const sign = neonSign(label, color, 9);
+    sign.position.set(0, 5.4, z + 2);
+    statics.add(sign);
+    for (const x of [-L + 0.4, L - 0.4]) {
+      const post = part(new THREE.BoxGeometry(0.3, 5.6, 0.3), 0x1b0f2b, { ink: 0 });
+      post.position.set(x, 2.8, z + 2);
+      statics.add(post);
+    }
+    const bar = part(new THREE.BoxGeometry(2 * L - 0.8, 0.2, 0.2), 0x1b0f2b, { ink: 0 });
+    bar.position.set(0, 5.6, z + 2);
+    statics.add(bar);
+  }
+  // 2: a low barrier across the lane to hop over.
+  const barrier = part(new THREE.BoxGeometry(2 * L, 0.6, 0.8), 0xe63946, { ink: 0.03 });
+  barrier.position.set(0, 0.3, 24);
+  statics.add(barrier);
+  for (let x = -L + 1; x < L; x += 2) {
+    const stripe = part(new THREE.BoxGeometry(0.9, 0.62, 0.82), 0xfff6e0, { ink: 0 });
+    stripe.position.set(x, 0.3, 24);
+    statics.add(stripe);
+  }
+  box(0, 24, 2 * L, 0.8, 0.6);
+  // 3: the crate (the tutorial fills it), on a little rug.
+  flat(0, 16, 6, 4, toon(0x7a1028), 0.05);
+  container('crate', 0, 15, 1);
+  // 4: the range: a sandbag line to shoot from and a backstop.
+  for (const x of [-8, 8]) wall(x - 2.5, x + 2.5, 8.6, 9.4, 1.0, toon(0xb08968));
+  wall(-L, -2.5, -2.6, -2, 3, toon(0x6b3a1e));
+  wall(2.5, L, -2.6, -2, 3, toon(0x6b3a1e));
+  // 6: a low wall to throw over.
+  wall(-6, 6, -15, -14.3, 1.4, toon(0x6b7280));
+  // 7: some cover in the fight pit.
+  for (const [x, z] of [[-6, -26], [6, -30], [-3, -33]]) {
+    const c = part(new THREE.BoxGeometry(2, 1.4, 2), 0xb07a3c, { ink: 0.03 });
+    c.position.set(x, 0.7, z);
+    statics.add(c);
+    box(x, z, 2, 2, 1.4);
+  }
+  zones.push({ name: 'Training Floor', x: 0, z: 0, w: 2 * L, d: 96, tier: 1 });
+  minimap.push({ x: 0, z: 0, w: 2 * L, d: 96, color: '#5a2a6a', label: 'Training' });
+  return {
+    casino: { x: 0, z: 0, w: 0, d: 0, doors: [] },
+    vault: { x: 0, z: -5000, doorZ: -5000 },
+    extracts: [{ name: 'Training Exit', x: 0, z: -42 }],
+    spawns: [[0, 42]],
+    lights: [[0, 30, 0xff3fa4], [0, 0, 0xffd23f], [0, -30, 0x5ee27a]],
+  };
+}
+
 // ---------- Temakilla: Temecula wine country. Vineyards, hot air balloons and Old Town ----------
 
 function wineCountry(k) {
@@ -4087,4 +4176,4 @@ function wineCountry(k) {
   };
 }
 
-const BUILDERS = { vegas: lostVegas, frost: frostbitePeaks, bayou: bayouRoyale, tequila: wineCountry, bunker: theBunker, lounge: theLounge };
+const BUILDERS = { training: trainingFloor, vegas: lostVegas, frost: frostbitePeaks, bayou: bayouRoyale, tequila: wineCountry, bunker: theBunker, lounge: theLounge };

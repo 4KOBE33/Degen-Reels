@@ -68,6 +68,7 @@ export class Raid {
     this.machines = [];
     this.pickups = [];
     this.rockets = [];
+    this.extractTime = EXTRACT_TIME;
     this.throws = new Throwables(this);
     this.recorder = new Recorder(this);
     this.player = null;
@@ -363,10 +364,13 @@ export class Raid {
     if (this.duel) this.duel.dispose();
     this.duel = null;
 
+    // The Training Floor: a guided run, short ride, nothing at stake.
+    this.tutorialMode = !!opts.tutorial;
+    this.extractTime = this.tutorialMode ? 6 : EXTRACT_TIME;
     // Two of the four exits are open each raid.
     const order = opts.exits ? [0, 1, 2, 3].sort((a, b) => (opts.exits.includes(b) ? 1 : 0) - (opts.exits.includes(a) ? 1 : 0)) : [0, 1, 2, 3].sort(() => Math.random() - 0.5);
     this.extracts.forEach((e, i) => {
-      e.active = order.indexOf(i) < 2;
+      e.active = this.tutorialMode || order.indexOf(i) < 2;
       e.beam.material.color.setHex(e.active ? 0x5ee27a : 0xff5d5d);
       e.ring.material.color.setHex(e.active ? 0x5ee27a : 0xff5d5d);
       e.beam.visible = e.active;
@@ -429,7 +433,7 @@ export class Raid {
     // Owe the Mob and walked into a real raid anyway? They'll be along shortly.
     if (this.kidnap) this.kidnap.cleanup();
     this.kidnap = !this.map.safe && !opts.tutorial && mobDebt() ? new Kidnap(this) : null;
-    save.update((d) => { d.stats.raids++; });
+    if (!this.tutorialMode) save.update((d) => { d.stats.raids++; });
     this.hud.raidIntro(this);
   }
 
@@ -448,8 +452,8 @@ export class Raid {
     e.beam.material.color.setHex(0xffd23f);
     e.ring.material.color.setHex(0xffd23f);
     this.feed(`📣 ${by.name} called the ${e.name} extraction!`);
-    if (by.isPlayer) this.hud.toast(`📣 Extraction called! The ride lands in ${EXTRACT_TIME}s. Everything nearby heard that…`, 'big');
-    else if (this.player && this.player.alive) this.hud.toast(`📣 ${by.name} called the ${e.name} extraction. Get there in ${EXTRACT_TIME}s to ride out too!`, 'big');
+    if (by.isPlayer) this.hud.toast(this.tutorialMode ? `📣 Extraction called! Stay in the circle: your ride lands in ${this.extractTime}s.` : `📣 Extraction called! The ride lands in ${this.extractTime}s. Everything nearby heard that…`, 'big');
+    else if (this.player && this.player.alive) this.hud.toast(`📣 ${by.name} called the ${e.name} extraction. Get there in ${this.extractTime}s to ride out too!`, 'big');
   }
 
   // The ride itself: it shows up over the last few seconds of the countdown, hovers over the
@@ -518,9 +522,11 @@ export class Raid {
     for (const e of this.extracts) {
       if (!e.active) continue;
       const t = e.call ? e.call.t : null;
-      if (t !== null && t >= EXTRACT_TIME - ARRIVE) {
+      const ET = this.extractTime;
+      if (t !== null && t >= ET - Math.min(ARRIVE, ET - 0.5)) {
         if (!e.ride) e.ride = this.makeRide(e);
-        const k = Math.min(1, (t - (EXTRACT_TIME - ARRIVE)) / (ARRIVE - 1));
+        const arrive = Math.min(ARRIVE, ET - 0.5);
+        const k = Math.min(1, (t - (ET - arrive)) / Math.max(0.5, arrive - 1));
         const ease = 1 - (1 - k) ** 3;
         e.ride.visible = true;
         e.ride.position.set(e.x - (1 - ease) * 60, 70 - ease * (70 - e.ride.userData.hover), e.z);
@@ -574,7 +580,7 @@ export class Raid {
       }
       // Reinforcements: three waves of machines pour in from the edges.
       const waves = [0.15, 0.45, 0.75];
-      if (call.wave < waves.length && call.t >= EXTRACT_TIME * waves[call.wave]) {
+      if (!this.tutorialMode && call.wave < waves.length && call.t >= this.extractTime * waves[call.wave]) {
         call.wave++;
         const n = 2 + Math.floor(Math.random() * 2) + (call.wave === 3 ? 1 : 0);
         for (let i = 0; i < n; i++) {
@@ -586,7 +592,7 @@ export class Raid {
         }
         if (p && p.alive && Math.hypot(p.pos.x - e.x, p.pos.z - e.z) < 80) this.hud.toast(`⚠️ More machines incoming! (${call.wave}/${waves.length})`);
       }
-      if (call.t >= EXTRACT_TIME) {
+      if (call.t >= this.extractTime) {
         // The ride is here. Everyone in the circle goes.
         e.call = null;
         e.cooldown = EXTRACT_COOLDOWN;
@@ -723,7 +729,8 @@ export class Raid {
     this.result = { ...result, run: this.run, time: this.raidTime - this.timeLeft, newFinds: [] };
     // Stats, collection log, XP and achievements.
     // The Lounge is for hanging out and dueling: no raid XP or stats for walking in and out.
-    this.result.progress = this.map.safe ? null : recordRaid(this.result, this.mapId);
+    this.result.progress = this.map.safe || this.tutorialMode ? null : recordRaid(this.result, this.mapId);
+    if (this.tutorialMode) this.result.tutorial = true;
     if (this.killcam) this.hud.killcam(this.killcam);
     else this.hud.raidOver(this.result);
   }
@@ -1326,6 +1333,11 @@ export class Raid {
     if (target.dodging && !target.puppet) {
       if (target.isPlayer || (attacker && attacker.isPlayer)) this.fx.number(target.center(new THREE.Vector3()).setY(target.pos.y + 2), 'DODGE!', '#2ee6d6', 1.1);
       return;
+    }
+    // The tutorial: it can hurt, but it can't put you down.
+    if (this.tutorialMode && target.isPlayer) {
+      amount = Math.min(amount, Math.max(0, target.hp + (target.armor || 0) - 15));
+      if (amount <= 0) return;
     }
     // Safe maps (the Lounge): nobody gets hurt, except the two people dueling in The Pit.
     if (this.map.safe && !(this.duel && this.duel.canHurt(attacker, target))) return;

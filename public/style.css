@@ -1400,3 +1400,74 @@ body.showdownup #toast { opacity: 0 !important; }
 .ctreroll:hover { opacity: 1; transform: rotate(20deg); }
 .ctdone { font: 900 12px var(--body); color: #5ee27a; white-space: nowrap; }
 @media (max-width: 900px) { .ctgrid { grid-template-columns: 1fr; } }
+/* ---------- The Training Floor guide ---------- */
+#training { position: fixed; left: 16px; top: 140px; width: min(380px, calc(100vw - 32px)); z-index: 13; pointer-events: none; background: rgba(27, 15, 43, 0.92); border: 3px solid var(--gold); border-radius: 16px; padding: 12px 14px 10px; color: var(--cream); box-shadow: 0 10px 30px rgba(0, 0, 0, 0.45); }
+#training[hidden] { display: none; }
+#training.pop { animation: trpop 0.35s ease-out; }
+@keyframes trpop { from { transform: translateX(-16px) scale(0.96); opacity: 0.3; } }
+#training .trhead { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; }
+#training .trstep { font: 900 12px var(--body); background: var(--gold); color: var(--ink); border-radius: 8px; padding: 2px 8px; white-space: nowrap; }
+#training .trhead b { font: 400 22px var(--display); color: var(--gold); letter-spacing: 0.5px; line-height: 1.05; }
+#training p { margin: 0 0 8px; font: 700 15px/1.35 var(--body); }
+#training .key { display: inline-block; min-width: 22px; text-align: center; padding: 0 6px; margin: 0 2px; border-radius: 6px; background: var(--cream); color: var(--ink); font: 900 13px/20px var(--body); box-shadow: 0 2px 0 rgba(0, 0, 0, 0.4); }
+#training .trdots { display: flex; gap: 4px; margin-bottom: 6px; }
+#training .trdots i { flex: 1; height: 6px; border-radius: 3px; background: rgba(255, 255, 255, 0.15); }
+#training .trdots i.done { background: #5ee27a; }
+#training .trdots i.now { background: var(--gold); }
+#training .trskip { font: 700 11px var(--body); opacity: 0.6; }
+/* ---------- Loadout step 1: pick a map ---------- */
+body.mapstage .hubfoot { display: none; }
+.mappick h3 { display: flex; align-items: baseline; gap: 10px; margin: 4px 0 10px; }
+.mappick h3 small { font: 700 13px var(--body); opacity: 0.75; }
+.mapgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 12px; }
+.maptile { position: relative; display: grid; align-content: start; gap: 6px; text-align: left; min-height: 210px; padding: 14px 14px 46px; border-radius: 18px; border: 4px solid var(--ink); color: var(--cream); cursor: pointer; font: inherit; background: #2a1748; box-shadow: 0 6px 0 rgba(0, 0, 0, 0.35); transition: transform 0.12s, box-shadow 0.12s; overflow: hidden; }
+.maptile:hover:not([disabled]) { transform: translateY(-4px); box-shadow: 0 10px 0 rgba(0, 0, 0, 0.35), 0 0 0 3px var(--gold); }
+.maptile[disabled] { opacity: 0.4; cursor: default; }
+.maptile.on { box-shadow: 0 6px 0 rgba(0, 0, 0, 0.35), 0 0 0 3px var(--gold); }
+.maptile.m-vegas { background: linear-gradient(150deg, #b5452c, #7a1f5c); }
+.maptile.m-frost { background: linear-gradient(150deg, #3b6d99, #1e3a5f); }
+.maptile.m-bayou { background: linear-gradient(150deg, #3f6212, #1f3d2b); }
+.maptile.m-tequila { background: linear-gradient(150deg, #9d174d, #4c1d95); }
+.maptile.m-bunker { background: linear-gradient(150deg, #4c0519, #1b0f2b); }
+.maptile.m-lounge { background: linear-gradient(150deg, #6a2c91, #3a1d5c); }
+.maptile.tut { background: linear-gradient(150deg, #0f766e, #134e4a); }
+.maptile.tut.hot { box-shadow: 0 6px 0 rgba(0, 0, 0, 0.35), 0 0 0 4px #5ee27a; animation: tuthot 1.6s ease-in-out infinite; }
+@keyframes tuthot { 50% { box-shadow: 0 6px 0 rgba(0, 0, 0, 0.35), 0 0 0 4px #5ee27a, 0 0 26px rgba(94, 226, 122, 0.55); } }
+.maptile .mticon { position: absolute; right: 10px; top: 4px; font-size: 54px; opacity: 0.9; filter: drop-shadow(0 4px 0 rgba(0, 0, 0, 0.3)); }
+.maptile .tag { justify-self: start; }
+.maptile b { font: 400 26px var(--display); color: var(--gold); letter-spacing: 0.5px; line-height: 1; padding-right: 60px; text-shadow: 0 3px 0 rgba(0, 0, 0, 0.35); }
+.maptile small { font: 700 13px/1.3 var(--body); opacity: 0.9; }
+.mtfacts { display: flex; flex-wrap: wrap; gap: 4px; }
+.mtfacts i { font: 800 11px var(--body); font-style: normal; background: rgba(0, 0, 0, 0.3); border-radius: 8px; padding: 2px 7px; }
+.mtgo { position: absolute; right: 12px; bottom: 10px; font: 400 18px var(--display); color: var(--ink); background: var(--gold); border-radius: 10px; padding: 4px 12px; box-shadow: 0 3px 0 #b8860b; }
+.maptile.tut .mtgo { background: #5ee27a; box-shadow: 0 3px 0 #15803d; }
+
+/* ---------- Loadout step 2: gear up ---------- */
+.gearhead { display: flex; align-items: center; gap: 14px; padding: 10px 14px; border-radius: 16px; margin-bottom: 12px; border: 3px solid var(--ink); background: #2a1748; }
+.gearhead.m-vegas { background: linear-gradient(120deg, #b5452c, #7a1f5c); }
+.gearhead.m-frost { background: linear-gradient(120deg, #3b6d99, #1e3a5f); }
+.gearhead.m-bayou { background: linear-gradient(120deg, #3f6212, #1f3d2b); }
+.gearhead.m-tequila { background: linear-gradient(120deg, #9d174d, #4c1d95); }
+.gearhead.m-bunker { background: linear-gradient(120deg, #4c0519, #1b0f2b); }
+.gearhead.m-lounge { background: linear-gradient(120deg, #6a2c91, #3a1d5c); }
+.gearback { margin: 0 !important; width: auto !important; padding: 8px 14px !important; font-size: 16px !important; }
+.gearicon { font-size: 40px; }
+.geartxt { display: grid; gap: 2px; }
+.geartxt .tag { justify-self: start; }
+.geartxt b { font: 400 28px var(--display); color: var(--gold); line-height: 1; letter-spacing: 0.5px; }
+.geartxt small { font: 800 13px var(--body); color: var(--cream); opacity: 0.85; }
+.gearcols { display: grid; grid-template-columns: 1.35fr 1fr; gap: 14px; align-items: start; }
+@media (max-width: 900px) { .gearcols { grid-template-columns: 1fr; } }
+.gearcols .stashsec, .gearcols .kit { background: rgba(27, 15, 43, 0.6); border-radius: 16px; padding: 10px 12px; }
+.freebar { display: flex; align-items: center; gap: 10px; justify-content: space-between; padding: 8px 10px; border-radius: 12px; background: rgba(94, 226, 122, 0.15); border: 2px solid #5ee27a; color: var(--cream); font: 800 13px var(--body); margin-bottom: 8px; }
+.freebar .btn { margin: 0; width: auto; padding: 6px 12px; font-size: 14px; white-space: nowrap; }
+
+/* ---------- Stash shelves ---------- */
+.shelf { margin-bottom: 10px; }
+.shelfhead { display: flex; align-items: baseline; gap: 8px; padding: 4px 2px 6px; border-bottom: 2px solid rgba(255, 255, 255, 0.1); margin-bottom: 6px; color: var(--cream); }
+.shelfhead b { font: 400 18px var(--display); letter-spacing: 0.5px; }
+.shelfhead small { font: 800 12px var(--body); opacity: 0.7; }
+.shelf.s-valuables .shelfhead b { color: #ffd23f; }
+.shelfsell { margin: 0 0 0 auto !important; width: auto !important; padding: 4px 12px !important; font-size: 14px !important; background: #5ee27a !important; }
+.shelfnote { display: block; font: 700 12px var(--body); color: var(--cream); opacity: 0.7; margin: -2px 0 6px; }
+.titletut { margin: 0 !important; width: auto !important; padding: 8px 18px !important; font-size: 16px !important; }

@@ -850,6 +850,18 @@ export class Machine {
       return this.dead < 4;
     }
 
+    // Practice targets: stand still, turn to face you, and take it.
+    if (this.dummy) {
+      this.flash = Math.max(0, this.flash - dt);
+      this.parts.bodyMat.emissiveIntensity = this.flash > 0 ? 0.7 : 0;
+      const pl = raid.player;
+      if (pl) this.yaw += angleDiff(this.yaw, Math.atan2(-(pl.pos.x - this.pos.x), -(pl.pos.z - this.pos.z))) * Math.min(1, dt * 3);
+      this.group.position.copy(this.pos);
+      this.group.position.y += Math.abs(Math.sin(performance.now() / 300 + this.pos.x)) * 0.08;
+      this.group.rotation.y = this.yaw;
+      return true;
+    }
+
     // Machines far from the player nap to save CPU.
     const p = raid.focus;
     const far = p && this.pos.distanceTo(p) > 120 && !this.target;

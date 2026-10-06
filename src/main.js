@@ -13,10 +13,12 @@ import { ITEMS, QUALITY } from './config.js';
 import { BUILD } from './version.js';
 import { wornLook } from './looks.js';
 import { Tutorial } from './tutorial.js';
+import { Training } from './training.js';
 import { Voice } from './voice.js';
 import { music } from './music.js';
 
 const tutorial = new Tutorial();
+const training = new Training();
 
 const $ = (id) => document.getElementById(id);
 
@@ -120,6 +122,7 @@ function setOverlay(name) {
   const wasPoker = overlay === 'poker';
   overlay = name;
   if (name) tutorial.note(name);
+  training.note(name || 'none');
   $('pokerPanel').hidden = name !== 'poker';
   if (wasPoker && name !== 'poker' && raid.duel) raid.duel.pokerClosed();
   $('bag').hidden = name !== 'bag';
@@ -159,6 +162,7 @@ window.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && overlay) {
     if (overlay === 'poker') { setOverlay(null); return; }
     overlay = null;
+    training.note('none');
     $('bag').hidden = true;
     $('bigmap').hidden = true;
     $('duelPanel').hidden = true;
@@ -398,6 +402,7 @@ const hub = new Hub({
     controller.c = raid.player;
     labelLeave();
     tutorial.start(raid);
+    training.start(raid);
     hub.hide();
     $('hud').hidden = false;
     $('results').hidden = true;
@@ -420,6 +425,8 @@ function openTable(game) {
 }
 hub.onTableClose = () => setOverlay(null);
 $('buildTag').textContent = `Build ${BUILD}`;
+// Finishing the tutorial: the hub says well done (and pays out, the first time).
+training.onComplete = (reward) => { hub.tutorialReward = { reward }; };
 // The title screen, unless this page load is getting back into a party's raid.
 if (!(net.seat || net.resume)) hub.showTitle();
 
@@ -464,7 +471,7 @@ $('abandon').addEventListener('click', () => {
 });
 // Say what the pause menu's leave button does on this map.
 function labelLeave() {
-  $('abandon').textContent = raid.map.safe ? '🚪 Leave the Lounge (keep everything)' : 'Abandon raid (lose everything)';
+  $('abandon').textContent = raid.map.safe ? '🚪 Leave the Lounge (keep everything)' : raid.tutorialMode ? '🚪 Leave the tutorial' : 'Abandon raid (lose everything)';
 }
 
 // The controls cheat sheet on the pause screen, built from your current bindings.
@@ -652,6 +659,7 @@ function step(now, draw = true) {
   }
   pickMusic();
   tutorial.update(raid);
+  training.update(raid, dt);
   voice.update();
   wasActive = raid.active;
   backupRaid();

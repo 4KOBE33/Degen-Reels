@@ -246,7 +246,12 @@ export class Hub {
       const b = e.target.closest('[data-act]');
       if (!b) return;
       initAudio();
-      if (b.dataset.act === 'titleplay') this.closeTitle();
+      if (b.dataset.act === 'titleplay') {
+        // Brand new? Straight into the tutorial.
+        const d = this.data;
+        if (!d.tutorialDone && !(d.stats.raids || 0)) this.startTutorial();
+        else this.closeTitle();
+      } else if (b.dataset.act === 'titletut') this.startTutorial();
       else if (b.dataset.act === 'auth') this.openAuth(b.dataset.mode);
     });
     $('authModal').addEventListener('click', (e) => {
@@ -272,8 +277,32 @@ export class Hub {
     this.render();
   }
 
+  // The Training Floor: a guided run with the gear handed to you. Your own loadout stays home.
+  startTutorial() {
+    if (this.net && this.net.inParty) { this.toast('Leave your party first: the tutorial is a solo run.'); return; }
+    initAudio();
+    if (!$('title').hidden) { $('title').hidden = true; document.body.classList.remove('titleup'); }
+    const d = this.data;
+    this.onDeploy({
+      mapId: 'training',
+      name: (d.look.name || '').trim() || 'High Roller',
+      look: wornLook(d.look),
+      loadout: { weapons: [null, null], items: [], pocket: 0 },
+      opts: { tutorial: true },
+    });
+  }
+
   show() {
     $('hub').hidden = false;
+    // Back from the Training Floor: put the menu backdrop back on your map and say well done.
+    if (window.degen && window.degen.mapId === 'training') this.onMapChange(this.data.selectedMap);
+    if (this.tutorialReward) {
+      const r = this.tutorialReward.reward;
+      this.tutorialReward = null;
+      setTimeout(() => this.toast(r ? `🎓 Tutorial complete! Here's 🪙 ${fmt(r)} to get you started. Pick a map and go!` : '🎓 Tutorial complete! You\'re ready.'), 500);
+      this.tab = 'loadout';
+      this.loStage = 'maps';
+    }
     this.render();
     // Back from a raid with a contract finished: say so.
     const ready = readyCount();
@@ -345,6 +374,7 @@ export class Hub {
     const bar = pages.length > 1 ? `<nav class="groupbar">${pages.map(([t, n]) => `<button class="${t === this.tab ? 'on' : ''}" data-act="hubpage" data-t="${t}">${n}</button>`).join('')}</nav>` : '';
     $('hubBody').innerHTML = bar + body;
     $('hubBody').dataset.tab = this.tab;
+    document.body.classList.toggle('mapstage', this.tab === 'loadout' && this.loStage !== 'gear');
     if (this.tab === 'backroom' && this.game === 'crash') this.drawCrash();
     if (this.tab === 'backroom' && this.game === 'plinko') this.drawPlinko();
     if (this.tab === 'look') {
@@ -433,64 +463,97 @@ export class Hub {
   }
 
   renderLoadout() {
+    return this.loStage === 'gear' ? this.renderGear() : this.renderMapPick();
+  }
+
+  // Step 1: where are we going? Big map tiles (and the tutorial), nothing else to think about.
+  renderMapPick() {
+    const d = this.data;
+    const order = ['lounge', 'vegas', 'bayou', 'frost', 'tequila', 'bunker'].filter((id) => MAPS[id]);
+    const partyMember = this.net && this.net.inParty && !this.net.isHost;
+    const newbie = !d.tutorialDone && (d.stats.raids || 0) < 2;
+    const tiles = order.map((id) => {
+      const m = MAPS[id];
+      const facts = m.safe ? ['🛡️ No machines', '🥊 1v1s', '🎲 Casino games'] : [`⏱️ ${Math.round((m.raidTime || 1080) / 60)} min`, `📏 ${m.size}`, m.indoor ? '🏚️ Indoors' : `👑 ${bossTheme(id).name}`];
+      return `<button class="maptile m-${id} ${d.selectedMap === id ? 'on' : ''}" data-act="pickmap" data-m="${id}" ${partyMember && d.selectedMap !== id ? 'disabled' : ''}>
+        <span class="mticon">${m.icon}</span><span class="tag d-${m.danger.toLowerCase()}">${m.danger}</span>
+        <b>${m.name}</b><small>${m.blurb}</small>
+        <span class="mtfacts">${facts.map((x) => `<i>${x}</i>`).join('')}</span>
+        <span class="mtgo">${partyMember ? 'Gear up ▶' : 'Choose ▶'}</span></button>`;
+    }).join('');
+    const tut = `<button class="maptile tut ${newbie ? 'hot' : ''}" data-act="tutorial">
+        <span class="mticon">🎓</span><span class="tag d-safe">${newbie ? 'Start here' : 'Practice'}</span>
+        <b>Training Floor</b><small>A guided 5-minute run through the basics: moving, looting, shooting, healing and getting out. Nothing to lose.</small>
+        <span class="mtfacts"><i>⏱️ 5 min</i><i>🎒 Gear provided</i>${d.tutorialDone ? '' : '<i>🪙 +500 first time</i>'}</span>
+        <span class="mtgo">${d.tutorialDone ? 'Play again ▶' : 'Play tutorial ▶'}</span></button>`;
+    return `${this.renderContracts()}${this.renderParty()}
+      <section class="mappick"><h3>🗺️ Where to? <small>${partyMember ? 'Your party leader picks the map. Gear up for it.' : 'Pick a map, then pack your gear.'}</small></h3>
+      <div class="mapgrid">${tut}${tiles}</div></section>`;
+  }
+
+  // Step 2: the whole screen for packing: your stash on one side, what you're bringing on the other.
+  renderGear() {
     const d = this.data;
     const lo = d.loadout;
     const noGuns = !lo.weapons.some(Boolean);
     const freeKit = hasFreeKit(lo);
-    // Easiest to deadliest.
-    const order = ['lounge', 'vegas', 'bayou', 'frost', 'tequila', 'bunker'].filter((id) => MAPS[id]);
-    const maps = order.map((id) => {
-      const m = MAPS[id];
-      return `<button class="mapcard m-${id} ${d.selectedMap === id ? 'on' : ''}" data-act="map" data-m="${id}">
-        <span class="icon">${m.icon}</span><b>${m.name}</b><span class="tag d-${m.danger.toLowerCase()}">${m.danger}</span></button>`;
-    }).join('');
     const selId = MAPS[d.selectedMap] ? d.selectedMap : 'vegas';
     const sel = MAPS[selId];
-    const facts = sel.safe ? ['🛡️ No machines, no raiders', '🥊 1v1s in The Pit', '🎲 Every casino game'] : [`⏱️ ${Math.round((sel.raidTime || 1080) / 60)} min raids`, `📏 ${sel.size} map`, sel.indoor ? `🏚️ All indoors · 👑 ${bossTheme(selId).name}` : `👑 ${bossTheme(selId).name} at 4:00`];
-    let hideGuide = false;
-    try { hideGuide = localStorage.getItem('bth.hideGuide') === '1'; } catch (e) { /* private mode */ }
-    const newbie = (d.stats.raids || 0) === 0 && !hideGuide;
-    const guide = newbie ? `<section class="newbie"><button class="newbiex" data-act="hidenewbie" title="Got it">✕</button><b>👋 New to Beat the House? Here's the deal:</b>
-      <ol><li><b>Pack a gun.</b> No gear? Grab the 🎁 FREE LOADOUT below.</li>
-      <li><b>Pick a map and DEPLOY.</b> Search crates, bust machines, grab everything shiny.</li>
-      <li><b>Get to a green exit</b> and survive while your ride comes. Die, and you lose what you brought.</li>
-      <li><b>Sell your loot</b> at the 💰 Fence, then gamble it in the 🎰 Back Room, or gear up for a bigger raid.</li></ol>
-      <small>Tips will walk you through your first raids. Play with friends using the party panel below.</small></section>` : '';
+    const facts = sel.safe ? ['🛡️ No machines, no raiders', '🥊 1v1s in The Pit'] : [`⏱️ ${Math.round((sel.raidTime || 1080) / 60)} min raid`, `📏 ${sel.size} map`, sel.indoor ? `👑 ${bossTheme(selId).name}` : `👑 ${bossTheme(selId).name} at 4:00`];
     const packed = lo.weapons.filter(Boolean).length + lo.items.length;
-    return `${guide}${this.renderContracts()}${this.renderParty()}
-      <div class="lotop">
-      <div class="lcol">
-      <section class="raidpick">
-        <div class="hero m-${selId}">
-          <button class="mapstep prev" data-act="mapstep" data-d="-1" title="Previous map">◀</button>
-          <button class="mapstep next" data-act="mapstep" data-d="1" title="Next map">▶</button>
-          <span class="heroicon">${sel.icon}</span>
-          <div class="herotxt"><span class="tag d-${sel.danger.toLowerCase()}">${sel.danger}</span><h2>${sel.name}</h2><p>${sel.blurb}</p>
-          <div class="facts">${facts.map((f) => `<span>${f}</span>`).join('')}</div></div>
-        </div>
-        <div class="mapnav"><span class="dots">${order.map((id) => `<i class="${id === selId ? 'on' : ''}" title="${MAPS[id].name}"></i>`).join('')}</span>
-          <button class="btn ghost small" data-act="allmaps">${this.showMaps ? 'Hide map list' : `🗺️ All ${order.length} maps`}</button></div>
-        ${this.showMaps ? `<div class="maps">${maps}</div>` : ''}
-      </section>
-      <section class="stashsec"><h3>📦 Stash <small>${d.stash.items.length} items · click to pack it for the raid</small></h3>
-        <div class="grid">${d.stash.items.map((it, i) => this.itemCard(it, 'pack', i)).join('') || '<p class="hint">Empty. Go raid!</p>'}</div>
-      </section>
+    const pocket = (() => {
+      const n = pocketSlots(d.bag || 0);
+      if (!n) return '<p class="hint pocketnote">🔒 Buy any backpack in the Shop to get a <b>Safe Pocket</b>: what you put in it during a raid comes home even if you die.</p>';
+      if (freeKit) return '<p class="hint pocketnote off">🔒 No Safe Pocket with the free loadout. Bring your own gun to get it.</p>';
+      if (noGuns) return '<p class="hint pocketnote off">🔒 Pack a gun of your own to bring your Safe Pocket.</p>';
+      return `<p class="hint pocketnote on">🔒 Safe Pocket: ${n} slot${n > 1 ? 's' : ''} this raid. Drag your best find into it in your backpack screen.</p>`;
+    })();
+    const free = freeKit
+      ? '<div class="freebar"><span>🎁 Free loadout packed. It\'s locked in until you raid with it.</span><button class="btn ghost" data-act="unfreekit">✕ Put it back</button></div>'
+      : noGuns ? '<button class="btn freekit" data-act="freekit">🎁 FREE LOADOUT<small>No gun? Take a random gun, bandages, an Ammo Box, a Chip Plate and a throwable. You can put it back.</small></button>' : '';
+    return `<div class="gearhead m-${selId}">
+        <button class="btn ghost gearback" data-act="backmaps">◀ Maps</button>
+        <span class="gearicon">${sel.icon}</span>
+        <div class="geartxt"><span class="tag d-${sel.danger.toLowerCase()}">${sel.danger}</span><b>${sel.name}</b><small>${facts.join(' · ')}</small></div>
       </div>
-      <section class="kit"><h3>🎒 Raid Loadout <small>${packed} packed · lost if you die</small></h3>
-        ${freeKit ? '<p class="hint freelock">🔒 Free loadout is locked in: nothing goes in or out until you raid with it.</p>' : noGuns ? '<button class="btn freekit" data-act="freekit">🎁 FREE LOADOUT<small>A random gun, bandages, an Ammo Box, a Chip Plate and a throwable. Lose it and grab another.</small></button>' : ''}
-        <div class="wslots">${lo.weapons.map((g, i) => (g ? this.itemCard(g, 'unequip', i) : `<div class="item empty">Weapon ${i + 1}<br><small>empty</small></div>`)).join('')}</div>
-        <div class="grid">${lo.items.map((it, i) => this.itemCard(it, 'unpack', i)).join('')}${Array(Math.max(0, LOADOUT_SLOTS - lo.items.length)).fill('<div class="item empty"></div>').join('')}</div>
-        <p class="hint">Click anything to send it back to your stash.</p>
-        ${(() => {
-    const n = pocketSlots(d.bag || 0);
-    if (!n) return '<p class="hint pocketnote">🔒 Buy any backpack in the Shop to get a <b>Safe Pocket</b>: what you put in it during a raid comes home even if you die.</p>';
-    if (freeKit) return '<p class="hint pocketnote off">🔒 No Safe Pocket with the free loadout. Bring your own gun to get it.</p>';
-    if (noGuns) return '<p class="hint pocketnote off">🔒 Pack a gun of your own to bring your Safe Pocket.</p>';
-    return `<p class="hint pocketnote on">🔒 Safe Pocket: ${n} slot${n > 1 ? 's' : ''} this raid. Drag your best find into it in your backpack screen.</p>`;
-  })()}
-      </section>
-      </div>
-`;
+      <div class="gearcols">
+        <section class="stashsec"><h3>📦 Your stash <small>click something to pack it</small></h3>
+          ${this.stashSections('pack', freeKit)}</section>
+        <section class="kit"><h3>🎒 Bringing <small>${packed} packed · lost if you die</small></h3>
+          ${free}
+          <div class="wslots">${lo.weapons.map((g, i) => (g ? this.itemCard(g, freeKit ? 'freelocked' : 'unequip', i) : `<div class="item empty">Weapon ${i + 1}<br><small>empty</small></div>`)).join('')}</div>
+          <div class="grid">${lo.items.map((it, i) => this.itemCard(it, freeKit ? 'freelocked' : 'unpack', i)).join('')}${Array(Math.max(0, LOADOUT_SLOTS - lo.items.length)).fill('<div class="item empty"></div>').join('')}</div>
+          <p class="hint">${freeKit ? 'Free gear can\'t be swapped piece by piece: put the whole thing back to pack your own.' : 'Click anything here to send it back to your stash.'}</p>
+          ${pocket}
+        </section>
+      </div>`;
+  }
+
+  // The stash, sorted into shelves: guns, supplies, throwables, valuables (to sell) and the rest.
+  // Best stuff first on each shelf. `act` is what clicking an item does (pack it, or sell it).
+  stashSections(act, locked = false) {
+    const d = this.data;
+    const shelves = [
+      ['guns', '🔫 Guns', (it) => isGun(it)],
+      ['supplies', '🩹 Healing, armor & ammo', (it) => ['heal', 'armor', 'ammo', 'revive', 'warm', 'boost'].includes(ITEMS[it.id] && ITEMS[it.id].kind)],
+      ['throw', '💣 Throwables', (it) => ITEMS[it.id] && ITEMS[it.id].kind === 'throw'],
+      ['valuables', '💰 Valuables', (it) => ITEMS[it.id] && ITEMS[it.id].kind === 'valuable'],
+      ['other', '🔑 Other', () => true],
+    ];
+    const used = new Set();
+    const out = [];
+    for (const [key, label, test] of shelves) {
+      const list = [];
+      d.stash.items.forEach((it, i) => { if (!used.has(i) && test(it)) { used.add(i); list.push({ it, i }); } });
+      if (!list.length) continue;
+      list.sort((x, y) => (itemInfo(y.it).rarity || 0) - (itemInfo(x.it).rarity || 0) || itemInfo(y.it).value - itemInfo(x.it).value);
+      const worth = list.reduce((n, x) => n + itemInfo(x.it).value, 0);
+      const sell = key === 'valuables' ? `<button class="btn shelfsell" data-act="sellvaluables">Sell all · 🪙 ${fmt(worth)}</button>` : '';
+      const note = key === 'valuables' && act === 'pack' ? '<small class="shelfnote">Valuables are only worth chips: sell them at the Fence (or right here).</small>' : '';
+      const cards = list.map(({ it, i }) => this.itemCard(it, locked && act === 'pack' ? 'freelocked' : act, i, act === 'sell' ? `<span class="price">Sell 🪙${fmt(itemInfo(it).value)}</span>` : '')).join('');
+      out.push(`<div class="shelf s-${key}"><div class="shelfhead"><b>${label}</b><small>${list.length} · worth 🪙 ${fmt(worth)}</small>${sell}</div>${note}<div class="grid">${cards}</div></div>`);
+    }
+    return out.join('') || '<p class="hint">Your stash is empty. Go raid!</p>';
   }
 
   // Today's guns: six offers that change every day (the same for everyone on that day).
@@ -586,8 +649,8 @@ export class Hub {
     const valuables = d.stash.items.filter((it) => !isGun(it) && ITEMS[it.id].kind === 'valuable');
     const total = valuables.reduce((n, it) => n + itemInfo(it).value, 0);
     return `<h3>The Fence</h3><p class="hint">Sells anything for its full value in chips. No questions asked.</p>
-      ${valuables.length ? `<button class="btn" data-act="sellvaluables">Sell all valuables · 🪙 ${fmt(total)}</button>` : ''}
-      <div class="grid">${d.stash.items.map((it, i) => this.itemCard(it, 'sell', i, `<span class="price">Sell 🪙${fmt(itemInfo(it).value)}</span>`)).join('') || '<p class="hint">Nothing to sell.</p>'}</div>`;
+      <p class="hint">Stash worth 🪙 ${fmt(d.stash.items.reduce((n, it) => n + itemInfo(it).value, 0))}${valuables.length ? ` · valuables 🪙 ${fmt(total)}` : ''}. Click anything to sell it.</p>
+      ${this.stashSections('sell')}`;
   }
 
   // ---------- Look ----------
@@ -657,7 +720,7 @@ export class Hub {
         ${tile('🎲', 'Raids', fmt(s.raids))}${tile('🚁', 'Extracts', fmt(s.extracts))}${tile('💀', 'Deaths', fmt(s.deaths))}${tile('📈', 'Survival rate', `${rate}%`)}
         ${tile('💰', 'Best haul', `🪙 ${fmt(s.bestHaul)}`)}${tile('🏦', 'Total extracted', `🪙 ${fmt(s.totalHaul)}`)}${tile('🔧', 'Machines busted', fmt(s.machines))}${tile('🤠', 'Raiders busted', fmt(s.raiders))}
         ${tile('👑', 'Pit Bosses', fmt(s.bossKills))}${tile('🎯', 'Critical hits', fmt(s.crits))}${tile('🐊', 'Gators', fmt(s.gators))}${tile('💣', 'Throwables thrown', fmt(s.throws))}
-        ${tile('📦', 'Containers searched', fmt(s.containers))}${tile('🎰', 'Raid slots pulled', fmt(s.slotPulls))}${tile('⏱️', 'Time in raids', `${mins} min`)}${tile('🗺️', 'Maps escaped', `${Object.keys(s.extractsByMap).length} / ${Object.keys(MAPS).length}`)}
+        ${tile('📦', 'Containers searched', fmt(s.containers))}${tile('🎰', 'Raid slots pulled', fmt(s.slotPulls))}${tile('⏱️', 'Time in raids', `${mins} min`)}${tile('🗺️', 'Maps escaped', `${Object.keys(s.extractsByMap).length} / ${Object.keys(MAPS).filter((id) => !MAPS[id].tutorial).length}`)}
       </div>
       <h3>The Back Room</h3>
       <div class="stat-tiles">
@@ -776,6 +839,7 @@ export class Hub {
         <h1 class="logo titlelogo">BEAT THE<br>HOUSE</h1>
         <p class="tagline">Raid the casinos. Bust the Pit Boss. Get out rich, or lose it all.</p>
         <button class="btn big titleplay" data-act="titleplay">▶ PLAY</button>
+        <button class="btn ghost titletut" data-act="titletut">🎓 ${d.tutorialDone ? 'Play the tutorial again' : 'How to play (5 min tutorial)'}</button>
         ${u
     ? `<p class="acctline in">☁️ Signed in as <b>${escapeHtml(u.name)}</b>. Your progress saves automatically.</p>`
     : `<div class="titleacct"><button class="btn" data-act="auth" data-mode="in">Log in</button><button class="btn ghost" data-act="auth" data-mode="reg">Create account</button></div>
@@ -894,7 +958,7 @@ export class Hub {
 
   renderSettings() {
     const s = this.data.settings;
-    return `${this.renderAccount()}<h3>Settings</h3>
+    return `${this.renderAccount()}<section class="account"><b>🎓 Tutorial</b><small>A guided 5-minute run through the basics on the Training Floor. Nothing to lose.</small><div class="prow"><button class="btn" data-act="tutorial">🎓 Play the tutorial${this.data.tutorialDone ? ' again' : ''}</button></div></section><h3>Settings</h3>
       <label class="slider">Mouse sensitivity <b id="sensVal">${s.sensitivity.toFixed(2)}x</b><input type="range" id="sens" min="0.1" max="3" step="0.05" value="${s.sensitivity}"></label>
       <label class="slider">Field of view <b id="fovVal">${s.fov}°</b><input type="range" id="fov" min="60" max="100" step="1" value="${s.fov}"></label>
       <label class="slider">Volume <b id="volVal">${Math.round(s.volume * 100)}%</b><input type="range" id="vol" min="0" max="1" step="0.05" value="${s.volume}"></label>
@@ -1383,6 +1447,23 @@ export class Hub {
         try { navigator.clipboard.writeText(this.net.room.code); this.toast(`Copied ${this.net.room.code}. Send it to your friends!`); } catch (err) { this.toast(`Party code: ${this.net.room.code}`); }
         return;
       case 'auth': this.openAuth(b.dataset.mode); return;
+      case 'tutorial': this.startTutorial(); return;
+      case 'pickmap':
+        if (!(this.net && this.net.inParty && !this.net.isHost) && d.selectedMap !== b.dataset.m) {
+          save.update((x) => { x.selectedMap = b.dataset.m; });
+          this.onMapChange(b.dataset.m);
+        }
+        this.loStage = 'gear';
+        break;
+      case 'backmaps': this.loStage = 'maps'; break;
+      case 'freelocked': this.toast('That\'s free gear. Put the whole free loadout back to pack your own.'); return;
+      case 'unfreekit':
+        save.update((x) => {
+          x.loadout.weapons = x.loadout.weapons.map((g) => (g && g.free ? null : g));
+          x.loadout.items = x.loadout.items.filter((it) => !it.free);
+        });
+        this.toast('Free loadout put back. Pack whatever you like.');
+        break;
       case 'claimct': {
         const out = claimContract(i);
         if (out) { sfx.jackpot(); this.toast(`📋 Contract done! +🪙 ${fmt(out.chips)} and ⭐ ${out.xp} XP`); this.announce(out); }
@@ -1871,6 +1952,7 @@ export class Hub {
     if (!restoring) loadout.pocket = !hasFreeKit(lo) && lo.weapons.some(Boolean) ? pocketSlots(d.bag || 0) : 0;
     else loadout.pocket = pocketSlots(d.bag || 0);
     if (!restoring) save.update((x) => { x.loadout = { weapons: [null, null], items: [] }; delete x.insured; });
+    this.loStage = 'maps';
     this.onDeploy({
       party,
       mapId: party ? party.mapId : d.selectedMap,

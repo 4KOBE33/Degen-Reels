@@ -249,7 +249,7 @@ export class Hud {
     // Extraction countdown.
     const call = raid.active ? raid.extracts.find((e) => e.call) : null;
     if (call) {
-      const left = Math.ceil(EXTRACT_TIME - call.call.t);
+      const left = Math.ceil((raid.extractTime || EXTRACT_TIME) - call.call.t);
       const inside = raid.extractAt === call;
       const dist = Math.round(Math.hypot(call.x - p.pos.x, call.z - p.pos.z));
       $('extracting').hidden = false;
@@ -743,7 +743,13 @@ export class Hud {
     const insuredNote = r.kept && r.kept.length ? ` 🔒 Your Safe Pocket kept your ${r.kept.map(escapeHtml).join(' and ')}.` : '';
     let title;
     let line;
-    if (r.success) {
+    if (r.tutorial && r.success) {
+      title = '🎓 TUTORIAL COMPLETE!';
+      line = 'You got out alive, and everything you carried is yours to keep. Next up: pick a real map, pack a gun and go. Sell what you find at the 💰 Fence, then try your luck in the 🎰 Back Room.';
+    } else if (r.tutorial) {
+      title = '🎓 TUTORIAL OVER';
+      line = 'You left the Training Floor. You can play it again any time from the map list or Settings.';
+    } else if (r.success) {
       title = '🚁 EXTRACTED!';
       line = `You got out through the ${escapeHtml(r.where)} with <b>🪙 ${r.value}</b> worth of stuff.${r.riders && r.riders.length ? ` Rode out with ${r.riders.map(escapeHtml).join(', ')}.` : ''}`;
     } else if (r.reason === 'time') {
@@ -772,7 +778,7 @@ export class Hud {
       ? `<div class="rnew"><b>📖 New in your collection:</b> ${r.newFinds.map((it) => `<span class="chip" style="color:${itemInfo(it).css}">${iconHtml(it)} ${escapeHtml(itemInfo(it).name)}</span>`).join('')}</div>` : '';
     const achs = pr.achievements.map((a) => `<div class="rach t${a.tier}"><span class="ic">${a.icon}</span><div><b>${escapeHtml(a.name)}</b><small>${TIER_NAMES[a.tier]} achievement · ${escapeHtml(a.desc)}</small></div></div>`).join('');
     const looks = pr.looks.length ? `<div class="rnew">🎨 <b>New look unlocked:</b> ${pr.looks.map((k) => escapeHtml(lookName(k))).join(', ')}</div>` : '';
-    $('resultsUnlocks').innerHTML = `<div class="rxp"><span class="lvl">LV ${lv.level}</span><div class="xpbar"><i style="width:${(lv.frac * 100).toFixed(1)}%"></i></div><b>+${pr.xp} XP</b></div>
+    $('resultsUnlocks').innerHTML = r.tutorial ? '' : `<div class="rxp"><span class="lvl">LV ${lv.level}</span><div class="xpbar"><i style="width:${(lv.frac * 100).toFixed(1)}%"></i></div><b>+${pr.xp} XP</b></div>
       ${pr.levelUp ? `<div class="rlevel">⭐ LEVEL UP! You're level ${pr.levelUp}</div>` : ''}${finds}${achs}${looks}`;
     el.hidden = false;
     this.prompt(null);
