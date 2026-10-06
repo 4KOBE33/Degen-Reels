@@ -47,8 +47,9 @@ class Cloud {
     try { this.user = JSON.parse(localStorage.getItem(KEY) || 'null'); } catch (e) { /* blocked */ }
     net.onWaking = () => this.changed();
     // Upload a few seconds after anything changes.
-    save.onChange(() => { if (this.user && !this.applying) this.queue(); });
-    if (this.user) this.queue(500);
+    save.onChange(() => { if (this.user && !this.applying && !save.tampered) this.queue(); });
+    if (this.user && save.tampered) this.restore();
+    else if (this.user) this.queue(500);
     // Does the server keep accounts in a database, or in a file a restart wipes?
     this.storage = '';
     call('/status').then((st) => { this.storage = st.storage || ''; this.changed(); }).catch(() => {});
@@ -64,15 +65,31 @@ class Cloud {
     } catch (e) { /* blocked */ }
   }
 
+  // This device's save was edited and got reset: put the account's cloud save back.
+  async restore() {
+    try {
+      const out = await call('/load', { token: this.user.token });
+      if (out.save) { this.applying = true; save.replace(out.save); this.applying = false; }
+      save.clearTampered();
+      this.syncedAt = Date.now();
+      this.status = 'saved';
+    } catch (e) {
+      this.status = `not saved: ${e.message}`;
+      if (/log in/i.test(e.message)) { this.user = null; this.remember(); }
+      else setTimeout(() => this.restore(), 20000);
+    }
+    this.changed();
+  }
+
   queue(wait = 3000) {
     clearTimeout(this.timer);
     this.timer = setTimeout(() => this.push(), wait);
   }
 
   async push() {
-    if (!this.user) return;
+    if (!this.user || save.tampered) return;
     try {
-      await call('/save', { token: this.user.token, save: save.get() });
+      await call('/save', { token: this.user.token, save: save.get(), seal: save.sealOf(save.get()) });
       this.syncedAt = Date.now();
       this.status = 'saved';
     } catch (e) {
@@ -91,7 +108,7 @@ class Cloud {
     const u = this.user;
     if (!u || !u.pin) return false;
     try {
-      const out = await call('/account', { name: u.name, pin: u.pin, mode: 'register', save: save.get() });
+      const out = await call('/account', { name: u.name, pin: u.pin, mode: 'register', save: save.get(), seal: save.sealOf(save.get()) });
       this.user = { name: out.name, token: out.token, pin: u.pin };
       this.remember();
       this.syncedAt = Date.now();
@@ -105,7 +122,7 @@ class Cloud {
 
   // Make an account from this device's progress.
   async register(name, pin) {
-    const out = await call('/account', { name, pin, mode: 'register', save: save.get() });
+    const out = await call('/account', { name, pin, mode: 'register', save: save.get(), seal: save.sealOf(save.get()) });
     // The PIN stays on this device so the account can be put back if the server forgets it.
     this.user = { name: out.name, token: out.token, pin: String(pin) };
     this.remember();

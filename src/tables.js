@@ -16,7 +16,7 @@ import { itemInfo, isGun, makeGun, fullAmmo, addToList } from './items.js';
 import { levelInfo } from './progress.js';
 import { Shoe, handValue, isNatural } from './cards.js';
 import {
-  BETS, BET_LEVEL, RED, WHEEL, REEL_SYMBOLS, REEL_HITS, PLINKO, PLINKO_ROWS, bucketColor, MINE_COUNTS, minesMult, reelPull,
+  BETS, BET_LEVEL, betLock, chipLabel, RED, WHEEL, REEL_SYMBOLS, REEL_HITS, PLINKO, PLINKO_ROWS, bucketColor, MINE_COUNTS, minesMult, reelPull,
 } from './hub.js';
 
 const $ = (id) => document.getElementById(id);
@@ -1448,7 +1448,7 @@ const Plinko = {
     t.bucketTex.needsUpdate = true;
   },
   panel(t, T) {
-    const risks = ['low', 'medium', 'high'].map((r) => `<button class="subtab ${t.pl.risk === r ? 'on' : ''}" data-act="risk" data-arg="${r}">${r[0].toUpperCase() + r.slice(1)}</button>`).join('');
+    const risks = ['low', 'medium', 'high', 'extreme'].map((r) => `<button class="subtab ${t.pl.risk === r ? 'on' : ''}" data-act="risk" data-arg="${r}">${r[0].toUpperCase() + r.slice(1)}</button>`).join('');
     return `${T.chipsHtml(false)}<div class="tprow">${risks}</div><div class="tprow"><button class="btn big" data-act="drop">DROP · 🪙 ${fmt(T.bet)}</button></div>`;
   },
   act(t, a, arg, T) {
@@ -1703,11 +1703,10 @@ export class LoungeTables {
   }
 
   chipsHtml(disabled) {
-    const lv = levelInfo(save.get().xp).level;
-    const chips = save.get().stash.chips;
-    return `<div class="betchips tpchips">${BETS.filter((b) => b <= 25000).map((b) => {
-      const locked = lv < (BET_LEVEL[b] || 0) || b > chips;
-      return `<button class="cchip c${b} ${b === this.bet ? 'on' : ''}" data-act="bet" data-arg="${b}" ${disabled || locked ? 'disabled' : ''}>${b >= 1000 ? `${b / 1000}K` : b}</button>`;
+    const d = save.get();
+    return `<div class="betchips tpchips">${BETS.map((b) => {
+      const locked = !!betLock(b, d) || b > d.stash.chips;
+      return `<button class="cchip c${b} ${b === this.bet ? 'on' : ''}" data-act="bet" data-arg="${b}" ${disabled || locked ? 'disabled' : ''}>${chipLabel(b)}</button>`;
     }).join('')}</div>`;
   }
 

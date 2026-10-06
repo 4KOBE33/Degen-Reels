@@ -17,6 +17,8 @@ import { Training } from './training.js';
 import { Voice } from './voice.js';
 import { music } from './music.js';
 import { addToStash } from './items.js';
+// Test hooks on window only when running locally: on the real site the console can't reach the game.
+const DEV = /^(localhost|127\.0\.0\.1)$/.test(location.hostname);
 
 const tutorial = new Tutorial();
 const training = new Training();
@@ -40,8 +42,8 @@ const camera = new THREE.PerspectiveCamera(72, 1, 0.1, 900);
 const hud = new Hud();
 let raid = new Raid(hud, save.get().selectedMap || 'vegas');
 const controller = new PlayerController(raid, camera, renderer.domElement);
-// Handy for poking at the game from the browser console.
-window.degen = raid;
+// Handy for poking at the game from the browser console (locally only).
+if (DEV) window.degen = raid;
 raid.renderer = renderer;
 raid.camera = camera;
 raid.setOverlay = (n) => setOverlay(n);
@@ -235,7 +237,7 @@ function switchMap(id, seed = null) {
   controller.raid = raid;
   if (typeof voice !== 'undefined') voice.raid = raid;
   applyQuality();
-  window.degen = raid;
+  if (DEV) window.degen = raid;
 }
 
 // ---------- multiplayer ----------
@@ -248,8 +250,8 @@ voice.onChange = (msg) => {
   $('voiceInd').hidden = !voice.talking;
   if (!$('hub').hidden && hub.tab === 'loadout') hub.renderDeploy();
 };
-window.voice = voice;
-window.music = music;
+if (DEV) window.voice = voice;
+if (DEV) window.music = music;
 // Everyone in a party has to be on the same build: each game builds the map itself from the shared
 // seed, so a different build means a different map (crates that don't line up, loot and machines
 // inside walls). Members say which build they're on; anyone who doesn't answer is on an old one.
@@ -449,7 +451,8 @@ const hub = new Hub({
   },
 });
 
-window.hub = hub;
+if (DEV) window.hub = hub;
+Object.defineProperty(hub, 'raid', { get: () => raid }); // the current raid (it changes with the map)
 // The Lounge tables bet out of the same bank as the Back Room.
 raid.casino = hub;
 hub.raidToast = (text) => hud.toast(text);
@@ -467,6 +470,14 @@ $('buildTag').textContent = `Build ${BUILD}`;
 training.onComplete = (reward) => { hub.tutorialReward = { reward }; };
 // The title screen, unless this page load is getting back into a party's raid.
 if (!(net.seat || net.resume)) hub.showTitle();
+// The save on this device had been edited by hand, so it was reset (or put back from the cloud).
+if (save.tampered) {
+  const say = setInterval(() => {
+    if (!$('title').hidden || $('hub').hidden) return;
+    clearInterval(say);
+    setTimeout(() => hub.toast('🚫 Your save had been edited outside the game, so it was reset. Logged in? Your account\'s save comes back.'), 400);
+  }, 300);
+}
 // A party member whose page reloaded gets put back in the raid with their gear instead, so wait
 // a moment to see if that happens before handing it back here.
 setTimeout(() => { if (raid.active) clearSafety(); else restoreSafety(); }, net.seat || net.resume ? 9000 : 300);

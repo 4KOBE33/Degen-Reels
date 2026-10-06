@@ -19,7 +19,8 @@ const COUNTDOWN = 3;
 const TIME_LIMIT = 120;
 const BET_TIME = 10; // seconds to get bets in before the bell
 const EXHIBITION_IDLE = 25; // the House stages a fight when The Pit's been empty this long
-const BETS = [100, 500, 1000, 5000, 10000, 25000];
+const chipLabel = (v) => (v >= 1000000 ? `${v / 1000000}M` : v >= 1000 ? `${v / 1000}K` : String(v));
+const BETS = [100, 500, 1000, 5000, 10000, 25000, 100000, 250000, 1000000];
 const CHALLENGERS = ['Slick Vinnie', 'Lady Luck', 'Two-Bit Tony', 'The Dealer\'s Cousin', 'Big Sal', 'Lucky Lou', 'Mama Blackjack', 'Snake Eyes Sam'];
 
 // ---------- Poker Showdown: five cards each, best hand takes the pot ----------
@@ -90,7 +91,7 @@ const cardHtml = (c, cls = '', style = '') => {
   const r = RANKS[Math.floor(c / 4)].replace('T', '10');
   return `<span class="pcard ${s === '♥' || s === '♦' ? 'red' : ''} ${cls}" ${style ? `style="${style}"` : ''}><i>${r}</i><em>${s}</em><i class="flip">${r}</i></span>`;
 };
-const STAKES = [0, 500, 1000, 5000, 10000, 25000, 50000, 100000];
+const STAKES = [0, 500, 1000, 5000, 10000, 25000, 50000, 100000, 250000, 500000, 1000000];
 const gunName = (g) => (g ? itemInfo({ id: 'gun', kind: g.kind, rarity: g.rarity }).name : 'nothing');
 
 export class Duel {
@@ -223,7 +224,7 @@ export class Duel {
     $('duelGame').innerHTML = [['pit', '🥊 Fight in The Pit'], ['poker', '🃏 Poker Showdown']].map(([g, l]) => `<button class="subtab ${this.game === g ? 'on' : ''}" data-g="${g}">${l}</button>`).join('');
     $('duelGame').onclick = (e) => { const b = e.target.closest('[data-g]'); if (b) { this.game = b.dataset.g; this.renderPanel(); } };
     const champ = this.target && this.target.champion;
-    $('duelChips').innerHTML = STAKES.map((v) => `<button class="cchip c${v} ${v === this.stake ? 'on' : ''}" data-v="${v}" ${v > chips ? 'disabled' : ''}>${v ? (v >= 1000 ? `${v / 1000}K` : v) : 'Just for fun'}</button>`).join('');
+    $('duelChips').innerHTML = STAKES.map((v) => `<button class="cchip c${v} ${v === this.stake ? 'on' : ''}" data-v="${v}" ${v > chips ? 'disabled' : ''}>${v ? chipLabel(v) : 'Just for fun'}</button>`).join('');
     $('duelChips').onclick = (e) => { const b = e.target.closest('[data-v]'); if (b && !b.disabled) { this.stake = Number(b.dataset.v); this.renderPanel(); } };
     const mine = this.betGun();
     const theirs = champ ? this.target.gun : null;
@@ -582,7 +583,7 @@ export class Duel {
     const chipKey = `${this.betAmt}|${BETS.map((x) => x > chips).join('')}`;
     if (chipKey !== this.betChipKey) {
       this.betChipKey = chipKey;
-      $('betChips').innerHTML = BETS.map((x) => `<button class="cchip c${x} ${x === this.betAmt ? 'on' : ''}" data-v="${x}" ${x > chips ? 'disabled' : ''}>${x >= 1000 ? `${x / 1000}K` : x}</button>`).join('');
+      $('betChips').innerHTML = BETS.map((x) => `<button class="cchip c${x} ${x === this.betAmt ? 'on' : ''}" data-v="${x}" ${x > chips ? 'disabled' : ''}>${chipLabel(x)}</button>`).join('');
     }
     $('betWho').onclick = (e) => { const b = e.target.closest('[data-s]'); if (b) { this.betSide = b.dataset.s; this.renderBet(); } };
     $('betChips').onclick = (e) => { const b = e.target.closest('[data-v]'); if (b && !b.disabled) { this.betAmt = Number(b.dataset.v); this.renderBet(); } };

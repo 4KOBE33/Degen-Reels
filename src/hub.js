@@ -26,9 +26,19 @@ import { contracts, contractView, claim as claimContract, reroll as rerollContra
 
 const $ = (id) => document.getElementById(id);
 const LOADOUT_SLOTS = 8;
-export const BETS = [25, 100, 250, 500, 1000, 2500, 5000, 10000, 25000, 50000, 100000];
+export const BETS = [25, 100, 250, 500, 1000, 2500, 5000, 10000, 25000, 50000, 100000, 250000, 500000, 1000000];
 // High-roller tables open up as you level up from raiding.
-export const BET_LEVEL = { 25000: 5, 50000: 10, 100000: 15 };
+export const BET_LEVEL = { 25000: 5, 50000: 10, 100000: 15, 250000: 20, 500000: 25 };
+// The million-chip bet: only for millionaires (a million chips in the bank).
+export const MILLION = 1000000;
+// Why a bet size is locked for you right now ('' if it isn't).
+export function betLock(b, d) {
+  const need = BET_LEVEL[b] || 0;
+  if (levelInfo(d.xp).level < need) return `LV${need}`;
+  if (b >= MILLION && d.stash.chips < MILLION) return '1M 🏦';
+  return '';
+}
+export const chipLabel = (b) => (b >= 1000000 ? `${b / 1000000}M` : b >= 1000 ? `${b / 1000}K` : String(b));
 const fmt = (n) => Math.round(n).toLocaleString('en-US');
 const hex = (c) => `#${Number(c).toString(16).padStart(6, '0')}`;
 
@@ -106,12 +116,16 @@ const GAMES = [
   ['mines', '💎', 'Mines', 'Find gems, dodge the bombs'],
   ['plinko', '🔴', 'Plinko', 'Drop a ball, pray for the edges'],
 ];
+// Auto-drop speeds for Plinko (balls a second).
+const PLINKO_SPEEDS = [1, 2, 4, 8, 15];
 // Plinko: 12 rows of pegs, 13 buckets. Riskier boards pay more at the edges and less in the middle.
 export const PLINKO_ROWS = 12;
 export const PLINKO = {
   low: [9, 3, 1.5, 1.3, 1.1, 0.95, 0.5, 0.95, 1.1, 1.3, 1.5, 3, 9],
   medium: [29, 9, 4, 2, 1, 0.6, 0.3, 0.6, 1, 2, 4, 9, 29],
   high: [140, 22, 8, 2, 0.7, 0.2, 0.2, 0.2, 0.7, 2, 8, 22, 140],
+  // All or nothing: the middle pays zero, the edges pay a thousand times. About 4% of balls win.
+  extreme: [1000, 36, 5, 0.6, 0.1, 0, 0, 0, 0.1, 0.6, 5, 36, 1000],
 };
 const PW = 560;
 const PH = 430;
@@ -181,7 +195,7 @@ export class Hub {
     this.roulette = null;
     this.mines = null;
     this.mineCount = 3;
-    this.plinko = { risk: 'medium', balls: [], results: [], flash: [], loop: false };
+    this.plinko = { risk: 'medium', balls: [], results: [], flash: [], loop: false, auto: null, speed: 2 };
     this.reels = null;
     this.machine = 0;
     this.session = 0;
@@ -295,7 +309,7 @@ export class Hub {
   show() {
     $('hub').hidden = false;
     // Back from the Training Floor: put the menu backdrop back on your map and say well done.
-    if (window.degen && window.degen.mapId === 'training') this.onMapChange(this.data.selectedMap);
+    if (this.raid && this.raid.mapId === 'training') this.onMapChange(this.data.selectedMap);
     if (this.tutorialReward) {
       const r = this.tutorialReward.reward;
       this.tutorialReward = null;
@@ -602,8 +616,15 @@ export class Hub {
       body = `<p class="hint">Stock up before a raid. It all goes to your stash. More supplies unlock as you level up.</p><div class="shopgrid">${SUPPLIES.map(([id, price, need]) => {
         const it = ITEMS[id];
         if (lv < need) return lockCard(it.icon, it.name, `Level ${need}`);
+        // How many to buy at once: 1, 5, 10, 25, or as many as you can afford (up to 99).
+        const most = Math.max(1, Math.min(99, Math.floor(chips / price)));
+        const pick = (this.shopQty && this.shopQty[id]) || 1;
+        const n = pick === 'max' ? most : pick;
+        const qty = [1, 5, 10, 25].map((q) => `<button class="qchip ${pick === q ? 'on' : ''}" data-act="shopqty" data-id="${id}" data-q="${q}">×${q}</button>`).join('')
+          + `<button class="qchip ${pick === 'max' ? 'on' : ''}" data-act="shopqty" data-id="${id}" data-q="max">MAX</button>`;
         return `<div class="shopcard"><span class="sicon">${it.icon}</span><b>${it.name}</b><small>${escapeHtml(it.desc).slice(0, 70)}${it.desc.length > 70 ? '…' : ''}</small>
-          <button class="btn" data-act="buyitem" data-id="${id}" ${chips < price ? 'disabled' : ''}>BUY · 🪙 ${fmt(price)}</button></div>`;
+          <div class="qtyrow">${qty}</div>
+          <button class="btn" data-act="buyitem" data-id="${id}" data-n="${n}" ${chips < price * n ? 'disabled' : ''}>BUY${n > 1 ? ` ×${n}` : ''} · 🪙 ${fmt(price * n)}</button></div>`;
       }).join('')}</div>`;
     } else if (sec === 'looks') {
       const items = [];
@@ -981,7 +1002,7 @@ export class Hub {
     return `<div class="backroom">
       <aside class="gamerail">${rail}
         ${this.renderMob()}
-        <div class="session"><small>This<br>session</small><b class="${net > 0 ? 'win' : net < 0 ? 'loss' : ''}">${net > 0 ? '+' : ''}${fmt(net)}</b><small>Stash 🪙 ${fmt(d.stash.chips)}</small></div>
+        <div class="session" data-act="sessgraph" title="See how your session is going"><small>This<br>session 📈</small><b class="${net > 0 ? 'win' : net < 0 ? 'loss' : ''}">${net > 0 ? '+' : ''}${fmt(net)}</b><small>Stash 🪙 ${fmt(d.stash.chips)}</small></div>
       </aside>
       <section class="table split">${stage.replace('<!--recent-->', recent ? `<div class="recent"><small>Recent</small>${recent}</div>` : '')}</section>
     </div>`;
@@ -1011,11 +1032,9 @@ export class Hub {
   }
 
   betChips(disabled = false) {
-    const lv = levelInfo(this.data.xp).level;
     return `<div class="betchips"><small>BET</small>${BETS.map((b) => {
-      const need = BET_LEVEL[b] || 0;
-      const locked = lv < need;
-      return `<button class="cchip c${b} ${b === this.bet ? 'on' : ''} ${locked ? 'locked' : ''}" data-act="bet" data-b="${b}" ${disabled ? 'disabled' : ''} title="${locked ? `Unlocks at level ${need}` : ''}">${b >= 1000 ? `${b / 1000}K` : b}${locked ? `<i>LV${need}</i>` : ''}</button>`;
+      const lock = betLock(b, this.data);
+      return `<button class="cchip c${b} ${b === this.bet ? 'on' : ''} ${lock ? 'locked' : ''}" data-act="bet" data-b="${b}" ${disabled ? 'disabled' : ''} title="${lock ? (b >= MILLION ? 'Unlocks once you have a million chips' : `Unlocks at level ${BET_LEVEL[b]}`) : ''}">${chipLabel(b)}${lock ? `<i>${lock}</i>` : ''}</button>`;
     }).join('')}</div>`;
   }
 
@@ -1157,13 +1176,30 @@ export class Hub {
 
   renderPlinko() {
     const pl = this.plinko;
-    const risks = ['low', 'medium', 'high'].map((r) => `<button class="subtab ${pl.risk === r ? 'on' : ''}" data-act="plinkorisk" data-r="${r}" ${pl.balls.length ? 'disabled' : ''}>${r[0].toUpperCase() + r.slice(1)}</button>`).join('');
+    const risks = ['low', 'medium', 'high', 'extreme'].map((r) => `<button class="subtab ${pl.risk === r ? 'on' : ''}" data-act="plinkorisk" data-r="${r}" ${pl.balls.length ? 'disabled' : ''}>${r[0].toUpperCase() + r.slice(1)}</button>`).join('');
     const last = pl.results.slice(-10).reverse().map((m) => `<span style="background:${bucketColor(m)}">${m}x</span>`).join('');
     return this.split(`<div class="plinko"><canvas id="plinkoBoard" width="${PW}" height="${PH}"></canvas><div class="plast">${last}</div></div>`,
       `${this.betChips()}
       <div class="minecount"><small>RISK</small>${risks}</div>
       <button class="btn big" data-act="plinkodrop">DROP · 🪙 ${fmt(this.bet)}</button>
-      <p class="hint">Drop as many balls as you like. Edges pay big; the middle doesn't.</p>`);
+      <div class="minecount plauto"><small>AUTO</small>${PLINKO_SPEEDS.map((v) => `<button class="subtab ${pl.speed === v ? 'on' : ''}" data-act="plinkospeed" data-v="${v}">${v}/s</button>`).join('')}</div>
+      <button class="btn ${pl.auto ? 'ghost' : ''}" data-act="plinkoauto">${pl.auto ? '■ STOP AUTO-DROP' : `▶ AUTO-DROP · ${pl.speed} a second`}</button>
+      <p class="hint">Drop as many balls as you like. Edges pay big; the middle doesn't. Auto-drop keeps going until you stop it, run out of chips, or leave the table.</p>`);
+  }
+
+  // Auto-drop: a ball every so often at the chosen speed.
+  plinkoAuto(on) {
+    const pl = this.plinko;
+    clearInterval(pl.auto);
+    pl.auto = null;
+    if (on) {
+      pl.auto = setInterval(() => {
+        const here = !$('hub').hidden && this.tab === 'backroom' && this.game === 'plinko';
+        if (!here || this.data.stash.chips < this.bet) { this.plinkoAuto(false); if (here) this.render(); return; }
+        this.dropPlinko();
+      }, 1000 / pl.speed);
+      this.dropPlinko();
+    }
   }
 
   dropPlinko() {
@@ -1313,8 +1349,109 @@ export class Hub {
   // Log a finished bet: session total, recent results, achievements.
   settleBet(icon, wager, payout, statChange = null) {
     this.session += payout - wager;
-    this.history.push({ icon, net: payout - wager });
+    this.history.push({ icon, net: payout - wager, total: this.session });
     this.announce(progress((d) => { if (statChange) statChange(d.stats); }));
+    if (this.graphOpen) this.drawGraph();
+  }
+
+  // ---------- session graph ----------
+  // Click "This session" in the Back Room: a line of your running up/down, bet by bet.
+  openGraph() {
+    let el = $('sessGraph');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'sessGraph';
+      el.innerHTML = '<div class="sgcard"><button class="sgx" aria-label="Close">✕</button><div class="sgbody"></div></div>';
+      document.body.appendChild(el);
+      el.addEventListener('click', (e) => { if (e.target === el || e.target.closest('.sgx')) this.closeGraph(); });
+      window.addEventListener('keydown', (e) => { if (e.key === 'Escape' && this.graphOpen) this.closeGraph(); });
+    }
+    el.hidden = false;
+    this.graphOpen = true;
+    this.drawGraph();
+  }
+
+  closeGraph() {
+    this.graphOpen = false;
+    if ($('sessGraph')) $('sessGraph').hidden = true;
+  }
+
+  drawGraph() {
+    const body = document.querySelector('#sessGraph .sgbody');
+    if (!body) return;
+    const h = this.history;
+    const sign = (n) => `${n > 0 ? '+' : n < 0 ? '−' : ''}${fmt(Math.abs(n))}`;
+    const cls = (n) => (n > 0 ? 'win' : n < 0 ? 'loss' : '');
+    const head = `<h3>📈 This session <b class="${cls(this.session)}">${sign(this.session)}</b></h3>`;
+    if (!h.length) { body.innerHTML = `${head}<p class="hint">No bets yet. Play a few hands and your ups and downs show up here.</p>`; return; }
+    const wins = h.filter((x) => x.net > 0);
+    const losses = h.filter((x) => x.net < 0);
+    const peak = Math.max(0, ...h.map((x) => x.total));
+    const low = Math.min(0, ...h.map((x) => x.total));
+    const tile = (label, val, c = '') => `<div class="sgtile"><small>${label}</small><b class="${c}">${val}</b></div>`;
+    const tiles = tile('Bets', fmt(h.length)) + tile('Won', `${fmt(wins.length)} (${Math.round((wins.length / h.length) * 100)}%)`)
+      + tile('Biggest win', wins.length ? sign(Math.max(...wins.map((x) => x.net))) : '–', wins.length ? 'win' : '')
+      + tile('Biggest loss', losses.length ? sign(Math.min(...losses.map((x) => x.net))) : '–', losses.length ? 'loss' : '')
+      + tile('Best point', sign(peak), cls(peak)) + tile('Worst point', sign(low), cls(low));
+    // The line: start at 0, then your running total after every bet (thinned out on long sessions).
+    const pts = [{ i: 0, total: 0, net: 0, icon: '' }, ...h.map((x, k) => ({ i: k + 1, ...x }))];
+    const step = Math.max(1, Math.ceil(pts.length / 400));
+    const shown = pts.filter((p, k) => k % step === 0 || k === pts.length - 1);
+    const W = 640, H = 240, L = 64, R = 14, T = 14, B = 26;
+    const lo = Math.min(0, ...shown.map((p) => p.total));
+    const hi = Math.max(0, ...shown.map((p) => p.total));
+    const pad = (hi - lo || 100) * 0.08;
+    const y0 = lo - pad, y1 = hi + pad;
+    const X = (i) => L + ((W - L - R) * i) / Math.max(1, pts.length - 1);
+    const Y = (v) => T + (H - T - B) * (1 - (v - y0) / (y1 - y0));
+    const line = shown.map((p, k) => `${k ? 'L' : 'M'}${X(p.i).toFixed(1)},${Y(p.total).toFixed(1)}`).join('');
+    const zero = Y(0);
+    const area = `${line}L${X(shown[shown.length - 1].i).toFixed(1)},${zero}L${X(0)},${zero}Z`;
+    const ticks = [y1 - pad, (y0 + y1) / 2, y0 + pad].map((v) => Math.round(v));
+    const last = shown[shown.length - 1];
+    body.innerHTML = `${head}
+      <div class="sgtiles">${tiles}</div>
+      <div class="sgplot">
+        <svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Your running chip total across ${h.length} bets this session, ending at ${sign(this.session)}">
+          <defs>
+            <clipPath id="sgUp"><rect x="0" y="0" width="${W}" height="${zero}"/></clipPath>
+            <clipPath id="sgDown"><rect x="0" y="${zero}" width="${W}" height="${H - zero}"/></clipPath>
+          </defs>
+          ${ticks.map((v) => `<line class="sggrid" x1="${L}" x2="${W - R}" y1="${Y(v)}" y2="${Y(v)}"/><text class="sgaxis" x="${L - 8}" y="${Y(v) + 4}" text-anchor="end">${sign(v)}</text>`).join('')}
+          <path d="${area}" class="sgup" clip-path="url(#sgUp)"/>
+          <path d="${area}" class="sgdown" clip-path="url(#sgDown)"/>
+          <line class="sgzero" x1="${L}" x2="${W - R}" y1="${zero}" y2="${zero}"/>
+          <text class="sgaxis" x="${L - 8}" y="${zero + 4}" text-anchor="end">0</text>
+          <path d="${line}" class="sgline"/>
+          <circle class="sgdot" cx="${X(last.i)}" cy="${Y(last.total)}" r="5"/>
+          <text class="sgaxis" x="${L}" y="${H - 6}">Start</text><text class="sgaxis" x="${W - R}" y="${H - 6}" text-anchor="end">Bet ${fmt(h.length)}</text>
+          <line class="sgcross" x1="0" x2="0" y1="${T}" y2="${H - B}" visibility="hidden"/>
+          <circle class="sghover" r="6" visibility="hidden"/>
+          <rect class="sghit" x="${L}" y="0" width="${W - L - R}" height="${H}"/>
+        </svg>
+        <div class="sgtip" hidden></div>
+      </div>
+      <div class="sglegend"><span class="win">▲ green: you're up</span><span class="loss">▼ red: you're down</span><span>Hover the line for each bet</span></div>`;
+    // Hover: the nearest bet to the mouse, with a crosshair and a little card.
+    const svg = body.querySelector('svg');
+    const tip = body.querySelector('.sgtip');
+    const cross = svg.querySelector('.sgcross');
+    const dot = svg.querySelector('.sghover');
+    const hit = svg.querySelector('.sghit');
+    hit.addEventListener('mousemove', (e) => {
+      const box = svg.getBoundingClientRect();
+      const sx = ((e.clientX - box.left) / box.width) * W;
+      const i = Math.round(((sx - L) / (W - L - R)) * (pts.length - 1));
+      const p = pts[Math.max(0, Math.min(pts.length - 1, i))];
+      cross.setAttribute('x1', X(p.i)); cross.setAttribute('x2', X(p.i)); cross.setAttribute('visibility', 'visible');
+      dot.setAttribute('cx', X(p.i)); dot.setAttribute('cy', Y(p.total)); dot.setAttribute('visibility', 'visible');
+      tip.hidden = false;
+      tip.innerHTML = p.i ? `<small>Bet ${fmt(p.i)} ${p.icon}</small><b class="${cls(p.net)}">${sign(p.net)}</b><small>Session ${sign(p.total)}</small>` : '<small>Start</small><b>0</b>';
+      const px = (X(p.i) / W) * box.width;
+      tip.style.left = `${Math.min(box.width - 130, Math.max(0, px + 12))}px`;
+      tip.style.top = `${(Y(p.total) / H) * box.height - 20}px`;
+    });
+    hit.addEventListener('mouseleave', () => { tip.hidden = true; cross.setAttribute('visibility', 'hidden'); dot.setAttribute('visibility', 'hidden'); });
   }
 
   onInput(e) {
@@ -1496,11 +1633,17 @@ export class Hub {
       case 'buyitem': {
         const sup = SUPPLIES.find(([id]) => id === b.dataset.id);
         if (!sup || levelInfo(d.xp).level < sup[2]) break;
-        const price = sup[1];
+        const n = Math.max(1, Math.min(99, Math.floor(Number(b.dataset.n) || 1)));
+        const price = sup[1] * n;
         if (d.stash.chips < price) { this.toast(`You need 🪙 ${fmt(price)}.`); break; }
-        save.update((x) => { x.stash.chips -= price; addToStash(x.stash.items, makeItem(b.dataset.id, 1)); });
+        save.update((x) => { x.stash.chips -= price; addToStash(x.stash.items, makeItem(b.dataset.id, n)); });
         sfx.pickup();
-        this.toast(`${ITEMS[b.dataset.id].icon} ${ITEMS[b.dataset.id].name} added to your stash.`);
+        this.toast(`${ITEMS[b.dataset.id].icon} ${n > 1 ? `${n}× ` : ''}${ITEMS[b.dataset.id].name} added to your stash.`);
+        break;
+      }
+      case 'shopqty': {
+        this.shopQty = this.shopQty || {};
+        this.shopQty[b.dataset.id] = b.dataset.q === 'max' ? 'max' : Number(b.dataset.q);
         break;
       }
       case 'buylook': {
@@ -1578,6 +1721,7 @@ export class Hub {
       case 'bet': {
         const need = BET_LEVEL[b.dataset.b] || 0;
         if (levelInfo(d.xp).level < need) { this.toast(`🔒 The ${fmt(Number(b.dataset.b))} table opens at level ${need}. Raid to level up!`); break; }
+        if (Number(b.dataset.b) >= MILLION && d.stash.chips < MILLION) { this.toast('🏦 The million-chip bet is for millionaires. Get 🪙 1,000,000 in the bank to unlock it.'); break; }
         this.bet = Number(b.dataset.b);
         break;
       }
@@ -1596,6 +1740,13 @@ export class Hub {
       case 'minecash': this.cashMines(); break;
       case 'plinkorisk': if (!this.plinko.balls.length) this.plinko.risk = b.dataset.r; break;
       case 'plinkodrop': this.dropPlinko(); return;
+      case 'sessgraph': this.openGraph(); return;
+      case 'plinkoauto': this.plinkoAuto(!this.plinko.auto); break;
+      case 'plinkospeed': {
+        this.plinko.speed = Number(b.dataset.v) || 2;
+        if (this.plinko.auto) this.plinkoAuto(true);
+        break;
+      }
       case 'cashout': this.cashOutCrash(); return;
       default: return;
     }
@@ -1907,7 +2058,7 @@ export class Hub {
     initAudio();
     const d = this.data;
     const lo = d.loadout;
-    if (window.degen && window.degen.net && window.degen.isHost && !window.degen.net.ended) {
+    if (this.raid && this.raid.net && this.raid.isHost && !this.raid.net.ended) {
       this.toast('Your squad is still in the raid. Wait for them to get out first.');
       return;
     }

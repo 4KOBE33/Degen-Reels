@@ -82,6 +82,25 @@ function levelFor(xp = 0) {
   return level;
 }
 
+// Saves come with a fingerprint from the game (src/seal.js). One that doesn't match was edited
+// by hand, so it's turned away and never reaches the leaderboard. Keep in step with src/seal.js.
+const PEPPER = 'bth:7f3a9c:lucky-sevens:never-beat-the-house';
+function sealOf(str) {
+  const s = PEPPER + str;
+  let h1 = 0xdeadbeef ^ s.length;
+  let h2 = 0x41c6ce57 ^ s.length;
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    h1 = Math.imul(h1 ^ c, 2654435761);
+    h2 = Math.imul(h2 ^ c, 1597334677);
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return (h2 >>> 0).toString(36) + (h1 >>> 0).toString(36);
+}
+const sealed = (save, seal) => typeof seal === 'string' && sealOf(JSON.stringify(save)) === seal;
+const BAD_SEAL = 'That save didn\'t check out, so it wasn\'t stored. Refresh the page to get the latest version of the game.';
+
 // What a save is worth: chips plus everything in the stash at Fence prices.
 function summarize(save) {
   const chips = Math.max(0, Math.floor(Number(save && save.stash && save.stash.chips) || 0));
@@ -125,7 +144,7 @@ router.get('/status', (req, res) => res.json({ ok: true, storage: pool ? 'databa
 
 // Create an account, or log in to one. Returns a token and the cloud save.
 router.post('/account', (req, res) => {
-  const { name, pin, mode, save } = req.body || {};
+  const { name, pin, mode, save, seal } = req.body || {};
   if (!NAME_RE.test(String(name || ''))) { res.status(400).json({ error: 'Names are 3-16 letters, numbers, spaces, - or _.' }); return; }
   if (!PIN_RE.test(String(pin || ''))) { res.status(400).json({ error: 'Your PIN is 4-8 digits.' }); return; }
   const k = key(name);
@@ -138,6 +157,7 @@ router.post('/account', (req, res) => {
       const salt = crypto.randomBytes(16).toString('hex');
       a = accounts[k] = { name: String(name).trim(), salt, hash: hashPin(pin, salt), tokens: [], save: null, updatedAt: 0, chips: 0, worth: 0, level: 1 };
     }
+    if (save && !sealed(save, seal)) { res.status(400).json({ error: BAD_SEAL }); return; }
     if (save && JSON.stringify(save).length <= MAX_SAVE) {
       a.save = save;
       a.updatedAt = Date.now();
@@ -159,6 +179,7 @@ router.post('/save', (req, res) => {
   const save = req.body.save;
   if (!save || typeof save !== 'object' || !save.stash) { res.status(400).json({ error: 'Bad save.' }); return; }
   if (JSON.stringify(save).length > MAX_SAVE) { res.status(413).json({ error: 'Save too big.' }); return; }
+  if (!sealed(save, req.body.seal)) { res.status(400).json({ error: BAD_SEAL }); return; }
   a.save = save;
   a.updatedAt = Date.now();
   Object.assign(a, summarize(save));

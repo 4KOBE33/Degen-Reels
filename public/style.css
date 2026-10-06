@@ -1475,3 +1475,38 @@ body.mapstage .hubfoot { display: none; }
 .mapgrid { grid-template-columns: repeat(3, 1fr); }
 @media (max-width: 760px) { .mapgrid { grid-template-columns: 1fr 1fr; } }
 .tutstars { font-size: 26px; letter-spacing: 4px; color: #ffd23f; }
+.cchip.c250000 { background: linear-gradient(135deg, #c084fc, #7b2cbf); }
+.cchip.c500000 { background: linear-gradient(135deg, #f472b6, #b5172b); }
+.cchip.c1000000 { background: linear-gradient(135deg, #fff6c0, #ffd23f 40%, #2ee6d6); color: var(--ink); text-shadow: none; box-shadow: 0 0 12px #ffd23faa; }
+.shopcard .qtyrow { display: flex; flex-wrap: wrap; gap: 4px; justify-content: center; margin-top: 4px; }
+.shopcard .qchip { font: 900 12px var(--body); padding: 3px 7px; border-radius: 999px; border: 2px solid var(--ink); background: rgba(255, 255, 255, 0.12); color: inherit; cursor: pointer; }
+.shopcard .qchip.on { background: var(--gold); color: var(--ink); }
+/* Session graph (Back Room) */
+.session[data-act="sessgraph"] { cursor: pointer; transition: transform 0.1s; }
+.session[data-act="sessgraph"]:hover { transform: translateY(-1px); box-shadow: 0 0 0 2px var(--gold); }
+#sessGraph { position: fixed; inset: 0; z-index: 60; display: grid; place-items: center; background: rgba(10, 4, 22, 0.7); padding: 16px; }
+#sessGraph[hidden] { display: none; }
+#sessGraph .sgcard { position: relative; width: min(720px, 100%); max-height: 100%; overflow: auto; background: #1b0f2b; border: 3px solid var(--gold); border-radius: 18px; padding: 18px 20px; color: #fff6e0; }
+#sessGraph .sgx { position: absolute; top: 10px; right: 12px; background: none; border: 0; color: inherit; font-size: 20px; cursor: pointer; }
+#sessGraph h3 { margin: 0 0 10px; font: 400 24px var(--display); color: var(--gold); }
+#sessGraph h3 b { margin-left: 8px; }
+#sessGraph .win { color: #5ee27a; } #sessGraph .loss { color: #ff6b6b; }
+#sessGraph .sgtiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 8px; margin-bottom: 12px; }
+#sessGraph .sgtile { background: rgba(255, 255, 255, 0.06); border-radius: 10px; padding: 6px 10px; display: grid; }
+#sessGraph .sgtile small { font-size: 11px; font-weight: 800; opacity: 0.7; }
+#sessGraph .sgtile b { font-size: 16px; }
+#sessGraph .sgplot { position: relative; }
+#sessGraph svg { width: 100%; height: auto; display: block; }
+#sessGraph .sggrid { stroke: rgba(255, 246, 224, 0.08); stroke-width: 1; }
+#sessGraph .sgzero { stroke: rgba(255, 246, 224, 0.45); stroke-width: 1; stroke-dasharray: 4 4; }
+#sessGraph .sgaxis { fill: rgba(255, 246, 224, 0.6); font: 700 11px var(--body); }
+#sessGraph .sgline { fill: none; stroke: #ffd23f; stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+#sessGraph .sgup { fill: rgba(94, 226, 122, 0.18); }
+#sessGraph .sgdown { fill: rgba(255, 107, 107, 0.18); }
+#sessGraph .sgdot { fill: #ffd23f; stroke: #1b0f2b; stroke-width: 2; }
+#sessGraph .sghover { fill: #fff6e0; stroke: #1b0f2b; stroke-width: 2; }
+#sessGraph .sgcross { stroke: rgba(255, 246, 224, 0.5); stroke-width: 1; }
+#sessGraph .sghit { fill: transparent; cursor: crosshair; }
+#sessGraph .sgtip { position: absolute; pointer-events: none; background: #0d0618; border: 2px solid rgba(255, 246, 224, 0.25); border-radius: 10px; padding: 6px 10px; display: grid; min-width: 110px; }
+#sessGraph .sgtip small { font-size: 11px; opacity: 0.75; font-weight: 800; }
+#sessGraph .sglegend { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 8px; font-size: 12px; font-weight: 800; opacity: 0.85; }
