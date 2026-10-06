@@ -110,7 +110,7 @@ export class Duel {
     this.exitSpot = { spot: new THREE.Vector3(L.exit.x, 0, L.exit.z), range: 4, searchTime: 0.6, searchLabel: 'Cashing out…', prompt: () => `<b>Hold ${keyName('use')}</b> Cash out (leave with everything)`, open: (by) => { if (by.isPlayer) raid.extract('Cash Out'); } };
     this.challengeSpots = new Map();
     // Betting windows on two sides of The Pit.
-    this.betSpots = [[0, this.r + 3.5], [0, -this.r - 3.5]].map(([dx, dz]) => ({
+    this.betSpots = [[7, this.r + 8], [-7, -this.r - 8]].map(([dx, dz]) => ({
       spot: new THREE.Vector3(this.arena.x + dx, 0, this.arena.z + dz), range: 3.5, searchTime: 0.2, searchLabel: 'Grabbing a ticket…',
       prompt: () => `<b>Hold ${keyName('use')}</b> 🎟️ Bet on the fight`, open: (by) => { if (by.isPlayer) this.openBet(); },
     }));
@@ -754,7 +754,7 @@ export class Duel {
           }
           const lost = c.winner && x !== c.winner;
           const sp = spawns[Math.floor(Math.random() * spawns.length)];
-          if (!gone(x)) this.place(x, lost ? new THREE.Vector3(sp[0], 0, sp[1]) : new THREE.Vector3(ar.x + i * 4, 0, ar.z + this.r + 4), lost ? Math.atan2(sp[0], sp[1]) : 0);
+          if (!gone(x)) this.place(x, lost ? new THREE.Vector3(sp[0], 0, sp[1]) : new THREE.Vector3(ar.x + i * 6, 0, ar.z + this.r + 12), lost ? Math.atan2(sp[0], sp[1]) : 0);
           if (x.brain) x.brain.duelTarget = null;
         }
         if (this.champ && this.champ.alive) {

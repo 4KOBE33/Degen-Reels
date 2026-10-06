@@ -406,6 +406,7 @@ export function buildMap(scene, mapId = 'vegas') {
   const winPaneMat = new THREE.MeshBasicMaterial({ color: 0x35507a });
 
   const doorFronts = [];
+  const interiors = [];
   // Walls with door gaps, a floor and a roof. doors: [{ side: 'n'|'s'|'e'|'w', at, width }]
   function building({ name, x, z, w, d, h = 5, color = 0xe9d8a6, trim = 0x2b2140, floor = 0x9c6b4a, floorMap = null, doors = [], tier = 2, sign = null, signColor = '#ff3fa4', roof = true, mapColor = '#6b4f3a', windows = !def.indoor, furnish = true }) {
     const T = 0.5;
@@ -427,6 +428,8 @@ export function buildMap(scene, mapId = 'vegas') {
       statics.add(lamp);
     }
 
+    // Rooms get furniture later, once everything else is placed (see the furnishing pass).
+    if (furnish && w >= 5 && d >= 5 && w * d < 2500 && (roof || def.indoor)) interiors.push({ name, x, z, w, d, h, doors });
     // Remember where the doors are, so the outside can be dressed without blocking them.
     for (const dr of doors) {
       const nx = dr.side === 'e' ? 1 : dr.side === 'w' ? -1 : 0;
@@ -1947,17 +1950,235 @@ export function buildMap(scene, mapId = 'vegas') {
     enemies('bouncer', 30, -52, 1, 2);
     enemies('dealer', 0, 20, 1, 3);
   }
-  // Loot nobody can get to (boxed in by scenery) moves to the nearest open ground.
-  for (const k of containers) {
-    if (k.y > 0.5) continue;
-    let open = false;
-    for (let i = 0; i < 8 && !open; i++) {
-      const ang = (i / 8) * Math.PI * 2;
-      open = !solidAt(k.x + Math.cos(ang) * 1.4, k.z + Math.sin(ang) * 1.4, 0.45, 0.4);
+  // ---------- furnishing: stuff inside the rooms ----------
+  // Shelves, desks, couches, beds, lockers, vending machines and crates against the walls, a card
+  // table in the middle of the bigger rooms, posters, and clutter on the floor. Furniture keeps out
+  // of doorways and away from loot so you can always get to it. Seeded like the rest of the map.
+  // Real room for a body at (x, z): any collider within r blocks it (low ones too).
+  const freeAt = (x, z, r) => {
+    for (let cx = Math.floor((x - r - 1) / CELL); cx <= Math.floor((x + r + 1) / CELL); cx++) {
+      for (let cz = Math.floor((z - r - 1) / CELL); cz <= Math.floor((z + r + 1) / CELL); cz++) {
+        for (const c of grid.get(cellKey(cx, cz)) || []) {
+          if (c.rayOnly || (c.bottom && c.bottom > 2)) continue;
+          if (c.type === 'box') {
+            const nx = Math.max(c.minX, Math.min(x, c.maxX));
+            const nz = Math.max(c.minZ, Math.min(z, c.maxZ));
+            if (Math.hypot(x - nx, z - nz) < r) return false;
+          } else if (Math.hypot(x - c.x, z - c.z) < c.r + r) return false;
+        }
+      }
     }
-    if (open) continue;
-    const to = clearSpot(k.x, k.z, 1.6, 0.4);
-    if (to) [k.x, k.z] = to;
+    return Math.abs(x) < H - 2 && Math.abs(z) < H - 2;
+  };
+  {
+    const R = Math.random;
+    const mat = (c) => toon(c);
+    const glow = (c) => new THREE.MeshBasicMaterial({ color: c });
+    const P = (geo, color, x, y, z, ink = 0.02) => { const m = part(geo, color, { ink, shadow: false }); m.position.set(x, y, z); return m; };
+    const B = (w, h, d) => new THREE.BoxGeometry(w, h, d);
+    const itemCols = [0xe63946, 0x2a9d8f, 0xffd23f, 0x7b2cbf, 0xff9f1c, 0x4dabff, 0x5ee27a, 0xfff6e0];
+    const pick = (a) => a[Math.floor(R() * a.length)];
+    // Each piece: footprint along the wall (w) and out from it (d), built facing +z with its back at -d/2.
+    const PIECES = {
+      shelf: { w: 2.0, d: 0.55, build(g) {
+        g.add(P(B(2.0, 0.08, 0.55), 0x6b4a2e, 0, 2.15, 0), P(B(0.08, 2.2, 0.55), 0x6b4a2e, -0.96, 1.1, 0), P(B(0.08, 2.2, 0.55), 0x6b4a2e, 0.96, 1.1, 0), P(B(2.0, 2.2, 0.05), 0x4a3220, 0, 1.1, -0.25, 0));
+        for (const y of [0.1, 0.75, 1.4]) {
+          g.add(P(B(1.9, 0.06, 0.5), 0x6b4a2e, 0, y, 0, 0));
+          for (let x = -0.75; x <= 0.75; x += 0.3 + R() * 0.15) {
+            if (R() < 0.25) continue;
+            const tall = R() < 0.4;
+            const it = tall ? P(new THREE.CylinderGeometry(0.07, 0.07, 0.32, 8), pick(itemCols), x, y + 0.2, 0.05, 0.01) : P(B(0.22 + R() * 0.1, 0.18 + R() * 0.2, 0.3), pick(itemCols), x, y + 0.15, 0.02, 0.01);
+            g.add(it);
+          }
+        }
+      } },
+      desk: { w: 1.8, d: 0.8, build(g) {
+        g.add(P(B(1.8, 0.08, 0.8), 0x8b5a2b, 0, 0.82, 0), P(B(0.5, 0.8, 0.7), 0x6b4a2e, -0.6, 0.4, 0), P(B(0.5, 0.8, 0.7), 0x6b4a2e, 0.6, 0.4, 0));
+        const mon = P(B(0.7, 0.45, 0.06), 0x1b0f2b, 0.15, 1.2, -0.2, 0.01);
+        const scr = new THREE.Mesh(new THREE.PlaneGeometry(0.62, 0.37), glow(pick([0x2ee6d6, 0x5ee27a, 0xff3fa4])));
+        scr.position.set(0.15, 1.2, -0.165);
+        g.add(mon, scr, P(B(0.08, 0.3, 0.08), 0x1b0f2b, 0.15, 0.98, -0.22, 0), P(B(0.4, 0.02, 0.3), 0xfff6e0, -0.5, 0.87, 0.1, 0));
+      } },
+      rack: { w: 1.2, d: 0.8, build(g) {
+        g.add(P(B(1.2, 2.2, 0.8), 0x1f2937, 0, 1.1, 0));
+        for (let y = 0.3; y < 2.1; y += 0.25) {
+          const led = new THREE.Mesh(B(0.9, 0.05, 0.02), glow(R() < 0.3 ? 0xff5d5d : 0x5ee27a));
+          led.position.set(0, y, 0.41);
+          g.add(led);
+        }
+      } },
+      couch: { w: 2.2, d: 0.9, build(g) {
+        const c = pick([0x7b2cbf, 0xb5172b, 0x2a9d8f, 0x6b4a2e]);
+        g.add(P(B(2.2, 0.45, 0.9), c, 0, 0.23, 0), P(B(2.2, 0.55, 0.22), c, 0, 0.7, -0.34), P(B(0.22, 0.6, 0.9), c, -1.0, 0.45, 0), P(B(0.22, 0.6, 0.9), c, 1.0, 0.45, 0));
+        g.add(P(B(0.85, 0.15, 0.62), new THREE.Color(c).multiplyScalar(1.25).getHex(), -0.45, 0.52, 0.06, 0.01), P(B(0.85, 0.15, 0.62), new THREE.Color(c).multiplyScalar(1.25).getHex(), 0.45, 0.52, 0.06, 0.01));
+      } },
+      bed: { w: 1.4, d: 2.2, build(g) {
+        g.add(P(B(1.4, 0.4, 2.2), 0x6b4a2e, 0, 0.2, 0), P(B(1.3, 0.2, 2.05), 0xfff6e0, 0, 0.5, 0.05, 0.01), P(B(1.32, 0.22, 1.2), pick([0xe63946, 0x4dabff, 0x7b2cbf, 0x2a9d8f]), 0, 0.53, 0.45, 0.01));
+        g.add(P(B(0.9, 0.14, 0.4), 0xffffff, 0, 0.66, -0.75, 0.01), P(B(1.4, 0.9, 0.1), 0x4a3220, 0, 0.65, -1.07));
+      } },
+      vending: { w: 1.1, d: 0.85, build(g) {
+        g.add(P(B(1.1, 2.0, 0.85), pick([0xe63946, 0x2563eb, 0x16a34a]), 0, 1.0, 0));
+        const front = new THREE.Mesh(new THREE.PlaneGeometry(0.62, 1.3), glow(0xbfe3f5));
+        front.position.set(-0.12, 1.15, 0.43);
+        g.add(front);
+        for (let y = 0.65; y < 1.8; y += 0.28) for (let x = -0.35; x < 0.15; x += 0.16) g.add(P(B(0.1, 0.16, 0.05), pick(itemCols), x, y, 0.44, 0));
+      } },
+      lockers: { w: 2.1, d: 0.55, build(g) {
+        for (let i = 0; i < 3; i++) {
+          g.add(P(B(0.68, 2.0, 0.55), pick([0x6b7280, 0x4b5563, 0x52525b]), -0.7 + i * 0.7, 1.0, 0));
+          for (const y of [1.7, 1.6, 1.5]) g.add(P(B(0.4, 0.03, 0.02), 0x1f2937, -0.7 + i * 0.7, y, 0.28, 0));
+        }
+      } },
+      crates: { w: 1.7, d: 1.1, build(g) {
+        g.add(P(B(0.9, 0.9, 0.9), 0xb07a3c, -0.38, 0.45, 0), P(B(0.75, 0.75, 0.75), 0x9c6b32, 0.45, 0.38, 0.1));
+        if (R() < 0.6) { const t = P(B(0.65, 0.65, 0.65), 0xb07a3c, -0.3, 1.23, 0.02); t.rotation.y = 0.3; g.add(t); }
+      } },
+      barrels: { w: 1.7, d: 0.85, build(g) {
+        for (const x of [-0.42, 0.42]) {
+          g.add(P(new THREE.CylinderGeometry(0.4, 0.4, 1.0, 14), pick([0x7c4a22, 0x374151, 0xb5172b]), x, 0.5, 0));
+          const band = new THREE.Mesh(new THREE.TorusGeometry(0.41, 0.03, 4, 16), glow(0x1f2937));
+          band.rotation.x = Math.PI / 2;
+          band.position.set(x, 0.75, 0);
+          g.add(band);
+        }
+      } },
+      counter: { w: 2.6, d: 0.8, build(g) {
+        g.add(P(B(2.6, 1.0, 0.8), 0x6b3a1e, 0, 0.5, 0), P(B(2.7, 0.08, 0.9), 0xd4a63a, 0, 1.04, 0));
+        for (let i = 0; i < 4; i++) g.add(P(new THREE.CylinderGeometry(0.05, 0.06, 0.3, 8), pick([0x16a34a, 0x7a1028, 0xffd23f]), -1.0 + i * 0.55 + R() * 0.2, 1.23, (R() - 0.5) * 0.4, 0.01));
+      } },
+    };
+    const posters = ['WANTED', 'LUCKY 7', 'JACKPOT!', 'NO REFUNDS', 'BEAT THE HOUSE', 'HIGH STAKES', 'ALL IN', 'CASH ONLY'].map((text, i) => {
+      const bg = ['#e63946', '#1b0f2b', '#7b2cbf', '#2a9d8f', '#ffd23f', '#b5172b', '#16a34a', '#ff9f1c'][i];
+      return new THREE.MeshBasicMaterial({ map: canvasTexture(128, 170, (c, w, h) => {
+        c.fillStyle = bg; c.fillRect(0, 0, w, h);
+        c.strokeStyle = '#fff6e0'; c.lineWidth = 6; c.strokeRect(6, 6, w - 12, h - 12);
+        c.fillStyle = bg === '#ffd23f' ? '#1b0f2b' : '#fff6e0';
+        c.font = "bold 22px 'Luckiest Guy', 'Arial Black', sans-serif"; c.textAlign = 'center'; c.textBaseline = 'middle';
+        const words = text.split(' ');
+        words.forEach((wd, k) => c.fillText(wd, w / 2, h / 2 + (k - (words.length - 1) / 2) * 26));
+        c.font = '34px "Apple Color Emoji","Segoe UI Emoji","Noto Color Emoji",sans-serif';
+        c.fillText(['💰', '🎰', '🃏', '🎲', '👑', '🍀', '💎', '🪙'][i], w / 2, 30);
+      }) });
+    });
+    const posterGeo = new THREE.PlaneGeometry(0.9, 1.2);
+    const loot = containers.filter((k) => k.y < 0.5);
+    const nearLoot = (x, z, pad) => loot.some((k) => Math.hypot(k.x - x, k.z - z) < pad);
+    const kindsFor = (name) => {
+      const n = (name || '').toLowerCase();
+      if (/motel|inn|cabin|lodge|chalet|shack|hut|house|mansion|suite|trailer/.test(n)) return ['bed', 'couch', 'shelf', 'crates', 'vending'];
+      if (/pawn|shop|store|mart|warehouse|depot|cellar|storage|supply|garage|barn|cage/.test(n)) return ['shelf', 'shelf', 'crates', 'barrels', 'lockers'];
+      if (/office|security|server|counting|bank|lab|observ|station|tower|post/.test(n)) return ['desk', 'rack', 'lockers', 'desk', 'shelf'];
+      if (/bar|kitchen|saloon|diner|cafe|crawfish|snack|club|lounge|room|chapel|winery|tasting/.test(n)) return ['counter', 'couch', 'vending', 'shelf', 'barrels'];
+      return ['shelf', 'crates', 'desk', 'couch', 'lockers', 'barrels', 'vending'];
+    };
+    for (const rm of interiors) {
+      const kinds = kindsFor(rm.name);
+      const sides = [
+        { k: 'n', nx: 0, nz: 1, len: rm.w, ry: 0 }, { k: 's', nx: 0, nz: -1, len: rm.w, ry: Math.PI },
+        { k: 'w', nx: 1, nz: 0, len: rm.d, ry: Math.PI / 2 }, { k: 'e', nx: -1, nz: 0, len: rm.d, ry: -Math.PI / 2 },
+      ];
+      const want = Math.max(2, Math.min(7, Math.floor((rm.w + rm.d) / 5)));
+      let placed = 0;
+      let posted = 0;
+      for (let tries = 0; tries < want * 4 && placed < want; tries++) {
+        const sd = sides[Math.floor(R() * 4)];
+        const pc = PIECES[kinds[(placed + tries) % kinds.length]];
+        const along = (R() - 0.5) * (sd.len - pc.w - 1.4);
+        if (Math.abs(along) + pc.w / 2 > sd.len / 2 - 0.6) continue;
+        // Keep doorways clear.
+        if (rm.doors.some((dr) => dr.side === sd.k && Math.abs(dr.at - along) < dr.width / 2 + 1.4 + pc.w / 2)) continue;
+        const inset = 0.3 + pc.d / 2;
+        const ax = sd.nz ? along : 0;
+        const az = sd.nx ? along : 0;
+        const cx = rm.x + ax + (sd.nx ? -sd.nx * (rm.w / 2) + sd.nx * inset : 0);
+        const cz = rm.z + az + (sd.nz ? -sd.nz * (rm.d / 2) + sd.nz * inset : 0);
+        const fw = sd.nz ? pc.w : pc.d;
+        const fd = sd.nz ? pc.d : pc.w;
+        // Room around it and nothing already there (other furniture, cover, loot).
+        if (!freeAt(cx, cz, Math.max(fw, fd) / 2 + 0.15) || nearLoot(cx, cz, Math.max(fw, fd) / 2 + 1.9)) continue;
+        // And don't wall off the middle: something has to stay walkable in front of it.
+        if (!freeAt(cx + sd.nx * (fd / 2 + 1.0), cz + sd.nz * (fw / 2 + 1.0), 0.5)) continue;
+        const g = new THREE.Group();
+        g.position.set(cx, 0, cz);
+        g.rotation.y = sd.ry;
+        pc.build(g);
+        statics.add(g);
+        box(cx, cz, fw, fd, 1.2);
+        placed++;
+        // A poster on the wall nearby.
+        if (posted < 2 && rm.h >= 3.4 && R() < 0.6) {
+          const along2 = Math.max(-sd.len / 2 + 1, Math.min(sd.len / 2 - 1, along + (R() < 0.5 ? -1 : 1) * (pc.w / 2 + 0.8)));
+          if (!rm.doors.some((dr) => dr.side === sd.k && Math.abs(dr.at - along2) < dr.width / 2 + 0.8)) {
+            const pm = new THREE.Mesh(posterGeo, pick(posters));
+            pm.position.set(rm.x + (sd.nz ? along2 : -sd.nx * (rm.w / 2 - 0.28)), 2.3, rm.z + (sd.nx ? along2 : -sd.nz * (rm.d / 2 - 0.28)));
+            pm.rotation.y = sd.ry;
+            statics.add(pm);
+            posted++;
+          }
+        }
+      }
+      // The middle of a bigger room: a card table with chairs, and whatever was left on it.
+      if (Math.min(rm.w, rm.d) >= 9 && freeAt(rm.x, rm.z, 2.2) && !nearLoot(rm.x, rm.z, 3.4)) {
+        const g = new THREE.Group();
+        g.position.set(rm.x, 0, rm.z);
+        g.add(P(new THREE.CylinderGeometry(0.95, 0.95, 0.08, 20), 0x1f8a4c, 0, 0.82, 0), P(new THREE.CylinderGeometry(0.12, 0.3, 0.8, 10), 0x2b2140, 0, 0.4, 0));
+        for (let i = 0; i < 4; i++) {
+          const a = (i / 4) * Math.PI * 2 + 0.4;
+          const ch = new THREE.Group();
+          ch.position.set(Math.cos(a) * 1.35, 0, Math.sin(a) * 1.35);
+          ch.rotation.y = -a + Math.PI / 2;
+          ch.add(P(B(0.5, 0.08, 0.5), 0x6b4a2e, 0, 0.48, 0, 0.01), P(B(0.5, 0.5, 0.06), 0x6b4a2e, 0, 0.75, -0.22, 0.01), P(B(0.06, 0.48, 0.06), 0x3f2a14, 0.18, 0.24, 0.18, 0), P(B(0.06, 0.48, 0.06), 0x3f2a14, -0.18, 0.24, 0.18, 0));
+          g.add(ch);
+        }
+        for (let i = 0; i < 3; i++) {
+          const st = P(new THREE.CylinderGeometry(0.1, 0.1, 0.08 + R() * 0.18, 12), pick([0xe63946, 0x1b0f2b, 0x2a9d8f, 0xffd23f]), (R() - 0.5) * 1.0, 0.9, (R() - 0.5) * 1.0, 0.01);
+          g.add(st);
+        }
+        for (let i = 0; i < 4; i++) {
+          const card = new THREE.Mesh(new THREE.PlaneGeometry(0.16, 0.22), glow(0xfff6e0));
+          card.rotation.set(-Math.PI / 2, 0, R() * 3);
+          card.position.set((R() - 0.5) * 1.1, 0.87, (R() - 0.5) * 1.1);
+          g.add(card);
+        }
+        statics.add(g);
+        circle(rm.x, rm.z, 1.0, 0.9);
+      }
+      // Clutter on the floor: papers, chips, a bottle.
+      for (let i = 0; i < 5; i++) {
+        const x = rm.x + (R() - 0.5) * (rm.w - 2);
+        const z = rm.z + (R() - 0.5) * (rm.d - 2);
+        if (!freeAt(x, z, 0.3)) continue;
+        const r = R();
+        let m;
+        if (r < 0.45) { m = new THREE.Mesh(new THREE.PlaneGeometry(0.3, 0.4), glow(0xf1e3c8)); m.rotation.set(-Math.PI / 2, 0, R() * 3); m.position.set(x, 0.07, z); }
+        else if (r < 0.8) { m = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 0.03, 10), glow(pick([0xe63946, 0x2563eb, 0x1b0f2b, 0x16a34a]))); m.position.set(x, 0.07, z); }
+        else { m = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, 0.28, 8), glow(pick([0x16a34a, 0x7a1028]))); m.rotation.set(Math.PI / 2, 0, R() * 3); m.position.set(x, 0.1, z); }
+        statics.add(m);
+      }
+    }
+  }
+
+  // Loot nobody can get to (boxed in by scenery) moves to the nearest open ground: somewhere with
+  // room for the crate and room to stand next to it, checked with a real body-sized circle.
+  const standRoom = (x, z) => {
+    for (let i = 0; i < 8; i++) {
+      const ang = (i / 8) * Math.PI * 2;
+      if (freeAt(x + Math.cos(ang) * 1.35, z + Math.sin(ang) * 1.35, 0.5)) return true;
+    }
+    return false;
+  };
+  for (const k of containers) {
+    if (k.y > 0.5 || standRoom(k.x, k.z)) continue;
+    let moved = false;
+    for (let r = 0.8; r <= 14 && !moved; r += 0.7) {
+      for (let i = 0; i < 16 && !moved; i++) {
+        const ang = (i / 16) * Math.PI * 2;
+        const x = k.x + Math.cos(ang) * r;
+        const z = k.z + Math.sin(ang) * r;
+        if (freeAt(x, z, 0.8) && standRoom(x, z)) { k.x = x; k.z = z; moved = true; }
+      }
+    }
+    if (!moved) { const to = clearSpot(k.x, k.z, 1.6, 0.4); if (to) [k.x, k.z] = to; }
   }
   const CX = layout.casino.x;
   const CZ = layout.casino.z;
@@ -3525,10 +3746,15 @@ function theLounge(k) {
   ceiling.position.y = CEIL;
   statics.add(ceiling);
 
-  // ----- The Pit: a glass-walled arena in the middle -----
-  // Duelists drop in on opposite pads, each behind a giant playing card, with a chip tower in the
-  // middle so nobody gets a clean shot off the bell: you have to move to find the angle.
+  // ----- The Pit: a sunken arena in the middle -----
+  // A ring-shaped gallery 4m up runs all the way round, so the fight happens down in a pit with
+  // stadium walls and everyone watches from the rail above. Ramps lead up from the casino floor at
+  // the north and south. Duelists drop in on opposite pads, each behind a giant playing card, with a
+  // chip tower in the middle so nobody gets a clean shot off the bell.
   const R = 14;
+  const GH = 4; // gallery height
+  const GW = 4; // gallery width
+  const RO = R + GW;
   // A roulette-wheel floor: red and black wedges round a gold ring.
   const wedges = canvasTexture(1024, 1024, (c, w) => {
     const r = w / 2;
@@ -3560,51 +3786,170 @@ function theLounge(k) {
     ring.position.set(side * (R - 4), 0.09, 0);
     statics.add(pad, ring);
   }
-  const glass = new THREE.Mesh(new THREE.CylinderGeometry(R, R, 4.5, 48, 1, true), new THREE.MeshBasicMaterial({ color: 0x9be7ff, transparent: true, opacity: 0.14, side: THREE.DoubleSide, depthWrite: false }));
-  glass.position.y = 2.25;
-  const rim = part(new THREE.TorusGeometry(R, 0.18, 8, 64), 0xd4a63a, { ink: 0.01, shadow: false });
-  rim.rotation.x = Math.PI / 2;
-  rim.position.y = 4.5;
-  const base = part(new THREE.TorusGeometry(R, 0.3, 8, 64), 0x1b0f2b, { ink: 0.01, shadow: false });
-  base.rotation.x = Math.PI / 2;
-  base.position.y = 0.3;
-  statics.add(glass, rim, base);
-  // Neon posts round the glass, alternating pink and gold.
-  const postGeo = new THREE.CylinderGeometry(0.12, 0.12, 4.4, 8);
-  for (let i = 0; i < 16; i++) {
-    const a = (i / 16) * Math.PI * 2;
-    const post = new THREE.Mesh(postGeo, new THREE.MeshBasicMaterial({ color: i % 2 ? 0xff3fa4 : 0xffd23f }));
-    post.position.set(Math.cos(a) * (R + 0.05), 2.25, Math.sin(a) * (R + 0.05));
-    statics.add(post);
+  // The stadium wall inside the pit: padded panels with banners all the way round.
+  const banner = canvasTexture(2048, 128, (c, w, h) => {
+    c.fillStyle = '#1b0f2b';
+    c.fillRect(0, 0, w, h);
+    const bits = ['THE PIT', '♠', 'WINNER TAKES ALL', '♥', 'NO REFUNDS', '♦', 'HIGH STAKES', '♣'];
+    c.font = "bold 64px 'Luckiest Guy', 'Arial Black', sans-serif";
+    c.textBaseline = 'middle';
+    let x = 20;
+    let k = 0;
+    while (x < w) {
+      const t = bits[k % bits.length];
+      c.fillStyle = t.length === 1 ? (t === '♥' || t === '♦' ? '#ff3f5f' : '#fff6e0') : ['#ffd23f', '#ff3fa4', '#2ee6d6'][k % 3];
+      c.fillText(t, x, h / 2 + 4);
+      x += c.measureText(t).width + 60;
+      k++;
+    }
+  });
+  banner.wrapS = THREE.RepeatWrapping;
+  banner.repeat.set(-2, 1); // negative so the words read the right way from inside the pit
+  const innerWall = new THREE.Mesh(new THREE.CylinderGeometry(R, R, GH, 64, 1, true), toon(0x3a1d5c, { side: THREE.BackSide }));
+  innerWall.position.y = GH / 2;
+  const band = new THREE.Mesh(new THREE.CylinderGeometry(R - 0.05, R - 0.05, 1.0, 64, 1, true), new THREE.MeshBasicMaterial({ map: banner, side: THREE.BackSide }));
+  band.position.y = 2.4;
+  const pad = part(new THREE.TorusGeometry(R - 0.1, 0.22, 8, 64), 0xb5172b, { ink: 0.01, shadow: false });
+  pad.rotation.x = Math.PI / 2;
+  pad.position.y = 0.9;
+  statics.add(innerWall, band, pad);
+  // The gallery: a ring floor 4m up, an outer wall down to the casino floor, and a gold rail on
+  // the inside edge.
+  const deck = new THREE.Mesh(new THREE.RingGeometry(R, RO, 64), toon(0x5a2a6a, { side: THREE.DoubleSide }));
+  deck.rotation.x = -Math.PI / 2;
+  deck.position.y = GH;
+  const carpetRing = new THREE.Mesh(new THREE.RingGeometry(R + 0.8, RO - 0.6, 64), new THREE.MeshBasicMaterial({ color: 0x7a1028, side: THREE.DoubleSide }));
+  carpetRing.rotation.x = -Math.PI / 2;
+  carpetRing.position.y = GH + 0.02;
+  const outerWall = new THREE.Mesh(new THREE.CylinderGeometry(RO, RO, GH, 64, 1, true), toon(0x2b1640));
+  outerWall.position.y = GH / 2;
+  statics.add(deck, carpetRing, outerWall);
+  for (const [y, r] of [[GH + 1.05, R + 0.15], [GH + 0.55, R + 0.15]]) {
+    const rail = part(new THREE.TorusGeometry(r, y > GH + 1 ? 0.09 : 0.05, 6, 80), 0xd4a63a, { ink: 0.01, shadow: false });
+    rail.rotation.x = Math.PI / 2;
+    rail.position.y = y;
+    statics.add(rail);
   }
-  // The glass is solid: nobody walks in or shoots in. Duelists get dropped in.
   for (let i = 0; i < 32; i++) {
     const a = (i / 32) * Math.PI * 2;
-    circle(Math.cos(a) * R, Math.sin(a) * R, 1.5, 4.5);
+    const post = part(new THREE.CylinderGeometry(0.06, 0.06, 1.1, 6), 0xd4a63a, { ink: 0, shadow: false });
+    post.position.set(Math.cos(a) * (R + 0.15), GH + 0.55, Math.sin(a) * (R + 0.15));
+    statics.add(post);
+    // Neon strip lights round the outside of the gallery.
+    const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.14, 8, 6), new THREE.MeshBasicMaterial({ color: i % 2 ? 0xff3fa4 : 0xffd23f }));
+    bulb.position.set(Math.cos(a) * (RO + 0.05), GH - 0.25, Math.sin(a) * (RO + 0.05));
+    statics.add(bulb);
   }
-  // Giant playing cards standing in front of each spawn.
-  const cardTex = (suit, red) => canvasTexture(256, 360, (c, w, h) => {
-    c.fillStyle = '#fffdf5'; c.fillRect(0, 0, w, h);
-    c.strokeStyle = '#1b0f2b'; c.lineWidth = 14; c.strokeRect(7, 7, w - 14, h - 14);
+  // Solid gallery: overlapping posts of floor round the ring (you can walk on top), a rail you
+  // can't fall over, and walls that keep the fight in the pit.
+  for (let i = 0; i < 44; i++) {
+    const a = (i / 44) * Math.PI * 2;
+    const rc = (R + RO) / 2;
+    circle(Math.cos(a) * rc, Math.sin(a) * rc, GW / 2 + 0.25, GH);
+    k.addCollider({ type: 'circle', x: Math.cos(a) * (R + 0.15), z: Math.sin(a) * (R + 0.15), r: 0.35, top: GH + 1.2, bottom: GH + 0.05, noProxy: true });
+  }
+  // Ramps up to the gallery from the casino floor, north and south.
+  for (const dir of [1, -1]) {
+    const z0 = dir * (RO + 8);
+    const z1 = dir * (RO - 0.2);
+    const len = Math.abs(z1 - z0);
+    const ramp = part(new THREE.BoxGeometry(4, 0.3, Math.hypot(len, GH)), 0x5a2a6a, { ink: 0.02 });
+    ramp.position.set(0, GH / 2 - 0.1, (z0 + z1) / 2);
+    ramp.rotation.x = dir * Math.atan2(GH, len);
+    const runner = new THREE.Mesh(new THREE.PlaneGeometry(2.4, Math.hypot(len, GH)), new THREE.MeshBasicMaterial({ color: 0x7a1028 }));
+    runner.position.set(0, GH / 2 + 0.07, (z0 + z1) / 2);
+    runner.rotation.x = -Math.PI / 2 + dir * Math.atan2(GH, len);
+    statics.add(ramp, runner);
+    for (const side of [-1, 1]) {
+      const rail = part(new THREE.BoxGeometry(0.12, 0.12, Math.hypot(len, GH)), 0xd4a63a, { ink: 0, shadow: false });
+      rail.position.set(side * 2.05, GH / 2 + 1.0, (z0 + z1) / 2);
+      rail.rotation.x = ramp.rotation.x;
+      statics.add(rail);
+    }
+    k.addCollider({
+      type: 'box', minX: -2, maxX: 2, minZ: Math.min(z0, z1), maxZ: Math.max(z0, z1), top: GH, noProxy: true,
+      ramp: { z0, z1, y0: 0, y1: GH, steps: 12, rise: GH / 12, floating: false },
+    });
+    k.addRayBlocker(-2, 2, Math.min(z0, z1), Math.max(z0, z1), 0, GH);
+  }
+  // Spotlights from the ceiling down onto the pit floor.
+  for (const [x, z] of [[-6, -6], [6, 6], [-6, 6], [6, -6]]) {
+    const cone = new THREE.Mesh(new THREE.ConeGeometry(3.2, CEIL - 0.5, 24, 1, true), new THREE.MeshBasicMaterial({ color: 0xfff1b8, transparent: true, opacity: 0.07, depthWrite: false, side: THREE.DoubleSide }));
+    cone.position.set(x, (CEIL - 0.5) / 2, z);
+    statics.add(cone);
+  }
+  // Giant playing cards standing in front of each spawn: rounded corners, a big suit, corner
+  // indices, on a gold stand.
+  const cardFace = (suit, red) => canvasTexture(320, 448, (c, w, h) => {
+    const rr = 34;
+    c.beginPath();
+    c.roundRect(4, 4, w - 8, h - 8, rr);
+    c.fillStyle = '#fffdf5';
+    c.fill();
+    c.lineWidth = 8;
+    c.strokeStyle = '#1b0f2b';
+    c.stroke();
+    c.beginPath();
+    c.roundRect(26, 26, w - 52, h - 52, 18);
+    c.lineWidth = 4;
+    c.strokeStyle = red ? '#d62828' : '#1b0f2b';
+    c.stroke();
     c.fillStyle = red ? '#d62828' : '#1b0f2b';
-    c.textAlign = 'center'; c.textBaseline = 'middle';
-    c.font = 'bold 170px serif'; c.fillText(suit, w / 2, h / 2 + 8);
-    c.font = "bold 54px 'Luckiest Guy', 'Arial Black', sans-serif"; c.fillText('A', 40, 46);
-    c.save(); c.translate(w - 40, h - 46); c.rotate(Math.PI); c.fillText('A', 0, 0); c.restore();
+    c.textAlign = 'center';
+    c.textBaseline = 'middle';
+    c.font = 'bold 220px Georgia, serif';
+    c.fillText(suit, w / 2, h / 2 + 14);
+    c.font = "bold 60px 'Luckiest Guy', 'Arial Black', sans-serif";
+    c.fillText('A', 52, 66);
+    c.font = 'bold 44px Georgia, serif';
+    c.fillText(suit, 52, 118);
+    c.save();
+    c.translate(w - 52, h - 66);
+    c.rotate(Math.PI);
+    c.font = "bold 60px 'Luckiest Guy', 'Arial Black', sans-serif";
+    c.fillText('A', 0, 0);
+    c.font = 'bold 44px Georgia, serif';
+    c.fillText(suit, 0, -52);
+    c.restore();
   });
+  const cardShape = new THREE.Shape();
+  {
+    const cw = 2.2;
+    const ch = 3.1;
+    const rr = 0.25;
+    cardShape.moveTo(-cw + rr, -ch);
+    cardShape.lineTo(cw - rr, -ch);
+    cardShape.quadraticCurveTo(cw, -ch, cw, -ch + rr);
+    cardShape.lineTo(cw, ch - rr);
+    cardShape.quadraticCurveTo(cw, ch, cw - rr, ch);
+    cardShape.lineTo(-cw + rr, ch);
+    cardShape.quadraticCurveTo(-cw, ch, -cw, ch - rr);
+    cardShape.lineTo(-cw, -ch + rr);
+    cardShape.quadraticCurveTo(-cw, -ch, -cw + rr, -ch);
+  }
+  const cardBody = new THREE.ExtrudeGeometry(cardShape, { depth: 0.18, bevelEnabled: false });
+  cardBody.translate(0, 0, -0.09);
+  cardBody.scale(0.5, 0.5, 1);
   for (const [side, suit, red] of [[-1, '♥', true], [1, '♠', false]]) {
     const cx = side * 6.8;
-    const face = new THREE.MeshBasicMaterial({ map: cardTex(suit, red) });
-    const edge = toon(0xfffdf5);
-    // Thin along x, so the two big faces look east and west.
-    const card = new THREE.Mesh(new THREE.BoxGeometry(0.35, 3.0, 4.4), [face, face, edge, edge, edge, edge]);
-    card.position.set(cx, 1.6, 0);
-    card.castShadow = true;
-    statics.add(card);
-    const stand = part(new THREE.BoxGeometry(1.2, 0.3, 4.6), 0x1b0f2b, { ink: 0.02 });
-    stand.position.set(cx, 0.15, 0);
-    statics.add(stand);
-    box(cx, 0, 0.6, 4.6, 3.0);
+    const g = new THREE.Group();
+    g.position.set(cx, 0, 0);
+    g.rotation.y = Math.PI / 2;
+    const body = part(cardBody, 0xfffdf5, { ink: 0.03 });
+    body.position.y = 1.75;
+    const faceMat = new THREE.MeshBasicMaterial({ map: cardFace(suit, red), transparent: true });
+    for (const f of [1, -1]) {
+      const face = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 3.1), faceMat);
+      face.position.set(0, 1.75, f * 0.1);
+      if (f < 0) face.rotation.y = Math.PI;
+      g.add(face);
+    }
+    const stand = part(new THREE.BoxGeometry(2.6, 0.3, 0.8), 0xd4a63a, { ink: 0.02 });
+    stand.position.y = 0.15;
+    g.add(body, stand);
+    g.rotation.z = side * 0.04;
+    statics.add(g);
+    box(cx, 0, 0.6, 2.4, 3.3);
   }
   // The chip tower in the middle: taller than anyone, so you can't see across it.
   const chipCols = [0xe63946, 0x1b0f2b, 0x2a9d8f, 0x7b2cbf, 0xffd23f, 0xe63946, 0xfff6e0];
@@ -3616,23 +3961,21 @@ function theLounge(k) {
   circle(0, 0, 2.05, 3.7);
   // Giant dice to duck behind on the way round.
   for (const [x, z, ry] of [[-4.5, -7, 0.4], [4.5, 7, -0.5], [4.5, -7, 0.9], [-4.5, 7, -0.2]]) {
+    const holder = new THREE.Group();
+    holder.position.set(x, 0, z);
+    holder.rotation.y = ry;
     const die = part(new THREE.BoxGeometry(2.2, 2.2, 2.2), 0xfff6e0, { ink: 0.03 });
-    die.position.set(x, 1.1, z);
-    die.rotation.y = ry;
-    statics.add(die);
+    die.position.y = 1.1;
+    holder.add(die);
     for (const [px, py] of [[-0.5, 0.5], [0, 0], [0.5, -0.5]]) {
       for (const f of [1, -1]) {
         const pip = new THREE.Mesh(new THREE.CircleGeometry(0.18, 12), new THREE.MeshBasicMaterial({ color: 0xd62828 }));
         pip.position.set(px, 1.1 + py, f * 1.115);
         if (f < 0) pip.rotation.y = Math.PI;
-        const holder = new THREE.Group();
-        holder.position.set(x, 0, z);
-        holder.rotation.y = ry;
-        pip.position.y = 1.1 + py;
         holder.add(pip);
-        statics.add(holder);
       }
     }
+    statics.add(holder);
     circle(x, z, 1.35, 2.2);
   }
   const pitSign = neonSign('THE PIT', '#ff3fa4', 14);
@@ -3720,13 +4063,13 @@ function theLounge(k) {
     statics.add(sg2);
   }
   // Betting windows on both sides of The Pit.
-  for (const bz of [R + 3.5, -R - 3.5]) {
+  for (const [bx, bz] of [[7, R + 8], [-7, -R - 8]]) {
     const booth = part(new THREE.BoxGeometry(3, 1.2, 0.8), 0xd4a63a, { ink: 0.03 });
-    booth.position.set(0, 0.6, bz + Math.sign(bz) * 1.2);
+    booth.position.set(bx, 0.6, bz + Math.sign(bz) * 1.2);
     statics.add(booth);
-    box(0, bz + Math.sign(bz) * 1.2, 3, 0.8, 1.2);
+    box(bx, bz + Math.sign(bz) * 1.2, 3, 0.8, 1.2);
     const bs = neonSign('🎟️ BETS', '#ffd23f', 5);
-    bs.position.set(0, 2.6, bz + Math.sign(bz) * 1.2);
+    bs.position.set(bx, 2.6, bz + Math.sign(bz) * 1.2);
     if (bz < 0) bs.rotation.y = Math.PI;
     statics.add(bs);
   }
@@ -3737,7 +4080,7 @@ function theLounge(k) {
     extracts: [],
     lights,
     spawns: [[-40, 40], [40, 40], [-40, -40], [40, -40], [-20, 45], [20, 45], [-45, 0], [45, 0]],
-    lounge: { arena: { x: 0, z: 0, r: R }, champion: { x: 0, z: 22 }, exit: { x: 0, z: H - 3.5 }, tables, armory: { x: -26, z: H - 4.5, rot: Math.PI } },
+    lounge: { arena: { x: 0, z: 0, r: R }, champion: { x: 8, z: 25 }, exit: { x: 0, z: H - 3.5 }, tables, armory: { x: -26, z: H - 4.5, rot: Math.PI } },
   };
 }
 

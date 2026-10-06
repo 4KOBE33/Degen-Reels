@@ -717,7 +717,7 @@ export class Hud {
   raidIntro(raid) {
     const open = raid.extracts.filter((e) => e.active).map((e) => e.name).join(' and ');
     const el = $('intro');
-    el.innerHTML = `<div class="kicker">DEPLOYING TO</div><h2>${escapeHtml(raid.map.name.toUpperCase())}</h2><p>Exits open: <b>${open}</b>. Loot, survive, get out.</p>`;
+    el.innerHTML = `<div class="kicker">DEPLOYING TO</div><h2>${escapeHtml(raid.map.name.toUpperCase())}</h2><p>${open ? `Exits open: <b>${open}</b>. Loot, survive, get out.` : 'Gamble, duel, and cash out at the door when you\'re done.'}</p>`;
     el.classList.remove('show');
     void el.offsetWidth;
     el.classList.add('show');
