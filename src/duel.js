@@ -324,6 +324,21 @@ export class Duel {
   }
 
   // Put someone somewhere (and patch them up). Friends' games move their own character.
+  // Got into The Pit without a fight of your own (fell, glitched in, stayed after one)? Back up to
+  // the floor by the north ramp.
+  liftOut() {
+    const p = this.raid.player;
+    if (!p || !p.alive || p.pin) return;
+    if (Math.hypot(p.pos.x - this.arena.x, p.pos.z - this.arena.z) > this.r - 0.6 || p.pos.y > 1.5) return;
+    const v = this.view;
+    if (v && (v.a === p.name || v.b === p.name)) return;
+    if (this.cur && (this.cur.a === p || this.cur.b === p)) return;
+    p.pos.set(this.arena.x, 0, this.arena.z + this.r + 13.5);
+    p.vel.set(0, 0, 0);
+    p.yaw = 0;
+    this.raid.hud.toast('🪜 Lifted you out of The Pit. Watch from the gallery up top!');
+  }
+
   place(c, pos, yaw, pin = false) {
     if (c.puppet) {
       if (c.human && this.net) this.net.net.to(c.owner, { k: 'tp', p: [pos.x, 0, pos.z], yaw, pin: pin ? 1 : 0 });
@@ -716,6 +731,7 @@ export class Duel {
 
   update(dt) {
     this.tables.update(dt);
+    this.liftOut();
     // Invites time out.
     if (this.invite && performance.now() > this.invite.until) this.answer(false);
     this.tickDeal();

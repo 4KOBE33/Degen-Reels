@@ -14,6 +14,9 @@ export function topAt(c, x, z) {
 }
 export function resolve(pos, vel, radius, map) {
   let ground = 0;
+  // Landing from a jump can sink you a little past a ledge's top in one frame: still a landing,
+  // not walking into the side of it (which would shove you off sideways).
+  const step = Math.max(STEP, -vel.y * 0.06 + 0.05);
   for (const c of map.near(pos.x, pos.z)) {
     if (c.rayOnly || c.disabled) continue;
     // Something overhead (an upper floor): only matters once your feet are up there.
@@ -29,7 +32,7 @@ export function resolve(pos, vel, radius, map) {
       const top = c.ramp ? topAt(c, nx, nz) : c.top;
       // Under this part of a stair flight that hangs in the air: walk on under it.
       if (c.ramp && c.ramp.floating && pos.y < top - 0.65) continue;
-      if (pos.y >= top - STEP) {
+      if (pos.y >= top - step) {
         if (inside || d2 < radius * radius * 0.36) ground = Math.max(ground, top);
         continue;
       }
@@ -54,7 +57,7 @@ export function resolve(pos, vel, radius, map) {
       const d = Math.hypot(dx, dz);
       const min = c.r + radius;
       if (d >= min) continue;
-      if (pos.y >= c.top - STEP) {
+      if (pos.y >= c.top - step) {
         if (d < c.r + radius * 0.6) ground = Math.max(ground, c.top);
         continue;
       }

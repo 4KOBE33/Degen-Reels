@@ -16,6 +16,7 @@ import { Tutorial } from './tutorial.js';
 import { Training } from './training.js';
 import { Voice } from './voice.js';
 import { music } from './music.js';
+import { addToStash } from './items.js';
 
 const tutorial = new Tutorial();
 const training = new Training();
@@ -328,6 +329,43 @@ function readBackup(code) {
 }
 function clearBackup() { try { localStorage.removeItem(BACKUP_KEY); } catch (e) { /* blocked */ } }
 
+// Crash insurance: if the page dies mid-raid (graphics crash, reload, browser closed) your gear
+// isn't lost. What you were carrying is noted every couple of seconds, but only while it's calm
+// (not downed, not hit in the last 8 seconds, not about to be locked in), so refreshing to dodge
+// a death doesn't work. A raid that ends normally clears it. Free-kit and house guns don't count.
+const SAFE_KEY = 'bth-raid-safety';
+let safeAt = 0;
+function safetyBackup() {
+  if (!raid.active || raid.tutorialMode || performance.now() - safeAt < 2000) return;
+  const p = raid.player;
+  if (!p || !p.alive || p.downed || performance.now() - (p.hurtAt || -1e9) < 8000) return;
+  if (!raid.map.safe && raid.timeLeft < 20) return;
+  safeAt = performance.now();
+  const keep = (it) => it && !it.free && !it.house;
+  const items = [...p.weapons, ...p.backpack, ...(p.pocket || [])].filter(keep);
+  try { localStorage.setItem(SAFE_KEY, JSON.stringify({ at: Date.now(), map: raid.map.name, items, chips: p.chips || 0 })); } catch (e) { /* storage full or blocked */ }
+}
+function clearSafety() { try { localStorage.removeItem(SAFE_KEY); } catch (e) { /* blocked */ } }
+// On load: a raid that got cut off gives back what you had.
+function restoreSafety() {
+  let b = null;
+  try { b = JSON.parse(localStorage.getItem(SAFE_KEY) || 'null'); } catch (e) { /* bad data */ }
+  clearSafety();
+  if (!b || (!b.items.length && !b.chips)) return;
+  save.update((d) => {
+    d.stash.chips += b.chips || 0;
+    for (const it of b.items) addToStash(d.stash.items, { ...it });
+  });
+  hub.render();
+  const msg = `🛟 Your last raid${b.map ? ` on ${b.map}` : ''} got cut off. Everything you were carrying (${b.items.length} item${b.items.length === 1 ? '' : 's'}${b.chips ? ` + 🪙 ${Math.round(b.chips).toLocaleString('en-US')}` : ''}) is back in your stash.`;
+  // Say so once you're past the title screen (where it can be seen).
+  const say = setInterval(() => {
+    if (!$('title').hidden || $('hub').hidden) return;
+    clearInterval(say);
+    setTimeout(() => hub.toast(msg), 400);
+  }, 300);
+}
+
 // Ask the leader to let us in (after a reload, or a new member joining late).
 function askToJoin(late) {
   const r = net.room;
@@ -392,7 +430,7 @@ const hub = new Hub({
       const spawn = myTeam ? blue : red;
       const join = info.join || null;
       raid.deploy({ ...opts, opts: { client: !session.host, exits: info.exits, spawn, slot, party: info.members.length, at: join && join.pos, restore: join && join.restore } });
-      if (join) { session.applyJoin(join); clearBackup(); }
+      if (join) { session.applyJoin(join); clearBackup(); if (join.restore) clearSafety(); }
       if (session.host) session.addFriends(new THREE.Vector3(spawn[0], 0, spawn[1]));
       else session.register(raid.player, `p${net.id}`);
     } else {
@@ -429,6 +467,9 @@ $('buildTag').textContent = `Build ${BUILD}`;
 training.onComplete = (reward) => { hub.tutorialReward = { reward }; };
 // The title screen, unless this page load is getting back into a party's raid.
 if (!(net.seat || net.resume)) hub.showTitle();
+// A party member whose page reloaded gets put back in the raid with their gear instead, so wait
+// a moment to see if that happens before handing it back here.
+setTimeout(() => { if (raid.active) clearSafety(); else restoreSafety(); }, net.seat || net.resume ? 9000 : 300);
 
 hud.onLeave = () => {
   spectate(null);
@@ -655,6 +696,7 @@ function step(now, draw = true) {
   }
   if (wasActive && !raid.active) {
     clearBackup();
+    clearSafety();
     if (raid.result && !raid.map.safe) music.sting(raid.result.success ? 'extract' : 'busted');
   }
   pickMusic();
@@ -663,6 +705,7 @@ function step(now, draw = true) {
   voice.update();
   wasActive = raid.active;
   backupRaid();
+  safetyBackup();
   // Never keep the mouse captured once you're out of the raid.
   if (!raid.active && document.pointerLockElement && wasActive === false && !kcLive()) document.exitPointerLock();
 

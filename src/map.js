@@ -3846,7 +3846,11 @@ function theLounge(k) {
     const a = (i / 44) * Math.PI * 2;
     const rc = (R + RO) / 2;
     circle(Math.cos(a) * rc, Math.sin(a) * rc, GW / 2 + 0.25, GH);
-    k.addCollider({ type: 'circle', x: Math.cos(a) * (R + 0.15), z: Math.sin(a) * (R + 0.15), r: 0.35, top: GH + 1.2, bottom: GH + 0.05, noProxy: true });
+  }
+  // The rail is a solid, tall ring (posts close enough to overlap) so nobody falls or jumps in.
+  for (let i = 0; i < 132; i++) {
+    const a = (i / 132) * Math.PI * 2;
+    k.addCollider({ type: 'circle', x: Math.cos(a) * (R + 0.3), z: Math.sin(a) * (R + 0.3), r: 0.45, top: GH + 3, noProxy: true });
   }
   // Ramps up to the gallery from the casino floor, north and south.
   for (const dir of [1, -1]) {
