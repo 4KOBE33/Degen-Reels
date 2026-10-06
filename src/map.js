@@ -1991,6 +1991,7 @@ export function buildMap(scene, mapId = 'vegas') {
     botAim: def.botAim || 1,
     raiders: def.raiders ?? null,
     safe: !!def.safe,
+    tutorial: !!def.tutorial,
     noBoss: !!def.noBoss,
     lounge: layout.lounge || null,
     hostile: def.hostile ?? null,
@@ -3443,7 +3444,8 @@ function theBunker(k) {
     table.position.set(x - w / 6, 0.55, z + d / 6);
     statics.add(table);
     box(x - w / 6, z + d / 6, 5, 2.6, 1.1);
-    if (i % 4 === 1) slotSpots.push({ x: x + w / 2 - 2, z, rot: -Math.PI / 2 * Math.sign(x), tier: 3 });
+    // A slot machine against the back wall (the side away from the corridor door), facing in.
+    if (i % 4 === 1) slotSpots.push({ x: x - Math.sign(x) * (w / 2 - 1.6), z: z + d / 4 + 2, rot: -Math.PI / 2 * Math.sign(x), tier: 3 });
   });
   // Pillars and crates in the corridors for cover.
   for (const [x, z] of [[-55, -45], [55, -45], [-55, 30], [55, 30], [-55, -5], [55, -5], [-20, 50], [20, 50], [-20, -52], [20, -52]]) {
@@ -3746,7 +3748,7 @@ function trainingFloor(k) {
   for (let z = -44; z <= 44; z += 6) flat(0, z, 1.2, 3, toon(0xffd23f), 0.04);
   // Station pads: a numbered circle on the floor and a sign over each one.
   const stations = [
-    [32, '1 · MOVE', '#5ee27a'], [24, '2 · JUMP', '#2ee6d6'], [16, '3 · LOOT', '#ffd23f'], [4, '4 · SHOOT', '#ff3fa4'],
+    [32, '1 · MOVE', '#5ee27a'], [24, '2 · JUMP & ROLL', '#2ee6d6'], [16, '3 · LOOT', '#ffd23f'], [4, '4 · SHOOT', '#ff3fa4'],
     [-6, '5 · HEAL', '#ff7eb6'], [-16, '6 · THROW', '#ff9f1c'], [-28, '7 · FIGHT', '#e63946'], [-42, '8 · GET OUT', '#5ee27a'],
   ];
   for (const [z, label, color] of stations) {
@@ -3772,9 +3774,11 @@ function trainingFloor(k) {
     statics.add(stripe);
   }
   box(0, 24, 2 * L, 0.8, 0.6);
-  // 3: the crate (the tutorial fills it), on a little rug.
-  flat(0, 16, 6, 4, toon(0x7a1028), 0.05);
-  container('crate', 0, 15, 1);
+  // 3: three chests, three badge colors: gray, blue, purple (the tutorial fills the purple one).
+  flat(0, 15, 14, 4, toon(0x7a1028), 0.05);
+  container('crate', -5, 15, 1);
+  container('crate', 0, 15, 2);
+  container('crate', 5, 15, 3);
   // 4: the range: a sandbag line to shoot from and a backstop.
   for (const x of [-8, 8]) wall(x - 2.5, x + 2.5, 8.6, 9.4, 1.0, toon(0xb08968));
   wall(-L, -2.5, -2.6, -2, 3, toon(0x6b3a1e));

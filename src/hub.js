@@ -471,7 +471,6 @@ export class Hub {
     const d = this.data;
     const order = ['lounge', 'vegas', 'bayou', 'frost', 'tequila', 'bunker'].filter((id) => MAPS[id]);
     const partyMember = this.net && this.net.inParty && !this.net.isHost;
-    const newbie = !d.tutorialDone && (d.stats.raids || 0) < 2;
     const tiles = order.map((id) => {
       const m = MAPS[id];
       const facts = m.safe ? ['🛡️ No machines', '🥊 1v1s', '🎲 Casino games'] : [`⏱️ ${Math.round((m.raidTime || 1080) / 60)} min`, `📏 ${m.size}`, m.indoor ? '🏚️ Indoors' : `👑 ${bossTheme(id).name}`];
@@ -481,14 +480,9 @@ export class Hub {
         <span class="mtfacts">${facts.map((x) => `<i>${x}</i>`).join('')}</span>
         <span class="mtgo">${partyMember ? 'Gear up ▶' : 'Choose ▶'}</span></button>`;
     }).join('');
-    const tut = `<button class="maptile tut ${newbie ? 'hot' : ''}" data-act="tutorial">
-        <span class="mticon">🎓</span><span class="tag d-safe">${newbie ? 'Start here' : 'Practice'}</span>
-        <b>Training Floor</b><small>A guided 5-minute run through the basics: moving, looting, shooting, healing and getting out. Nothing to lose.</small>
-        <span class="mtfacts"><i>⏱️ 5 min</i><i>🎒 Gear provided</i>${d.tutorialDone ? '' : '<i>🪙 +500 first time</i>'}</span>
-        <span class="mtgo">${d.tutorialDone ? 'Play again ▶' : 'Play tutorial ▶'}</span></button>`;
     return `${this.renderContracts()}${this.renderParty()}
       <section class="mappick"><h3>🗺️ Where to? <small>${partyMember ? 'Your party leader picks the map. Gear up for it.' : 'Pick a map, then pack your gear.'}</small></h3>
-      <div class="mapgrid">${tut}${tiles}</div></section>`;
+      <div class="mapgrid">${tiles}</div></section>`;
   }
 
   // Step 2: the whole screen for packing: your stash on one side, what you're bringing on the other.

@@ -48,6 +48,7 @@ export class RaiderBrain {
     this.age = 0;
     this.path = null;
     this.pathTo = null;
+    this.skip = new Set(); // containers we found we can't get to
     this.pathAge = 0;
     this.searchT = 0;
   }
@@ -91,6 +92,15 @@ export class RaiderBrain {
       this.path = raid.nav.find(c.pos, to) || [to.clone()];
       this.pathTo = to.clone();
       this.pathAge = 0;
+      // Can't actually get there: don't walk into the wall nearest it. Forget that crate (or
+      // that wander spot) and pick something else.
+      if (this.path.partial && (this.goalKind === 'container' || this.goalKind === 'wander') && this.goal && to.distanceTo(this.goal) < 0.5) {
+        if (this.goalContainer) { this.skip.add(this.goalContainer); this.goalContainer.claimedBy = null; this.goalContainer = null; }
+        this.goal = null;
+        this.path = null;
+        c.move.set(0, 0);
+        return 0;
+      }
     }
     let wp = this.path && this.path[0];
     while (wp && this.path.length > 1 && Math.hypot(wp.x - c.pos.x, wp.z - c.pos.z) < 1.3) {
@@ -144,7 +154,9 @@ export class RaiderBrain {
     let bestD = Infinity;
     for (let i = 0; i < 14; i++) {
       const k = raid.containers[Math.floor(Math.random() * raid.containers.length)];
-      if (!k || k.opened || k.claimedBy) continue;
+      if (!k || k.opened || k.claimedBy || this.skip.has(k)) continue;
+      // The vault's behind a locked door until somebody opens it.
+      if (k.kind === 'vault' && !raid.vaultOpen) continue;
       const d = k.spot.distanceTo(c.pos);
       if (d < bestD) { bestD = d; best = k; }
     }

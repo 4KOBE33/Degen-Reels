@@ -856,6 +856,8 @@ export class Machine {
       this.parts.bodyMat.emissiveIntensity = this.flash > 0 ? 0.7 : 0;
       const pl = raid.player;
       if (pl) this.yaw += angleDiff(this.yaw, Math.atan2(-(pl.pos.x - this.pos.x), -(pl.pos.z - this.pos.z))) * Math.min(1, dt * 3);
+      // A target on a rail: slides side to side.
+      if (this.slideAmp) this.pos.x = this.slideX + Math.sin(performance.now() / 650) * this.slideAmp;
       this.group.position.copy(this.pos);
       this.group.position.y += Math.abs(Math.sin(performance.now() / 300 + this.pos.x)) * 0.08;
       this.group.rotation.y = this.yaw;

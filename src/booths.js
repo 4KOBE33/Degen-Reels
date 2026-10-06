@@ -1,5 +1,5 @@
-// More gambling out on the maps, next to the slot machines: a Lucky Dice table and a Double or
-// Nothing coin flip. You pay with raid chips; the host (or you, solo) decides how it lands and
+// More gambling out on the maps, each by a different building: Lucky Dice tables, Double or
+// Nothing coin flips and roulette wheels (bet from the red side or the black side). You pay with raid chips; the host (or you, solo) decides how it lands and
 // everyone nearby watches the dice tumble or the coin spin. Winnings go straight into the
 // gambler's chips with a fountain of chips for show.
 import * as THREE from 'three';
@@ -68,39 +68,93 @@ export function dicePays(a, b) {
 
 // ---------- the booths ----------
 
-const STAKE_BY_TIER = { dice: [30, 30, 60, 120, 200], coin: [150, 150, 300, 600, 1000] };
-const ROLL_TIME = { dice: 1.6, coin: 1.9 };
+const STAKE_BY_TIER = { dice: [30, 30, 60, 120, 200], coin: [150, 150, 300, 600, 1000], roulette: [50, 50, 100, 200, 400] };
+const ROLL_TIME = { dice: 1.6, coin: 1.9, roulette: 3.4 };
+const RED = new Set([1, 3, 5, 7, 9, 12, 14, 16, 18, 19, 21, 23, 25, 27, 30, 32, 34, 36]);
+const WHEEL = [0, 32, 15, 19, 4, 21, 2, 25, 17, 34, 6, 27, 13, 36, 11, 30, 8, 23, 10, 5, 24, 16, 33, 1, 20, 14, 31, 9, 22, 18, 29, 7, 28, 12, 35, 3, 26];
+let wheelTex = null;
+function rouletteTexture() {
+  if (wheelTex) return wheelTex;
+  const seg = (Math.PI * 2) / 37;
+  wheelTex = canvasTexture(512, 512, (c, w) => {
+    const r = w / 2;
+    WHEEL.forEach((n, i) => {
+      c.beginPath();
+      c.moveTo(r, r);
+      c.arc(r, r, r - 4, i * seg, (i + 1) * seg);
+      c.closePath();
+      c.fillStyle = n === 0 ? '#16a34a' : RED.has(n) ? '#d62828' : '#1b0f2b';
+      c.fill();
+      c.strokeStyle = '#d4a63a';
+      c.lineWidth = 2;
+      c.stroke();
+      c.save();
+      c.translate(r, r);
+      c.rotate((i + 0.5) * seg);
+      c.fillStyle = '#fff6e0';
+      c.font = "bold 22px 'Arial Black', sans-serif";
+      c.textAlign = 'center';
+      c.textBaseline = 'middle';
+      c.translate(r * 0.86, 0);
+      c.rotate(Math.PI / 2);
+      c.fillText(String(n), 0, 0);
+      c.restore();
+    });
+    c.beginPath();
+    c.arc(r, r, r * 0.58, 0, Math.PI * 2);
+    c.fillStyle = '#7a4a22';
+    c.fill();
+    c.lineWidth = 6;
+    c.strokeStyle = '#d4a63a';
+    c.stroke();
+  });
+  return wheelTex;
+}
 
 export class Booth {
-  constructor(raid, { kind, x, z, rot = 0 }) {
+  constructor(raid, { kind, x, z, rot = 0, pick = 'red', twin = null }) {
     this.raid = raid;
     this.kind = kind;
+    this.pick = pick;
     this.position = new THREE.Vector3(x, 0, z);
     this.front = new THREE.Vector3(Math.sin(rot), 0, Math.cos(rot));
-    this.spot = this.position.clone().addScaledVector(this.front, 1.7);
+    if (twin) this.front.multiplyScalar(-1);
+    this.spot = this.position.clone().addScaledVector(this.front, kind === 'roulette' ? 2.1 : 1.7);
     this.range = 2.2;
     this.tier = Math.max(1, Math.min(4, raid.map.tierAt(x, z)));
     this.stake = STAKE_BY_TIER[kind][this.tier];
     this.run = null;
     this.blink = 0;
+    // The black side of a roulette table: same wheel, same sign, other side.
+    if (twin) {
+      this.isTwin = true;
+      this.mate = twin;
+      twin.mate = this;
+      this.group = twin.group;
+      this.wheel = twin.wheel;
+      this.label = twin.label;
+      this.labelTex = twin.labelTex;
+      this.labelT = 0;
+      return;
+    }
     const g = new THREE.Group();
     g.position.set(x, 0, z);
     g.rotation.y = rot;
-    if (kind === 'dice') this.buildDice(g); else this.buildCoin(g);
+    if (kind === 'dice') this.buildDice(g); else if (kind === 'roulette') this.buildRoulette(g); else this.buildCoin(g);
     raid.scene.add(g);
     this.group = g;
     // The result, on a little sign that pops up over the booth for a few seconds.
     this.labelTex = canvasTexture(1024, 200, () => {});
     this.label = new THREE.Sprite(new THREE.SpriteMaterial({ map: this.labelTex, transparent: true, depthWrite: false }));
     this.label.scale.set(3.6, 0.7, 1);
-    this.label.position.set(x, kind === 'dice' ? 3.4 : 3.7, z);
+    this.label.position.set(x, kind === 'dice' ? 3.4 : kind === 'roulette' ? 3.9 : 3.7, z);
     this.label.renderOrder = 6;
     this.label.visible = false;
     raid.scene.add(this.label);
     this.labelT = 0;
     const sideways = Math.abs(Math.sin(rot)) > 0.5;
-    const w = sideways ? 1.3 : 2.2;
-    const d = sideways ? 2.2 : 1.3;
+    const w = kind === 'roulette' ? 2.4 : sideways ? 1.3 : 2.2;
+    const d = kind === 'roulette' ? 2.4 : sideways ? 2.2 : 1.3;
     raid.map.addCollider({ type: 'box', minX: x - w / 2, maxX: x + w / 2, minZ: z - d / 2, maxZ: z + d / 2, top: 1.0 });
   }
 
@@ -124,6 +178,46 @@ export class Booth {
       g.add(d);
       return d;
     });
+  }
+
+  // A roulette wheel on a pedestal, a red mat on one side and a black mat on the other.
+  buildRoulette(g) {
+    const base = part(new THREE.CylinderGeometry(0.9, 1.15, 0.95, 20), 0x6b3a1e);
+    base.position.y = 0.48;
+    const bowl = part(new THREE.CylinderGeometry(1.15, 1.0, 0.18, 32), 0x3f2a14, { ink: 0.02 });
+    bowl.position.y = 1.02;
+    g.add(base, bowl);
+    this.wheel = new THREE.Group();
+    this.wheel.position.y = 1.12;
+    const disc = new THREE.Mesh(new THREE.CircleGeometry(1.0, 48), new THREE.MeshBasicMaterial({ map: rouletteTexture() }));
+    disc.rotation.x = -Math.PI / 2;
+    const knob = part(new THREE.ConeGeometry(0.12, 0.3, 10), 0xd4a63a, { ink: 0.01 });
+    knob.position.y = 0.15;
+    this.wheel.add(disc, knob);
+    g.add(this.wheel);
+    // The pointer, on the side.
+    const ptr = part(new THREE.ConeGeometry(0.1, 0.3, 6), 0xffd23f, { ink: 0.01 });
+    ptr.rotation.z = Math.PI / 2;
+    ptr.position.set(1.18, 1.22, 0);
+    g.add(ptr);
+    for (const [side, col] of [[1, 0xd62828], [-1, 0x1b0f2b]]) {
+      const mat = new THREE.Mesh(new THREE.CircleGeometry(0.85, 24), new THREE.MeshBasicMaterial({ color: col }));
+      mat.rotation.x = -Math.PI / 2;
+      mat.position.set(0, 0.04, side * 2.1);
+      const rim = new THREE.Mesh(new THREE.RingGeometry(0.85, 0.97, 24), new THREE.MeshBasicMaterial({ color: 0xd4a63a }));
+      rim.rotation.x = -Math.PI / 2;
+      rim.position.copy(mat.position).setY(0.05);
+      g.add(mat, rim);
+    }
+    for (const side of [1, -1]) {
+      const sign = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 0.73), new THREE.MeshBasicMaterial({ map: marquee('ROULETTE', `🔴 RED SIDE · ⚫ BLACK SIDE · 2x`, '#ff3fa4') }));
+      sign.position.set(0, 2.9, side * 0.05);
+      if (side < 0) sign.rotation.y = Math.PI;
+      g.add(sign);
+    }
+    const post = part(new THREE.BoxGeometry(0.12, 1.9, 0.12), 0x1b0f2b);
+    post.position.set(0, 2.0, 0);
+    g.add(post);
   }
 
   buildCoin(g) {
@@ -180,20 +274,24 @@ export class Booth {
   }
 
   // What you'd put down: the dice have a set price; the coin takes up to its limit.
-  stakeFor(c) { return this.kind === 'dice' ? this.stake : Math.min(this.stake, c.chips); }
+  stakeFor(c) { return this.kind === 'coin' ? Math.min(this.stake, c.chips) : this.stake; }
+
+  // A roulette table is busy if either side is spinning.
+  get busy() { return !!(this.run || this.pending || (this.mate && (this.mate.run || this.mate.pending))); }
 
   prompt(c) {
-    if (this.run || this.pending) return 'Rolling…';
+    if (this.busy) return this.kind === 'roulette' ? 'Spinning…' : 'Rolling…';
     const s = this.stakeFor(c);
+    if (this.kind === 'roulette') return `<b>${keyName('use')}</b> 🎡 Bet 🪙 ${this.stake} on ${this.pick === 'red' ? '🔴 RED' : '⚫ BLACK'} · pays 2x`;
     if (this.kind === 'dice') return `<b>${keyName('use')}</b> 🎲 Roll the dice · 🪙 ${this.stake} · doubles pay 3x`;
     if (s < 20) return '🪙 Double or Nothing: bring at least 20 raid chips';
     return `<b>${keyName('use')}</b> 🪙 Flip for ${fmt(s)}: 👑 doubles it, 💀 takes it`;
   }
 
   use(c) {
-    if (this.run || this.pending) return 'Already rolling';
+    if (this.busy) return 'Already rolling';
     const stake = this.stakeFor(c);
-    if (this.kind === 'dice' && c.chips < stake) return `Need 🪙 ${stake} raid chips (you have ${c.chips})`;
+    if (this.kind !== 'coin' && c.chips < stake) return `Need 🪙 ${stake} raid chips (you have ${c.chips})`;
     if (this.kind === 'coin' && stake < 20) return 'Bring at least 20 raid chips';
     c.chips -= stake;
     const raid = this.raid;
@@ -212,7 +310,8 @@ export class Booth {
     const raid = this.raid;
     const r = this.kind === 'dice'
       ? [1 + Math.floor(Math.random() * 6), 1 + Math.floor(Math.random() * 6)]
-      : Math.random() < 0.47 ? 'heads' : 'tails';
+      : this.kind === 'roulette' ? Math.floor(Math.random() * 37)
+        : Math.random() < 0.47 ? 'heads' : 'tails';
     const owner = by && by.isPlayer ? (raid.net ? raid.net.me : 'me') : by && by.owner;
     const name = by ? by.name : '';
     if (raid.isHost) raid.net.rel({ k: 'gms', i: raid.booths.indexOf(this), r, stake, owner, name });
@@ -241,12 +340,19 @@ export class Booth {
     const run = this.run;
     if (!run) {
       if (this.coin) this.coin.rotation.y += dt * 0.6;
+      if (this.wheel && !this.isTwin && !(this.mate && this.mate.run)) this.wheel.rotation.y += dt * 0.25;
       return;
     }
     run.t += dt;
     const T = ROLL_TIME[this.kind];
     const k = Math.min(1, run.t / T);
-    if (this.kind === 'dice') {
+    if (this.kind === 'roulette') {
+      // Fast, then slower and slower, ticking past the pointer.
+      if (run.w0 === undefined) run.w0 = this.wheel.rotation.y;
+      const ease = 1 - (1 - k) ** 3;
+      this.wheel.rotation.y = run.w0 + ease * Math.PI * 2 * 5;
+      if (Math.floor(ease * 60) !== Math.floor((1 - (1 - Math.max(0, (run.t - dt) / T)) ** 3) * 60) && k < 0.98) sfx.tick(this.position, this.raid.listener);
+    } else if (this.kind === 'dice') {
       this.dice.forEach((d, i) => {
         if (k < 0.85) {
           // Tumbling: up, over and across the felt.
@@ -284,7 +390,11 @@ export class Booth {
     let x;
     let text;
     if (this.kind === 'dice') ({ x, text } = dicePays(run.r[0], run.r[1]));
-    else { x = run.r === 'heads' ? 2 : 0; text = run.r === 'heads' ? '👑 HEADS · DOUBLED' : '💀 TAILS'; }
+    else if (this.kind === 'roulette') {
+      const color = run.r === 0 ? 'green' : RED.has(run.r) ? 'red' : 'black';
+      x = color === this.pick ? 2 : 0;
+      text = `${run.r} ${color.toUpperCase()}${x ? ' · WIN' : ''}`;
+    } else { x = run.r === 'heads' ? 2 : 0; text = run.r === 'heads' ? '👑 HEADS · DOUBLED' : '💀 TAILS'; }
     const win = Math.floor(run.stake * x);
     const top = this.position.clone().setY(3.2);
     this.showLabel(text, x > 1 ? '#5ee27a' : x === 1 ? '#fff6e0' : '#ff7b85');
@@ -293,7 +403,8 @@ export class Booth {
       raid.fx.confetti(top.clone(), win >= run.stake * 3 ? 50 : 20);
       raid.fx.number(top.clone().setY(4.4), `+${fmt(win)}`, '#ffd23f', 1.4);
     } else if (win === 0) sfx.deny();
-    if (run.name && win >= 300) raid.feed(`${this.kind === 'dice' ? '🎲' : '🪙'} ${run.name} won 🪙 ${fmt(win)} at ${this.kind === 'dice' ? 'Lucky Dice' : 'Double or Nothing'}`);
+    const game = { dice: ['🎲', 'Lucky Dice'], coin: ['🪙', 'Double or Nothing'], roulette: ['🎡', 'Roulette'] }[this.kind];
+    if (run.name && win >= 300) raid.feed(`${game[0]} ${run.name} won 🪙 ${fmt(win)} at ${game[1]}`);
     if (!run.mine) return;
     const p = raid.player;
     if (p && p.alive && win) p.chips += win;

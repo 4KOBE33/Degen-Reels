@@ -160,6 +160,8 @@ export class NavGrid {
       i = j + 1;
     }
     if (found) out[out.length - 1] = new THREE.Vector3(to.x, 0, to.z);
+    // Only got partway (it's behind a locked door, say): whoever asked should pick somewhere else.
+    out.partial = !found;
     return out;
   }
 }

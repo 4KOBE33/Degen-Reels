@@ -745,7 +745,8 @@ export class Hud {
     let line;
     if (r.tutorial && r.success) {
       title = '🎓 TUTORIAL COMPLETE!';
-      line = 'You got out alive, and everything you carried is yours to keep. Next up: pick a real map, pack a gun and go. Sell what you find at the 💰 Fence, then try your luck in the 🎰 Back Room.';
+      const stars = (this.raid && this.raid.tutorialStars) || [];
+      line = `${stars.length ? `<b class="tutstars">${'⭐'.repeat(stars.length)}${'☆'.repeat(Math.max(0, 3 - stars.length))}</b> ${stars.map(escapeHtml).join(' · ')}<br>` : '<b class="tutstars">☆☆☆</b> No bonus stars this time: try for a crit, a triple grenade kill and a flawless fight.<br>'}You got out alive, and everything you carried is yours to keep. Next up: pick a real map, pack a gun and go. Sell what you find at the 💰 Fence, then try your luck in the 🎰 Back Room.`;
     } else if (r.tutorial) {
       title = '🎓 TUTORIAL OVER';
       line = 'You left the Training Floor. You can play it again any time from the map list or Settings.';

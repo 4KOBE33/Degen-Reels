@@ -88,9 +88,17 @@ export class Raid {
 
     this.slots = this.map.slotSpots.map((s) => new SlotMachine(this, s));
     this.containers = this.map.containers.map((c) => new Container(this, c));
-    this.gunWheels = this.map.safe ? [] : this.wheelSpots().map((s) => new GunWheel(this, s));
-    // Dice tables and coin flips beside more of the slot machines.
-    this.booths = this.map.safe ? [] : this.boothSpots().map((s) => new Booth(this, s));
+    // Gun Wheels, dice tables, coin flips and roulette wheels, each by a different building, spread
+    // across the map (same spots for everyone in a party).
+    const gamble = this.map.safe || this.map.tutorial ? [] : this.gambleSpots();
+    this.gunWheels = gamble.filter((s) => s.kind === 'wheel').map((s) => new GunWheel(this, s));
+    this.booths = [];
+    for (const s of gamble.filter((g) => g.kind !== 'wheel')) {
+      const b = new Booth(this, s);
+      this.booths.push(b);
+      // Roulette has two sides to bet from: red on one, black on the other.
+      if (s.kind === 'roulette') this.booths.push(new Booth(this, { ...s, pick: 'black', twin: b }));
+    }
     this.drawDist = 115;
     this.buildVaultDoor();
     this.buildBossLock();
@@ -895,6 +903,40 @@ export class Raid {
 
   // The nearest open ground to (x, z), so nobody spawns inside a rock or a wall.
   // Gun Wheels stand beside a few of the slot machines (the same spots for everyone in a party).
+  gambleSpots() {
+    const m = this.map;
+    const big = m.half > 150;
+    const gap = big ? 30 : 14;
+    const want = big ? ['wheel', 'dice', 'roulette', 'coin', 'wheel', 'dice', 'roulette', 'coin', 'wheel'] : ['wheel', 'dice', 'roulette', 'coin', 'wheel'];
+    const out = [];
+    const clear = (x, z) => m.isFree(x, z, 2.0)
+      && Math.abs(x) < m.half - 6 && Math.abs(z) < m.half - 6
+      && !this.slots.some((sl) => Math.hypot(sl.position.x - x, sl.position.z - z) < 10)
+      && !this.containers.some((k) => Math.hypot(k.spot.x - x, k.spot.z - z) < 4)
+      && !m.extracts.some((e) => Math.hypot(e.x - x, e.z - z) < 14)
+      && !(m.casino && m.casino.w && Math.abs(x - m.casino.x) < m.casino.w / 2 + 3 && Math.abs(z - m.casino.z) < m.casino.d / 2 + 3)
+      && !out.some((o) => Math.hypot(o.x - x, o.z - z) < gap);
+    // Just outside a building (or outpost), facing away from it. Zones in a fixed shuffled order
+    // so they spread around the map instead of filling up one corner.
+    const zones = m.zones.filter((q) => q.w < 120 && q.d < 120 && q.w > 4);
+    const order = zones.map((q, i) => [((i * 2654435761) >>> 0) % 1000, q]).sort((a, b) => a[0] - b[0]).map(([, q]) => q);
+    for (const q of order) {
+      if (out.length >= want.length) break;
+      for (let k = 0; k < 8; k++) {
+        const side = (k + Math.floor(q.x + q.z)) % 4;
+        const along = ((k >> 2) ? 0.3 : -0.3);
+        const nx = side === 0 ? 1 : side === 1 ? -1 : 0;
+        const nz = side === 2 ? 1 : side === 3 ? -1 : 0;
+        const x = q.x + (nx ? (nx * q.w) / 2 + nx * 4.5 : along * q.w);
+        const z = q.z + (nz ? (nz * q.d) / 2 + nz * 4.5 : along * q.d);
+        if (!clear(x, z)) continue;
+        out.push({ x, z, rot: Math.atan2(nx, nz), kind: want[out.length] });
+        break;
+      }
+    }
+    return out;
+  }
+
   wheelSpots() {
     const spots = this.map.slotSpots;
     const out = [];
