@@ -32,7 +32,7 @@ export class RaiderBrain {
     c.brain = this;
     this.hostile = Math.random() < RAIDERS.hostileChance;
     // How good this one is: aim, reactions, movement. Some are cracked.
-    this.skill = (0.55 + Math.random() * 0.45) * (raid.map.botSkill || 1);
+    this.skill = Math.min(0.98, (0.55 + Math.random() * 0.45) * (raid.map.botSkill || 1) * (raid.map.skillScale || 1));
     this.target = null;
     this.goal = null;
     this.goalKind = null;

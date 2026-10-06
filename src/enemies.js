@@ -719,7 +719,7 @@ export class Machine {
     this.name = type === 'boss' ? bossTheme(raid.mapId).name : this.def.name;
     this.team = 'machine';
     this.isBoss = type === 'boss';
-    this.maxHp = Math.round(this.def.hp * (raid.map.toughness || 1));
+    this.maxHp = Math.round(this.def.hp * (type === 'boss' && raid.map.boss ? raid.map.boss.hp : raid.map.toughness || 1));
     this.hp = this.maxHp;
     this.armor = 0;
     this.alive = true;
@@ -742,7 +742,7 @@ export class Machine {
     this.wanderTo = null;
     // The Pit Boss gets meaner as he gets weaker: speed, fire rate and damage per phase.
     this.bossPhase = 1;
-    this.rage = { speed: 1, rate: 1, dmg: 1 };
+    this.rage = { speed: 1, rate: type === 'boss' && raid.map.boss ? raid.map.boss.rate : 1, dmg: 1 };
     this.invuln = 0;
 
     this.theme = type === 'boss' ? bossTheme(raid.mapId) : null;
@@ -975,6 +975,22 @@ export class Machine {
       if (d > 1) { mx = (dx / d) * 0.5; mz = (dz / d) * 0.5; this.yaw += angleDiff(this.yaw, Math.atan2(-dx, -dz)) * Math.min(1, dt * 3); }
     }
 
+    // Can't see who it's after: find a way round the walls instead of walking into them.
+    const tg = this.target;
+    if (tg && tg.alive && !this.seesTarget && !this.isBoss && this.type !== 'gator' && raid.nav && (mx || mz)) {
+      const wp = this.navStep(tg.pos, dt);
+      if (wp) {
+        const wx = wp.x - this.pos.x;
+        const wz = wp.z - this.pos.z;
+        const wl = Math.hypot(wx, wz);
+        if (wl > 0.3) {
+          mx = wx / wl;
+          mz = wz / wl;
+          this.yaw += angleDiff(this.yaw, Math.atan2(-wx, -wz)) * Math.min(1, dt * 5);
+        }
+      }
+    } else this.navPath = null;
+
     // The boss stays inside the casino.
     if (this.isBoss) {
       const cz = raid.map.casino;
@@ -1043,6 +1059,20 @@ export class Machine {
     return m.add(this.group.position);
   }
 
+  // The next waypoint on a path to `goal`, refreshed every second and a half.
+  navStep(goal, dt) {
+    this.navAge = (this.navAge || 0) + dt;
+    if (!this.navPath || this.navAge > 1.5 || !this.navGoal || this.navGoal.distanceTo(goal) > 4) {
+      this.navPath = this.raid.nav.find(this.pos, goal);
+      this.navGoal = goal.clone();
+      this.navAge = 0;
+    }
+    const p = this.navPath;
+    if (!p || !p.length) return null;
+    while (p.length > 1 && Math.hypot(p[0].x - this.pos.x, p[0].z - this.pos.z) < 1.5) p.shift();
+    return p[0];
+  }
+
   // Boss phases: where the weak spot is, how hard he goes, what he looks like.
   setBossPhase(n, announce = true) {
     if (!this.isBoss || n === this.bossPhase) return;
@@ -1060,6 +1090,7 @@ export class Machine {
       this.rage = { speed: 1, rate: 1, dmg: 1 };
       p.critMult = 2.5;
       p.crit.userData.crit = p.critMult;
+      this.rage.rate *= (raid.map.boss && raid.map.boss.rate) || 1;
       return;
     } else if (n === 2) {
       // OVERCLOCKED: the screen armors up, a hot core opens on his back.
@@ -1081,6 +1112,8 @@ export class Machine {
       p.critMult = 3.5;
     }
     p.crit.userData.crit = p.critMult;
+    // Bosses on harder maps attack faster.
+    this.rage.rate *= (raid.map.boss && raid.map.boss.rate) || 1;
     if (!announce) return;
     this.invuln = 1.6;
     this.windup = 1.6;

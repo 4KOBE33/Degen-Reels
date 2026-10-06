@@ -116,6 +116,15 @@ function skyDome([topC, midC, lowC]) {
 
 
 // The maps you can deploy to. Each has its own look, size and layout builder below.
+// What each danger level means, so a Hard map really is harder than a Medium one: machine health,
+// how hard everything hits you, how many machines, how many raiders (and how sharp), and the boss.
+export const DIFFICULTY = {
+  Safe: { hp: 1, dmg: 1, count: 1, raiders: 1, skill: 1, boss: { hp: 1, dmg: 1, rate: 1 } },
+  Medium: { hp: 1, dmg: 1, count: 1, raiders: 1, skill: 1, boss: { hp: 1, dmg: 1, rate: 1 } },
+  Hard: { hp: 1.35, dmg: 1.25, count: 1.3, raiders: 1.25, skill: 1.08, boss: { hp: 1.6, dmg: 1.25, rate: 1.15 } },
+  Deadly: { hp: 1.7, dmg: 1.5, count: 1.4, raiders: 1.4, skill: 1.15, boss: { hp: 2.4, dmg: 1.5, rate: 1.3 } },
+};
+
 export const MAPS = {
   vegas: {
     name: 'Lost Vegas', icon: '🌵', size: 'Huge', danger: 'Medium', half: 330, wilds: 'The Desert',
@@ -140,14 +149,14 @@ export const MAPS = {
   },
   bunker: {
     name: 'The Bunker', icon: '🥊', size: 'Small', danger: 'Deadly', half: 95, wilds: 'Service Tunnels', indoor: true,
-    blurb: 'An underground high-stakes den. Barely any machines, a pack of raiders who want your stuff, and the BEST loot in the game: every crate is vault-grade.',
+    blurb: 'An underground high-stakes den. Guard machines in every room, a pack of raiders who want your stuff, the meanest boss in the game, and the BEST loot: every crate is vault-grade.',
     sky: [0x0b0612, 0x120a1c, 0x1b0f2b], fog: 0x120a1c,
     ground: { base: '#3a3046', a: 'rgba(0,0,0,0.25)', b: 'rgba(120,90,150,0.18)' },
     mapGround: '#2b2238', hemi: [0xd8c8ff, 0x3a2a4a, 2.2], sun: [0xffe0f0, 0.6], mountains: null, glow: 0xff3fa4, tough: 1,
-    raidTime: 600, raiders: 7, hostile: 0.75,
-    // The best loot in the game (everything a tier up, an extra item per search), and raiders a
-    // notch less sharp so it's a fair fight in close quarters.
-    lootBonus: 1, lootRolls: 1, botSkill: 0.7, botAim: 2.0,
+    raidTime: 600, raiders: 9, hostile: 0.9,
+    // The best loot in the game (everything a tier up, an extra item per search). Raiders aim a
+    // little looser than outdoors so close quarters stay a fair fight.
+    lootBonus: 1, lootRolls: 1, botSkill: 0.8, botAim: 1.7,
   },
   lounge: {
     name: 'High Roller Lounge', icon: '🎩', size: 'Social', danger: 'Safe', half: 60, wilds: 'The Lounge', indoor: true,
@@ -1981,7 +1990,13 @@ export function buildMap(scene, mapId = 'vegas') {
     name: def.name,
     mapGround: def.mapGround,
     // Machines on harder maps have more health and hit harder.
-    toughness: def.tough || 1,
+    // Danger level: see DIFFICULTY.
+    toughness: (DIFFICULTY[def.danger] || DIFFICULTY.Medium).hp,
+    dmgScale: (DIFFICULTY[def.danger] || DIFFICULTY.Medium).dmg,
+    machineScale: (DIFFICULTY[def.danger] || DIFFICULTY.Medium).count,
+    raiderScale: (DIFFICULTY[def.danger] || DIFFICULTY.Medium).raiders,
+    skillScale: (DIFFICULTY[def.danger] || DIFFICULTY.Medium).skill,
+    boss: (DIFFICULTY[def.danger] || DIFFICULTY.Medium).boss,
     half: H,
     indoor: !!def.indoor,
     raidTime: def.raidTime || null,
@@ -3458,11 +3473,17 @@ function theBunker(k) {
   for (const [x, z, t] of [[-56, 45, 'crate'], [56, 45, 'crate'], [-56, -50, 'locker'], [56, -50, 'locker']]) container(t, x, z, 3);
   zones.push({ name: 'Service Tunnels', x: 0, z: 0, w: H * 2, d: H * 2, tier: 3 });
 
-  // Barely any machines down here. You're here for the other raiders.
+  // Guards in every room and patrols in the corridors, on top of the raiders.
+  const guards = ['slotbot', 'shark', 'dicer', 'bouncer', 'shark', 'dealer'];
+  rooms.forEach(([, x, z], i) => enemies(guards[i % guards.length], x, z, 1, 4));
   enemies('shark', -55, 0, 2, 20);
   enemies('shark', 55, 0, 2, 20);
   enemies('dicer', 0, 55, 2, 20);
-  enemies('slotbot', 0, -55, 1);
+  enemies('dicer', 0, -55, 2, 20);
+  enemies('slotbot', -55, -45, 1);
+  enemies('slotbot', 55, 45, 1);
+  enemies('roller', -20, 50, 2, 6);
+  enemies('roller', 20, -52, 2, 6);
 
   const extracts = [
     { name: 'Freight Elevator', x: -80, z: -78 },

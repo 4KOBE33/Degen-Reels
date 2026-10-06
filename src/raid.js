@@ -298,9 +298,16 @@ export class Raid {
     this.bots = [];
     this.combatants = this.combatants.filter((c) => c.isPlayer);
     for (const s of this.map.enemySpots) this.spawnMachine(s.type, s.x, s.z, s.y || 0);
+    // Harder maps: more of them (copies of existing spots, a few meters off).
+    const extra = Math.round(this.map.enemySpots.length * ((this.map.machineScale || 1) - 1));
+    for (let i = 0; i < extra; i++) {
+      const s = this.map.enemySpots[Math.floor(Math.random() * this.map.enemySpots.length)];
+      if (s.y) continue;
+      this.spawnMachine(s.type, s.x + (Math.random() - 0.5) * 10, s.z + (Math.random() - 0.5) * 10);
+    }
     // Bayou ponds hide gators.
     if (this.mapId === 'bayou') for (const pd of this.map.hazards.ponds) this.spawnMachine('gator', pd.x, pd.z);
-    for (let i = 0; i < (this.map.raiders ?? RAIDERS.count); i++) this.spawnRaider();
+    for (let i = 0; i < Math.round((this.map.raiders ?? RAIDERS.count) * (this.map.raiderScale || 1)); i++) this.spawnRaider();
   }
 
   spawnMachine(type, x, z, y = 0) {
@@ -592,10 +599,9 @@ export class Raid {
         call.wave++;
         const n = 2 + Math.floor(Math.random() * 2) + (call.wave === 3 ? 1 : 0);
         for (let i = 0; i < n; i++) {
-          const a = Math.random() * Math.PI * 2;
-          const r = 38 + Math.random() * 14;
           const type = pick(['dicer', 'dicer', 'shark', 'slotbot']);
-          const m = this.spawnMachine(type, e.x + Math.cos(a) * r, e.z + Math.sin(a) * r);
+          const [sx, sz] = this.reinforcementSpot(e);
+          const m = this.spawnMachine(type, sx, sz);
           if (bait && bait.alive && !bait.downed) m.target = bait;
         }
         if (p && p.alive && Math.hypot(p.pos.x - e.x, p.pos.z - e.z) < 80) this.hud.toast(`⚠️ More machines incoming! (${call.wave}/${waves.length})`);
@@ -624,6 +630,30 @@ export class Raid {
         }
       }
     }
+  }
+
+  // Where extraction reinforcements come from: out of sight but with a real way in. Indoors that
+  // means close by and somewhere with a walkable route to the exit, not behind three walls.
+  reinforcementSpot(e) {
+    const indoor = this.map.indoor;
+    for (let tries = 0; tries < 14; tries++) {
+      const a = Math.random() * Math.PI * 2;
+      const r = indoor ? 14 + Math.random() * 16 : 38 + Math.random() * 14;
+      const x = e.x + Math.cos(a) * r;
+      const z = e.z + Math.sin(a) * r;
+      if (Math.abs(x) > this.map.half - 3 || Math.abs(z) > this.map.half - 3 || !this.map.isFree(x, z, 1)) continue;
+      if (!indoor || !this.nav) return [x, z];
+      const path = this.nav.find({ x, z }, { x: e.x, z: e.z });
+      if (path && !path.partial) {
+        let len = 0;
+        let px = x;
+        let pz = z;
+        for (const w of path) { len += Math.hypot(w.x - px, w.z - pz); px = w.x; pz = w.z; }
+        if (len < 60) return [x, z];
+      }
+    }
+    const a = Math.random() * Math.PI * 2;
+    return [e.x + Math.cos(a) * (indoor ? 12 : 40), e.z + Math.sin(a) * (indoor ? 12 : 40)];
   }
 
   // Successful extraction: everything you're carrying goes to the stash.
@@ -1263,7 +1293,7 @@ export class Raid {
     if (this.isHost) this.net.ev({ k: 'tr', f: [origin.x, origin.y, origin.z], to: [hit.point.x, hit.point.y, hit.point.z], c: 0xff3fa4 }, origin);
     this.fx.muzzleFlash(origin);
     sfx.zap(origin, this.listener);
-    if (hit.target && hit.target.team !== 'machine') this.damage(hit.target, damage * this.map.toughness, m, hit.point);
+    if (hit.target && hit.target.team !== 'machine') this.damage(hit.target, damage, m, hit.point);
     else if (hit.hit) this.fx.puff(hit.point, 0xff7eb6, 0.12);
   }
 
@@ -1369,6 +1399,8 @@ export class Raid {
   damage(target, amount, attacker, at, crit = false, fromNet = false) {
     if (!target.alive || this.frozen) return;
     if (attacker && attacker !== target && attacker.team === 'machine' && target.team === 'machine') return;
+    // Harder maps hit harder: anything a machine does to a person, scaled by the map's danger.
+    if (attacker && attacker.team === 'machine' && target.team !== 'machine') amount *= (this.map.dmgScale || 1) * (attacker.isBoss && this.map.boss ? this.map.boss.dmg : 1);
     amount = Math.round(amount);
     if (amount <= 0) return;
     // Mid-roll: it whiffs.
