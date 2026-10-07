@@ -151,6 +151,9 @@ export class RaiderBrain {
   // The nearest unsearched container, so they don't walk across the whole map for one crate.
   pickContainer() {
     const { c, raid } = this;
+    // A supply drop just landed: worth the trip for a lot of them.
+    const drop = raid.airdrop && raid.airdrop.crate;
+    if (drop && !drop.opened && !drop.claimedBy && !this.skip.has(drop) && drop.spot.distanceTo(c.pos) < 160 && Math.random() < 0.6) return drop;
     let best = null;
     let bestD = Infinity;
     for (let i = 0; i < 14; i++) {

@@ -424,6 +424,14 @@ export class Hud {
       ctx.fill();
       ctx.stroke();
     }
+    // The supply drop: always on the map (pinned to the rim) until someone opens it.
+    if (raid.airdrop) {
+      const [ax, ay] = clampEdge(...toMini(raid.airdrop.x, raid.airdrop.z), 10);
+      ctx.font = '16px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('🪂', ax, ay);
+    }
     if (raid.boss && raid.boss.alive) {
       const [bx, by] = clampEdge(...toMini(raid.boss.pos.x, raid.boss.pos.z), 10);
       ctx.font = '16px sans-serif';
@@ -739,6 +747,19 @@ export class Hud {
     el.style.opacity = '0';
   }
 
+  // A red arc on the edge of the screen pointing at whoever just hit you (0 = straight ahead).
+  hurtDir(rel) {
+    let box = $('hurtdirs');
+    if (!box) { box = document.createElement('div'); box.id = 'hurtdirs'; $('hud').appendChild(box); }
+    const el = document.createElement('div');
+    el.className = 'hurtdir';
+    // Turning left is +yaw, so something on your left sits at a negative screen angle.
+    el.style.transform = `rotate(${(-rel * 180 / Math.PI).toFixed(1)}deg)`;
+    box.appendChild(el);
+    while (box.children.length > 6) box.firstChild.remove();
+    setTimeout(() => el.remove(), 1300);
+  }
+
   hurt() {
     const el = $('vignette');
     el.classList.remove('show');
@@ -799,7 +820,7 @@ export class Hud {
       line = `${r.by ? `${escapeHtml(r.by)} got you.` : 'You died.'} Everything you carried is gone.`;
     }
     $('resultsTitle').textContent = title;
-    $('resultsLine').innerHTML = `${line}${insuredNote}<br><small>Machines destroyed: ${r.run.machines} · Raiders busted: ${r.run.raiders}${(r.run.bestStreak || 0) >= 2 ? ` · 🔥 Best streak: ${r.run.bestStreak}` : ''}${r.run.boss ? ` · 👑 Took down ${this.raid && this.raid.bossName ? this.raid.bossName : 'the boss'}!` : ''}</small>`;
+    $('resultsLine').innerHTML = `${line}${insuredNote}<br><small>Machines destroyed: ${r.run.machines} · Raiders busted: ${r.run.raiders}${(r.run.bestStreak || 0) >= 2 ? ` · 🔥 Best streak: ${r.run.bestStreak}` : ''}${r.run.bounty ? ' · 💰 Bounty claimed!' : ''}${r.run.boss ? ` · 👑 Took down ${this.raid && this.raid.bossName ? this.raid.bossName : 'the boss'}!` : ''}</small>`;
     $('resultsItems').innerHTML = r.items.length || r.chips
       ? `${r.chips ? `<span class="chip">🪙 ${r.chips} chips</span>` : ''}${r.items.map((it) => `<span class="chip ${r.success ? '' : 'lost'}" style="color:${itemInfo(it).css}">${iconHtml(it)} ${escapeHtml(itemTitle(it).slice(itemInfo(it).icon.length + 1))}</span>`).join('')}`
       : '<span class="chip">Nothing</span>';

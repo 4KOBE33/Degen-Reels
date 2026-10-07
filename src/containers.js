@@ -5,7 +5,7 @@ import { rollLoot, randInt } from './items.js';
 import { sfx } from './audio.js';
 import { keyName } from './keys.js';
 
-const ICONS = { register: '💵', crate: '📦', locker: '🗄️', safe: '🔒', vault: '💎' };
+const ICONS = { register: '💵', crate: '📦', locker: '🗄️', safe: '🔒', vault: '💎', drop: '🪂' };
 // Loot tier colors, matching item rarity: common, rare, epic, legendary.
 export const TIER_COLORS = ['#cbd5e1', '#cbd5e1', '#4ea8ff', '#b56cff', '#ffc83d'];
 const TIER_DARK = ['#64748b', '#64748b', '#1d4ed8', '#6d28d9', '#b45309'];
@@ -78,6 +78,8 @@ const KINDS = {
   locker: { name: 'Locker', time: 1.6, rolls: [2, 2], tierBonus: 0, color: 0x64748b, lid: 0x94a3b8 },
   safe: { name: 'Safe', time: 2.6, rolls: [2, 3], tierBonus: 1, color: 0x1f2937, lid: 0xd4a63a },
   vault: { name: 'Vault Chest', time: 3.0, rolls: [3, 4], tierBonus: 0, color: 0x6b3a1e, lid: 0x7a4a1e },
+  // Parachuted in mid-raid (raid.js): big search, big loot.
+  drop: { name: 'Supply Drop', time: 2.4, rolls: [3, 4], tierBonus: 1, color: 0x1f2937, lid: 0xd4a63a },
 };
 
 // Every map dresses its loot differently: chip crates in Vegas, wine crates and barrels in
@@ -335,9 +337,11 @@ export class Container {
     g.position.set(x, y, z);
     g.rotation.y = rot;
     this.theme = THEMES[raid.mapId] || THEMES.vegas;
-    const { h, lid, hw } = buildModel(kind, this.theme, g);
+    const { h, lid, hw } = buildModel(kind === 'drop' ? 'safe' : kind, this.theme, g);
     raid.map.statics.add(g);
-    raid.map.addCollider({ type: 'box', minX: x - hw, maxX: x + hw, minZ: z - 0.5, maxZ: z + 0.5, top: y + h, bottom: y || undefined });
+    this.group = g;
+    this.collider = { type: 'box', minX: x - hw, maxX: x + hw, minZ: z - 0.5, maxZ: z + 0.5, top: y + h, bottom: y || undefined };
+    raid.map.addCollider(this.collider);
     this.lid = lid;
     this.lid.position.set(x, y + h + 0.06, z);
     this.lid.rotation.y = rot;
@@ -416,6 +420,14 @@ export class Container {
     }
   }
 
+  // Take it out of the world for good (a supply drop, once its raid is over).
+  dispose() {
+    const raid = this.raid;
+    raid.map.statics.remove(this.group);
+    raid.scene.remove(this.lid, this.badge, this.ring);
+    raid.map.removeCollider(this.collider);
+  }
+
   reset() {
     this.opened = false;
     this.claimedBy = null;
@@ -436,8 +448,13 @@ export class Container {
       this.badge.position.y = this.badgeY + Math.sin(t * 2.2) * 0.18;
       // Grow a bit with distance so far-off crates still read.
       // Rarer chests get a slightly bigger badge.
-      const s = (1.3 + Math.min(2.4, Math.hypot(dx, dz) / 16)) * (1 + (this.tier - 1) * 0.08);
+      const d = Math.hypot(dx, dz);
+      // Right next to it: shrink and fade the badge so it isn't a giant sign in your face (the
+      // "hold E" prompt says what it is by then).
+      const near = Math.max(0, Math.min(1, (d - 1.5) / 3));
+      const s = (1.3 + Math.min(2.4, d / 16)) * (1 + (this.tier - 1) * 0.08) * (0.55 + 0.45 * near);
       this.badge.scale.set(s, s, 1);
+      this.badge.material.opacity = 0.3 + 0.7 * near;
       this.ring.material.opacity = 0.35 + Math.sin(t * 3) * 0.2;
     }
   }

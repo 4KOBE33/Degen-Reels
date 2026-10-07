@@ -747,6 +747,7 @@ export class Session {
         if (pk) { pk.remove(); raid.pickups = raid.pickups.filter((x) => x !== pk); this.pickupsById.delete(e.id); }
         break;
       }
+      case 'adrop': raid.startAirdrop(e.x, e.z); break;
       case 'ko': {
         const k = raid.containers[e.i];
         if (k) k.showOpened();

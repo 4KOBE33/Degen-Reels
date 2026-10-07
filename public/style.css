@@ -1526,3 +1526,8 @@ body.lowhp #vignette.beat { animation: lowbeat 0.5s ease-out; }
 #killpop .kstreak.s5 { color: #c084fc; font-size: 42px; }
 @keyframes killpop { 0% { opacity: 0; transform: translateX(-50%) scale(1.6); } 12% { opacity: 1; transform: translateX(-50%) scale(1); } 75% { opacity: 1; } 100% { opacity: 0; transform: translateX(-50%) translateY(-10px); } }
 @media (prefers-reduced-motion: reduce) { #killpop.show { animation-duration: 1.2s; } body.lowhp #vignette.beat { animation: none; } }
+/* Which way you got hit from: an arc around the crosshair. */
+#hurtdirs { position: absolute; left: 50%; top: 50%; width: 0; height: 0; pointer-events: none; }
+.hurtdir { position: absolute; left: -130px; top: -130px; width: 260px; height: 260px; border-radius: 50%; animation: hurtdir 1.2s ease-out forwards; }
+.hurtdir::before { content: ''; position: absolute; left: 50%; top: 0; width: 110px; height: 22px; transform: translateX(-50%); border-radius: 50% 50% 0 0 / 100% 100% 0 0; border-top: 7px solid rgba(255, 61, 61, 0.95); filter: drop-shadow(0 0 6px rgba(255, 40, 40, 0.8)); }
+@keyframes hurtdir { 0% { opacity: 1; } 60% { opacity: 0.85; } 100% { opacity: 0; } }

@@ -100,6 +100,13 @@ export const sfx = {
     tone({ freq: 1100, to: 1500, dur: 0.1, type: 'triangle', vol: 0.12, delay: 0.03 });
   },
   hurt() { tone({ freq: 300, to: 120, dur: 0.15, type: 'sawtooth', vol: 0.12 }); },
+  // A footstep: a soft thud with a little scuff. Yours are quiet; others fade with distance.
+  step(pos, listener, own = false) {
+    const v = own ? 0.35 : Math.max(0, 1 - Math.hypot(pos.x - listener.x, pos.z - listener.z) / 24);
+    if (v <= 0.02) return;
+    noise({ dur: 0.05, vol: 0.06 * v, freq: 900 + Math.random() * 400, to: 300 });
+    tone({ freq: 90 + Math.random() * 20, to: 60, dur: 0.05, type: 'sine', vol: 0.09 * v });
+  },
   // Low health: a soft lub-dub.
   heartbeat() {
     tone({ freq: 62, to: 48, dur: 0.12, type: 'sine', vol: 0.32 });

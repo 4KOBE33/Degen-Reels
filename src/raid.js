@@ -352,6 +352,9 @@ export class Raid {
     for (const r of this.rockets) this.scene.remove(r.mesh);
     this.rockets = [];
     this.throws.clear();
+    // Last raid's supply drop goes away; everything else is good as new.
+    for (const k of this.containers) if (k.kind === 'drop') k.dispose();
+    this.containers = this.containers.filter((k) => k.kind !== 'drop');
     for (const k of this.containers) k.reset();
     for (const s of this.slots) s.user = null;
     for (const w of this.gunWheels) { w.spin = null; w.pending = null; }
@@ -440,7 +443,15 @@ export class Raid {
     this.setBossLock(false);
     this.warned = {};
     this.hurtBy = {};
+    // A replay still up from last time (left early) shouldn't follow you into this raid.
+    if (this.killcam && this.killcam.replay && this.killcam.replay.dispose) this.killcam.replay.dispose();
     this.killcam = null;
+    this.hud.killcam(null);
+    this.streak = null;
+    this.bountyOn = null;
+    this.clearAirdrop();
+    // A supply drop comes down a bit before halfway through (not in the Lounge or the tutorial).
+    this.airdropAt = !this.map.safe && !opts.tutorial && !opts.client ? this.raidTime * (0.5 + Math.random() * 0.15) : -1;
     this.run = {
       kills: 0, machines: 0, raiders: 0, gators: 0, boss: false, crits: 0, throws: 0, containers: 0, slotPulls: 0, diceSixes: 0, bestStun: 0, started: performance.now(),
     };
@@ -452,6 +463,109 @@ export class Raid {
     this.kidnap = !this.map.safe && !opts.tutorial && mobDebt() ? new Kidnap(this) : null;
     if (!this.tutorialMode) save.update((d) => { d.stats.raids++; });
     this.hud.raidIntro(this);
+    if (!this.isClient && !this.map.safe && !this.tutorialMode) this.placeBounty();
+  }
+
+  // ---------- supply drop ----------
+  // A crate on a parachute: announced, falls for a few seconds, then lands as a big Supply Drop
+  // with a gold beam over it until somebody cracks it open.
+  startAirdrop(x, z) {
+    if (this.isHost) this.net.rel({ k: 'adrop', x, z });
+    const g = new THREE.Group();
+    const chute = new THREE.Mesh(new THREE.SphereGeometry(2.6, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshLambertMaterial({ color: 0xe63946, side: THREE.DoubleSide }));
+    chute.position.y = 5;
+    const stripes = new THREE.Mesh(new THREE.SphereGeometry(2.62, 8, 8, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0xfff6e0, wireframe: true }));
+    stripes.position.y = 5;
+    const box = new THREE.Mesh(new THREE.BoxGeometry(1.4, 1.2, 1.4), new THREE.MeshLambertMaterial({ color: 0x1f2937 }));
+    box.position.y = 0.6;
+    g.add(chute, stripes, box);
+    for (const [a, b] of [[-1, -1], [1, -1], [-1, 1], [1, 1]]) {
+      const line = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 4.6), new THREE.MeshBasicMaterial({ color: 0x1b0f2b }));
+      line.position.set(a * 1.1, 3.1, b * 1.1);
+      line.rotation.set(b * 0.3, 0, -a * 0.3);
+      g.add(line);
+    }
+    g.position.set(x, 55, z);
+    this.scene.add(g);
+    const beam = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.2, 120, 16, 1, true), new THREE.MeshBasicMaterial({ color: 0xffd23f, transparent: true, opacity: 0.22, depthWrite: false, side: THREE.DoubleSide }));
+    beam.position.set(x, 60, z);
+    this.scene.add(beam);
+    this.airdrop = { x, z, g, beam, t: 0, landed: false, crate: null };
+    const zn = this.map.zones.find((q) => Math.abs(x - q.x) < q.w / 2 + 20 && Math.abs(z - q.z) < q.d / 2 + 20);
+    this.hud.toast(`🪂 SUPPLY DROP${zn ? ` near ${zn.name}` : ''}!`, 'big');
+    this.feed(`🪂 Supply drop coming down${zn ? ` near ${zn.name}` : ''}: follow the gold beam. Everyone saw it.`);
+    sfx.alert(new THREE.Vector3(x, 0, z), this.listener);
+  }
+
+  updateAirdrop(dt) {
+    if (this.airdropAt > 0 && this.active && !this.isClient && this.raidTime - this.timeLeft >= this.airdropAt) {
+      this.airdropAt = -1;
+      // Somewhere open, away from the edges.
+      for (let k = 0; k < 60; k++) {
+        const x = (Math.random() - 0.5) * this.map.half * 1.3;
+        const z = (Math.random() - 0.5) * this.map.half * 1.3;
+        if (this.map.isFree(x, z, 3) && (!this.map.casino || !this.inCasino(new THREE.Vector3(x, 0, z), 4))) { this.startAirdrop(x, z); break; }
+      }
+    }
+    const a = this.airdrop;
+    if (!a) return;
+    a.beam.material.opacity = 0.16 + Math.sin(performance.now() / 300) * 0.06;
+    if (!a.landed) {
+      a.t += dt;
+      const y = Math.max(0, 55 - a.t * 7);
+      a.g.position.y = y;
+      a.g.rotation.y += dt * 0.4;
+      a.g.children[0].visible = a.g.children[1].visible = y > 0.5;
+      if (y <= 0) {
+        a.landed = true;
+        this.scene.remove(a.g);
+        sfx.boom(new THREE.Vector3(a.x, 0, a.z), this.listener);
+        this.fx.confetti(new THREE.Vector3(a.x, 1.5, a.z), 30);
+        a.crate = new Container(this, { kind: 'drop', x: a.x, z: a.z, tier: 3 });
+        this.containers.push(a.crate);
+        this.nav.cache.clear();
+        this.nav.edges.clear();
+      }
+    } else if (a.crate && a.crate.opened) {
+      this.scene.remove(a.beam);
+      this.airdrop = null;
+    }
+  }
+
+  clearAirdrop() {
+    const a = this.airdrop;
+    if (a) { this.scene.remove(a.g); this.scene.remove(a.beam); }
+    this.airdrop = null;
+  }
+
+  // One raider has a price on their head: hostile, better armed, armored up, and worth a pile of
+  // chips to whoever busts them. Announced once the intro's done.
+  placeBounty() {
+    const pool = this.bots.filter((b) => b.c.alive && !b.duelist && !b.c.bounty);
+    if (!pool.length) return;
+    const b = pool[Math.floor(Math.random() * pool.length)];
+    const c = b.c;
+    const tough = this.map.toughness || 1;
+    c.bounty = Math.round((1200 + Math.random() * 800) * tough / 100) * 100;
+    c.name = `💰 ${c.name}`;
+    b.hostile = true;
+    b.skill = Math.min(0.98, b.skill + 0.12);
+    // Their best gun goes in hand.
+    c.weapons[0] = makeGun(pick(['ar', 'smg', 'shotgun', 'revolver', 'rifle']), Math.min(3, rollRarity(2) + 1));
+    c.active = 0;
+    c.refreshWeapon();
+    c.armor = PLAYER.maxArmor;
+    const prize = rollLoot(3);
+    c.backpack.push(makeItem('bandage', 2), prize.chips ? makeItem('cards') : prize);
+    this.bountyOn = c;
+    this.bountyPing = 50;
+    const amount = c.bounty;
+    const name = c.name.replace('💰 ', '');
+    setTimeout(() => {
+      if (!this.active || !c.alive) return;
+      this.hud.toast(`💰 BOUNTY: ${name} · 🪙 ${amount.toLocaleString('en-US')}`, 'big');
+      this.feed(`💰 Bounty on ${name}: 🪙 ${amount.toLocaleString('en-US')}. They're hostile and armed. Tips on where they are will come in.`);
+    }, 5500);
   }
 
   // ---------- extraction ----------
@@ -1475,7 +1589,7 @@ export class Raid {
       this.fx.number(at, `${amount}`, '#ff5d5d', attacker && attacker.isPlayer ? 1.1 : 0.8);
       target.hurt(attacker);
       if (attacker && attacker.isPlayer && target !== attacker) { this.hud.hitmarker(target.downHp <= 0, false); sfx.hit(); }
-      if (target.isPlayer) this.hud.hurt();
+      if (target.isPlayer) { this.hud.hurt(); this.hurtFrom(target, attacker); }
       if (target.downHp <= 0) this.kill(target, attacker);
       return;
     }
@@ -1499,6 +1613,7 @@ export class Raid {
         this.hurtBy[k] = (this.hurtBy[k] || 0) + amount;
       }
       this.hud.hurt();
+      this.hurtFrom(target, attacker);
       this.shake = Math.max(this.shake, 0.2);
       sfx.hurt();
     }
@@ -1578,7 +1693,28 @@ export class Raid {
     target.chips = 0;
     target.removeIn = 8;
     this.feed(`${attacker ? attacker.name : 'Something'} busted ${target.name}`);
+    if (target.bounty) {
+      // Bounty paid out right there: a fountain of chips anyone can grab (mostly whoever's closest).
+      this.chips.spawnBurst(at.clone().setY(1.4), target.bounty, null, { speed: 6 });
+      this.fx.confetti(at.clone().setY(1.8), 60);
+      sfx.jackpot(at, this.listener);
+      this.feed(`💰 Bounty claimed on ${target.name.replace('💰 ', '')}: 🪙 ${target.bounty.toLocaleString('en-US')} on the floor!`);
+      if (attacker && attacker.isPlayer) {
+        this.hud.toast(`💰 BOUNTY CLAIMED! Grab the 🪙 ${target.bounty.toLocaleString('en-US')}!`, 'big');
+        this.run.bounty = (this.run.bounty || 0) + 1;
+      }
+      target.bounty = 0;
+    }
     if (attacker && attacker.isPlayer) { this.run.kills++; this.run.raiders++; this.killPop(target.name, true); }
+  }
+
+  // Which way the hit came from, as an arc on the edge of the screen.
+  hurtFrom(target, attacker) {
+    if (!attacker || !attacker.pos || attacker === target) return;
+    const dx = attacker.pos.x - target.pos.x;
+    const dz = attacker.pos.z - target.pos.z;
+    if (dx * dx + dz * dz < 0.5) return;
+    this.hud.hurtDir(Math.atan2(-dx, -dz) - target.yaw);
   }
 
   // You busted something: a pop under the crosshair, a ka-ching, and a streak if they come quick.
@@ -1682,8 +1818,29 @@ export class Raid {
     this.listener.copy(this.focus).setY(1.5);
 
     if (!this.isClient) for (const b of this.bots) b.update(dt);
+    this.updateAirdrop(dt);
+    // Where's the bounty? A tip every so often.
+    const bt = this.bountyOn;
+    if (bt && this.active) {
+      if (!bt.alive || !bt.bounty) this.bountyOn = null;
+      else if ((this.bountyPing -= dt) <= 0) {
+        this.bountyPing = 45;
+        const z = this.map.zones.find((q) => Math.abs(bt.pos.x - q.x) < q.w / 2 && Math.abs(bt.pos.z - q.z) < q.d / 2);
+        const p = this.player;
+        const d = p ? Math.round(Math.hypot(bt.pos.x - p.pos.x, bt.pos.z - p.pos.z)) : 0;
+        this.feed(`💰 Tip: ${bt.name.replace('💰 ', '')} was spotted ${z ? `near ${z.name}` : 'out in the open'} (${d}m from you)`);
+      }
+    }
     for (const c of this.combatants.slice()) {
       c.update(dt);
+      // Footsteps: hear people coming before you see them.
+      if (this.active && c.alive && c.onGround && !c.downed && this.listener) {
+        const sp = Math.hypot(c.vel.x, c.vel.z);
+        if (sp > 2) {
+          c.stepT = (c.stepT || 0) + sp * dt;
+          if (c.stepT > (c.isSprinting ? 2.1 : 1.7)) { c.stepT = 0; sfx.step(c.pos, this.listener, c.isPlayer); }
+        }
+      }
       c.wantJump = false;
       if (!c.alive && !c.isPlayer) {
         c.removeIn -= dt;
