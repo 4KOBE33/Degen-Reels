@@ -728,6 +728,9 @@ export class Machine {
     this.home = new THREE.Vector3(x, y, z);
     this.yaw = Math.random() * Math.PI * 2;
     this.radius = this.def.radius || (this.isBoss ? 2.4 : type === 'dicer' ? 0.6 : type === 'gator' ? 1.0 : 0.8);
+    // What bumps into walls: no wider than the gaps paths are planned through (nav clearance 0.75),
+    // so big machines don't wedge in doorways. Shots still hit the whole model.
+    this.bodyR = this.isBoss ? this.radius : Math.min(this.radius, 0.7);
     this.target = null;
     this.lostFor = 0;
     this.thinkIn = Math.random() * 0.5;
@@ -1017,7 +1020,7 @@ export class Machine {
       const len = Math.hypot(mx, mz);
       const ux = mx / len;
       const uz = mz / len;
-      const free = (x, z) => raid.map.isFree(this.pos.x + x * 0.6, this.pos.z + z * 0.6, this.radius + 0.02);
+      const free = (x, z) => raid.map.isFree(this.pos.x + x * 0.6, this.pos.z + z * 0.6, this.bodyR + 0.02);
       if (!free(ux, uz)) {
         for (const a of [0.5, -0.5, 1.0, -1.0, 1.5, -1.5]) {
           const ang = a * this.strafe;
@@ -1044,11 +1047,11 @@ export class Machine {
     this.vel.y -= 24 * dt;
     if (this.type === 'dicer') this.vel.y = 0;
     this.pos.addScaledVector(this.vel, dt);
-    if (this.type !== 'dicer') resolve(this.pos, this.vel, this.radius, raid.map);
+    if (this.type !== 'dicer') resolve(this.pos, this.vel, this.bodyR, raid.map);
     else {
       const y = this.pos.y;
       this.pos.y = 0;
-      resolve(this.pos, this.vel, this.radius, raid.map);
+      resolve(this.pos, this.vel, this.bodyR, raid.map);
       this.pos.y = y;
     }
 
@@ -1102,7 +1105,7 @@ export class Machine {
   // Could it walk straight from a to b without bumping into anything?
   clearLine(a, b) {
     const d = Math.hypot(b.x - a.x, b.z - a.z);
-    const r = (this.radius || 0.6) + 0.1;
+    const r = (this.bodyR || 0.6) + 0.1;
     const n = Math.max(1, Math.ceil(d / 0.7));
     for (let i = 1; i <= n; i++) {
       const t = i / n;

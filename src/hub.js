@@ -35,7 +35,7 @@ export const MILLION = 1000000;
 export function betLock(b, d) {
   const need = BET_LEVEL[b] || 0;
   if (levelInfo(d.xp).level < need) return `LV${need}`;
-  if (b >= MILLION && d.stash.chips < MILLION) return '1M 🏦';
+  if (b >= MILLION && d.stash.chips < MILLION) return '🏦';
   return '';
 }
 export const chipLabel = (b) => (b >= 1000000 ? `${b / 1000000}M` : b >= 1000 ? `${b / 1000}K` : String(b));
@@ -1032,8 +1032,11 @@ export class Hub {
   }
 
   betChips(disabled = false) {
+    // Everything you can bet, plus a peek at the next one to unlock (not a wall of locked chips).
+    let teased = false;
     return `<div class="betchips"><small>BET</small>${BETS.map((b) => {
       const lock = betLock(b, this.data);
+      if (lock) { if (teased) return ''; teased = true; }
       return `<button class="cchip c${b} ${b === this.bet ? 'on' : ''} ${lock ? 'locked' : ''}" data-act="bet" data-b="${b}" ${disabled ? 'disabled' : ''} title="${lock ? (b >= MILLION ? 'Unlocks once you have a million chips' : `Unlocks at level ${BET_LEVEL[b]}`) : ''}">${chipLabel(b)}${lock ? `<i>${lock}</i>` : ''}</button>`;
     }).join('')}</div>`;
   }

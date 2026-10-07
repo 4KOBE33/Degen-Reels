@@ -130,7 +130,8 @@ export class RaiderBrain {
     const free = (x, z) => raid.map.isFree(c.pos.x + x * ahead, c.pos.z + z * ahead, 0.45);
     if (free(mx, mz)) return true;
     const side = this.strafe || 1;
-    for (const a of [0.45, -0.45, 0.9, -0.9, 1.4, -1.4]) {
+    // Up to straight back: in a narrow tunnel, along it is the only way that's open.
+    for (const a of [0.45, -0.45, 0.9, -0.9, 1.4, -1.4, 1.9, -1.9, 2.5, -2.5, Math.PI]) {
       const ang = a * side;
       const x = mx * Math.cos(ang) - mz * Math.sin(ang);
       const z = mx * Math.sin(ang) + mz * Math.cos(ang);
@@ -186,6 +187,7 @@ export class RaiderBrain {
       const score = d - (a === c.lastAttacker ? 25 : 0) - (person && this.hostile ? 8 : 0);
       if (score < bestScore) { bestScore = score; best = a; }
     }
+    if (best !== this.target) this.lastSeen = null; // where the old one was doesn't help find the new one
     if (best && best !== this.target) {
       this.reaction = (0.55 - this.skill * 0.35) + Math.random() * 0.25;
       if (best.downed && (best.isPlayer || best.human)) say(raid, c, FINISH_LINES);
@@ -269,7 +271,9 @@ export class RaiderBrain {
     }
 
     const t = this.target;
-    if (t && t.alive) this.fight(t, dt);
+    // Only fight what it's seen: a target picked through a wall it's never laid eyes on would have
+    // it backing and strafing straight into that wall. Keep doing its thing until it shows up.
+    if (t && t.alive && (this.los || this.lastSeen)) this.fight(t, dt);
     else if (this.rescue) this.doRescue(dt);
     else if (this.loot && raid.pickups.includes(this.loot)) {
       if (this.steer(this.loot.spot, dt) < 1.4) {
@@ -283,13 +287,17 @@ export class RaiderBrain {
       if (c.armor < 40 && !c.using && c.count('plate')) c.startUsing('plate');
       const d = this.steer(this.goal, dt);
       this.faceMove(dt);
-      if (this.goalKind === 'container' && d < 1.8) {
+      // Close enough to reach it, or as close as the furniture lets it get.
+      if (this.goalKind === 'container') {
+        if (d < (this.bestD ?? Infinity) - 0.3) { this.bestD = d; this.noCloser = 0; } else this.noCloser = (this.noCloser || 0) + dt;
+      } else this.bestD = undefined;
+      if (this.goalKind === 'container' && (d < 2.3 || (d < 3.2 && this.noCloser > 1.5))) {
         // Search it like a player would.
         c.move.set(0, 0);
         this.searchT += dt;
         const k = this.goalContainer;
         if (k && !k.opened && this.searchT >= (k.searchTime || 2)) { k.open(c); this.searchT = 0; }
-        if (!k || k.opened) { this.goal = null; this.searchT = 0; }
+        if (!k || k.opened) { this.goal = null; this.searchT = 0; this.bestD = undefined; this.noCloser = 0; }
       } else if (this.goalKind === 'exit' && d < 4) c.move.set(0, 0);
       else if (this.goalKind === 'wander' && d < 2) this.goal = null;
       else this.searchT = 0;

@@ -47,6 +47,7 @@ export class NavGrid {
   constructor(map) {
     this.map = map;
     this.cache = new Map();
+    this.edges = new Map();
   }
 
   key(cx, cz) { return cx * 100003 + cz; }
@@ -60,6 +61,44 @@ export class NavGrid {
       this.cache.set(k, w);
     }
     return w;
+  }
+
+  // Can you actually walk from one cell to its neighbour? Both centres can be open with a thin
+  // wall (a tunnel wall, a partition) running between them, so check the ground in between too.
+  passable(ax, az, bx, bz) {
+    const k = ax < bx || (ax === bx && az < bz) ? `${ax},${az},${bx},${bz}` : `${bx},${bz},${ax},${az}`;
+    let p = this.edges.get(k);
+    if (p === undefined) {
+      p = true;
+      for (const t of [0.25, 0.5, 0.75]) {
+        if (!this.map.isFree((ax + (bx - ax) * t) * CELL, (az + (bz - az) * t) * CELL, 0.5)) { p = false; break; }
+      }
+      this.edges.set(k, p);
+    }
+    return p;
+  }
+
+  // Straight open ground between a world point and a cell centre?
+  reach(x, z, cx, cz) {
+    const tx = cx * CELL;
+    const tz = cz * CELL;
+    const n = Math.max(1, Math.ceil(Math.hypot(tx - x, tz - z) / 0.5));
+    for (let i = 1; i <= n; i++) {
+      if (!this.map.isFree(x + (tx - x) * (i / n), z + (tz - z) * (i / n), 0.4)) return false;
+    }
+    return true;
+  }
+
+  // The cell to start (or end) on: a nearby walkable one you can actually walk to from the point,
+  // not one on the far side of a wall.
+  anchor(p) {
+    const fx = Math.floor(p.x / CELL);
+    const fz = Math.floor(p.z / CELL);
+    const cands = [];
+    for (let dx = -1; dx <= 2; dx++) for (let dz = -1; dz <= 2; dz++) cands.push([fx + dx, fz + dz]);
+    cands.sort((a, b) => Math.hypot(a[0] * CELL - p.x, a[1] * CELL - p.z) - Math.hypot(b[0] * CELL - p.x, b[1] * CELL - p.z));
+    for (const [cx, cz] of cands) if (this.walkable(cx, cz) && this.reach(p.x, p.z, cx, cz)) return [cx, cz];
+    return this.nearestWalkable(this.toCell(p.x), this.toCell(p.z));
   }
 
   // The closest walkable cell to a point (goals are often right next to a crate or wall).
@@ -97,8 +136,8 @@ export class NavGrid {
 
   // World-space waypoints from `from` to `to`, or null if there's no way there.
   find(from, to) {
-    const s = this.nearestWalkable(this.toCell(from.x), this.toCell(from.z));
-    const g = this.nearestWalkable(this.toCell(to.x), this.toCell(to.z));
+    const s = this.anchor(from);
+    const g = this.anchor(to);
     if (!s || !g) return null;
     const [sx, sz] = s;
     const [gx, gz] = g;
@@ -123,7 +162,7 @@ export class NavGrid {
       for (const [dx, dz, w] of DIRS) {
         const nx = cur.x + dx;
         const nz = cur.z + dz;
-        if (!this.walkable(nx, nz)) continue;
+        if (!this.walkable(nx, nz) || !this.passable(cur.x, cur.z, nx, nz)) continue;
         // No cutting corners through walls.
         if (dx && dz && (!this.walkable(cur.x + dx, cur.z) || !this.walkable(cur.x, cur.z + dz))) continue;
         const nk = this.key(nx, nz);

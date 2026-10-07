@@ -6,6 +6,7 @@ import { iconHtml } from './icons.js';
 import { keyName } from './keys.js';
 import { save } from './save.js';
 import { levelInfo, TIER_NAMES, lookName } from './progress.js';
+import { sfx } from './audio.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -301,6 +302,21 @@ export class Hud {
     const gap = 8 * p.aimPenalty();
     this.gap = (this.gap || gap) + (gap - (this.gap || gap)) * Math.min(1, dt * 12);
     $('crosshair').style.setProperty('--gap', `${this.gap.toFixed(1)}px`);
+    // Low health: the screen edges pulse red with a heartbeat, faster the closer you are to done.
+    const frac = p.maxHp ? p.hp / p.maxHp : 1;
+    const low = raid.active && p.alive && !p.downed && frac < 0.3;
+    document.body.classList.toggle('lowhp', low);
+    if (low) {
+      this.beatIn = (this.beatIn ?? 0) - dt;
+      if (this.beatIn <= 0) {
+        this.beatIn = 0.55 + frac * 2.2;
+        sfx.heartbeat();
+        const v = $('vignette');
+        v.classList.remove('beat');
+        void v.offsetWidth;
+        v.classList.add('beat');
+      }
+    } else this.beatIn = 0;
     if (!$('bag').hidden) this.renderBag(p);
   }
 
@@ -673,6 +689,22 @@ export class Hud {
     this.slow = 0;
   }
 
+  // "BUSTED Slotbot" under the crosshair, with a streak banner for quick kills.
+  killPop(name, streak, person) {
+    let el = $('killpop');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'killpop';
+      $('hud').appendChild(el);
+    }
+    const STREAKS = ['', '', 'DOUBLE BUST!', 'TRIPLE BUST!', 'QUAD BUST!', 'HOUSE WRECKER!'];
+    const banner = streak >= 2 ? `<div class="kstreak s${Math.min(5, streak)}">${STREAKS[Math.min(5, streak)]}${streak > 5 ? ` ×${streak}` : ''}</div>` : '';
+    el.innerHTML = `${banner}<div class="kname ${person ? 'person' : ''}">✖ BUSTED <b>${escapeHtml(name)}</b></div>`;
+    el.classList.remove('show');
+    void el.offsetWidth;
+    el.classList.add('show');
+  }
+
   hitmarker(kill, crit) {
     const el = $('hitmarker');
     el.classList.remove('show', 'kill', 'crit');
@@ -767,7 +799,7 @@ export class Hud {
       line = `${r.by ? `${escapeHtml(r.by)} got you.` : 'You died.'} Everything you carried is gone.`;
     }
     $('resultsTitle').textContent = title;
-    $('resultsLine').innerHTML = `${line}${insuredNote}<br><small>Machines destroyed: ${r.run.machines} · Raiders busted: ${r.run.raiders}${r.run.boss ? ` · 👑 Took down ${this.raid && this.raid.bossName ? this.raid.bossName : 'the boss'}!` : ''}</small>`;
+    $('resultsLine').innerHTML = `${line}${insuredNote}<br><small>Machines destroyed: ${r.run.machines} · Raiders busted: ${r.run.raiders}${(r.run.bestStreak || 0) >= 2 ? ` · 🔥 Best streak: ${r.run.bestStreak}` : ''}${r.run.boss ? ` · 👑 Took down ${this.raid && this.raid.bossName ? this.raid.bossName : 'the boss'}!` : ''}</small>`;
     $('resultsItems').innerHTML = r.items.length || r.chips
       ? `${r.chips ? `<span class="chip">🪙 ${r.chips} chips</span>` : ''}${r.items.map((it) => `<span class="chip ${r.success ? '' : 'lost'}" style="color:${itemInfo(it).css}">${iconHtml(it)} ${escapeHtml(itemTitle(it).slice(itemInfo(it).icon.length + 1))}</span>`).join('')}`
       : '<span class="chip">Nothing</span>';

@@ -100,6 +100,18 @@ export const sfx = {
     tone({ freq: 1100, to: 1500, dur: 0.1, type: 'triangle', vol: 0.12, delay: 0.03 });
   },
   hurt() { tone({ freq: 300, to: 120, dur: 0.15, type: 'sawtooth', vol: 0.12 }); },
+  // Low health: a soft lub-dub.
+  heartbeat() {
+    tone({ freq: 62, to: 48, dur: 0.12, type: 'sine', vol: 0.32 });
+    tone({ freq: 56, to: 42, dur: 0.14, type: 'sine', vol: 0.24, delay: 0.17 });
+  },
+  // You busted something: a rising two-note ka-ching, higher for each kill in a streak.
+  kill(streak = 1) {
+    const up = 1 + Math.min(4, streak - 1) * 0.12;
+    tone({ freq: 880 * up, to: 1320 * up, dur: 0.08, type: 'square', vol: 0.08 });
+    tone({ freq: 1320 * up, to: 1760 * up, dur: 0.14, type: 'triangle', vol: 0.12, delay: 0.07 });
+    if (streak >= 2) tone({ freq: 1760 * up, to: 2640 * up, dur: 0.18, type: 'triangle', vol: 0.1, delay: 0.16 });
+  },
   bonk(pos, listener) { tone({ freq: 500, to: 200, dur: 0.1, type: 'triangle', vol: 0.15 * falloff(pos, listener) }); },
   // Bigger chips make a lower, chunkier clink.
   pickup(value = 5) {

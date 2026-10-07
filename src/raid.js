@@ -192,6 +192,7 @@ export class Raid {
       if (!on && d.added) { this.map.removeCollider(d.collider); d.added = false; }
     }
     this.nav.cache.clear();
+    this.nav.edges.clear();
     const p = this.player;
     const inside = p && p.alive && this.inCasino(p.pos);
     if (on) {
@@ -235,6 +236,7 @@ export class Raid {
     this.vaultCollider.disabled = true;
     this.map.removeCollider(this.vaultCollider);
     this.nav.cache.clear();
+    this.nav.edges.clear();
     sfx.jackpot(this.vaultDoor.position, this.listener);
     this.feed(`💳 ${c.name} opened the Vault!`);
     if (c.isPlayer) this.hud.toast('🔓 THE VAULT IS OPEN… something\'s moving in there!', 'big');
@@ -1555,6 +1557,7 @@ export class Raid {
         this.run.kills++;
         this.run.machines++;
         if (target.type === 'gator') this.run.gators++;
+        this.killPop(target.isBoss ? this.bossName : target.name || 'Machine');
       }
       return;
     }
@@ -1575,7 +1578,17 @@ export class Raid {
     target.chips = 0;
     target.removeIn = 8;
     this.feed(`${attacker ? attacker.name : 'Something'} busted ${target.name}`);
-    if (attacker && attacker.isPlayer) { this.run.kills++; this.run.raiders++; }
+    if (attacker && attacker.isPlayer) { this.run.kills++; this.run.raiders++; this.killPop(target.name, true); }
+  }
+
+  // You busted something: a pop under the crosshair, a ka-ching, and a streak if they come quick.
+  killPop(name, person = false) {
+    const now = performance.now();
+    const st = this.streak && now - this.streak.t < 4500 ? this.streak.n + 1 : 1;
+    this.streak = { n: st, t: now };
+    this.run.bestStreak = Math.max(this.run.bestStreak || 0, st);
+    sfx.kill(st);
+    this.hud.killPop(name, st, person);
   }
 
   // Everything a raider was carrying, laid out around the body in rings (guns closest) with room

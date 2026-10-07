@@ -1704,8 +1704,9 @@ export class LoungeTables {
 
   chipsHtml(disabled) {
     const d = save.get();
-    return `<div class="betchips tpchips">${BETS.map((b) => {
-      const locked = !!betLock(b, d) || b > d.stash.chips;
+    // Only bets you could make right now (and can afford).
+    return `<div class="betchips tpchips">${BETS.filter((b) => !betLock(b, d) && (b <= d.stash.chips || b <= 100)).map((b) => {
+      const locked = b > d.stash.chips;
       return `<button class="cchip c${b} ${b === this.bet ? 'on' : ''}" data-act="bet" data-arg="${b}" ${disabled || locked ? 'disabled' : ''}>${chipLabel(b)}</button>`;
     }).join('')}</div>`;
   }

@@ -1510,3 +1510,19 @@ body.mapstage .hubfoot { display: none; }
 #sessGraph .sgtip { position: absolute; pointer-events: none; background: #0d0618; border: 2px solid rgba(255, 246, 224, 0.25); border-radius: 10px; padding: 6px 10px; display: grid; min-width: 110px; }
 #sessGraph .sgtip small { font-size: 11px; opacity: 0.75; font-weight: 800; }
 #sessGraph .sglegend { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 8px; font-size: 12px; font-weight: 800; opacity: 0.85; }
+/* Low health: red edges that thump with the heartbeat. */
+body.lowhp #vignette { opacity: 0.35; }
+body.lowhp #vignette.beat { animation: lowbeat 0.5s ease-out; }
+@keyframes lowbeat { 0% { opacity: 0.85; } 100% { opacity: 0.35; } }
+/* Kill pop under the crosshair. */
+#killpop { position: absolute; left: 50%; top: calc(50% + 46px); transform: translateX(-50%); text-align: center; pointer-events: none; opacity: 0; white-space: nowrap; }
+#killpop.show { animation: killpop 1.6s ease-out forwards; }
+#killpop .kname { font: 900 15px var(--body); letter-spacing: 1px; color: #fff6e0; text-shadow: 2px 2px 0 var(--ink); }
+#killpop .kname b { color: #ff6b6b; }
+#killpop .kname.person b { color: var(--gold); }
+#killpop .kstreak { font: 400 30px var(--display); color: var(--gold); text-shadow: 3px 3px 0 var(--ink); margin-bottom: 2px; }
+#killpop .kstreak.s3 { color: #ff9f43; font-size: 34px; }
+#killpop .kstreak.s4 { color: #ff6b6b; font-size: 38px; }
+#killpop .kstreak.s5 { color: #c084fc; font-size: 42px; }
+@keyframes killpop { 0% { opacity: 0; transform: translateX(-50%) scale(1.6); } 12% { opacity: 1; transform: translateX(-50%) scale(1); } 75% { opacity: 1; } 100% { opacity: 0; transform: translateX(-50%) translateY(-10px); } }
+@media (prefers-reduced-motion: reduce) { #killpop.show { animation-duration: 1.2s; } body.lowhp #vignette.beat { animation: none; } }
