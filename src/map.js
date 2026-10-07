@@ -153,7 +153,7 @@ export const MAPS = {
     sky: [0x0b0612, 0x120a1c, 0x1b0f2b], fog: 0x120a1c,
     ground: { base: '#3a3046', a: 'rgba(0,0,0,0.25)', b: 'rgba(120,90,150,0.18)' },
     mapGround: '#2b2238', hemi: [0xd8c8ff, 0x3a2a4a, 2.2], sun: [0xffe0f0, 0.6], mountains: null, glow: 0xff3fa4, tough: 1,
-    raidTime: 600, raiders: 9, hostile: 0.9,
+    raidTime: 600, raiders: 13, hostile: 0.9,
     // The best loot in the game (everything a tier up, an extra item per search). Raiders aim a
     // little looser than outdoors so close quarters stay a fair fight.
     lootBonus: 1, lootRolls: 1, botSkill: 0.8, botAim: 1.7,

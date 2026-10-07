@@ -1124,6 +1124,8 @@ export class Raid {
     if (to.where === 'weapon' && !isGun(a)) return 'Only guns go in weapon slots';
     if (to.where === 'belt' && !isConsumable(a)) return 'Only consumables go on the belt';
     if (to.where === 'pocket' && to.i >= (c.pocket || []).length) return 'No Safe Pocket this raid';
+    // Downed: the Safe Pocket stays zipped (no pulling out a Second Chance Token you kept safe).
+    if (c.downed && (from.where === 'pocket' || to.where === 'pocket')) return '🔒 Your Safe Pocket stays zipped while you\'re down';
     // Whatever's in the target slot would land where `a` was: only swap if it's allowed there.
     if (b && from.where === 'weapon' && !isGun(b)) b = null;
     if (b && from.where === 'belt' && !isConsumable(b)) b = null;
@@ -1250,6 +1252,19 @@ export class Raid {
     }
 
     c.gun.ammo--;
+    // Third person: the camera sits off your shoulder and can see round corners your body can't.
+    // Find what the crosshair is on, then shoot at it from your head, so a wall between you and
+    // it stops the bullet.
+    if (c.isPlayer) {
+      const head = c.head(new THREE.Vector3());
+      if (head.distanceToSquared(origin) > 0.0025) {
+        const aim = this.raycast(origin, dir, w.range || 200, c).point;
+        if (aim.distanceToSquared(head) > 0.01) {
+          dir = aim.sub(head).normalize();
+          origin = head;
+        }
+      }
+    }
     c.char.recoil(w.projectile ? 1.6 : 1);
     this.fx.muzzleFlash(muzzle);
     sfx.shoot(c.weapon, c.pos, this.listener);

@@ -822,7 +822,13 @@ export class Machine {
     } else if (this.def.fixed) {
       this.wanderTo = null;
     } else if (!this.target && (!this.wanderTo || Math.random() < 0.05)) {
-      this.wanderTo = this.home.clone().add(new THREE.Vector3((Math.random() - 0.5) * 16, 0, (Math.random() - 0.5) * 16));
+      // Somewhere near home it can actually stand, in plain sight of home (not inside a wall or
+      // through it in the next room). No luck: stay put.
+      this.wanderTo = this.home.clone();
+      for (let k = 0; k < 6; k++) {
+        const p = this.home.clone().add(new THREE.Vector3((Math.random() - 0.5) * 16, 0, (Math.random() - 0.5) * 16));
+        if (this.clearLine(this.home, p)) { this.wanderTo = p; break; }
+      }
     }
     if (Math.random() < 0.15) this.strafe *= -1;
   }
@@ -969,15 +975,30 @@ export class Machine {
       }
       if (this.isBoss && this.invuln <= 0) this.bossMoves(dt, t, d);
     } else if (this.wanderTo) {
-      const dx = this.wanderTo.x - this.pos.x;
-      const dz = this.wanderTo.z - this.pos.z;
+      // Wall in the way (heading home after a chase, say)? Follow a path round it.
+      this.wanderCheck = (this.wanderCheck || 0) - dt;
+      if (this.wanderCheck <= 0) {
+        this.wanderCheck = 0.5;
+        this.wanderBlocked = raid.nav && this.type !== 'gator' && !this.clearLine(this.pos, this.wanderTo);
+      }
+      const wp = this.wanderBlocked ? this.navStep(this.wanderTo, dt) || this.wanderTo : this.wanderTo;
+      const dx = wp.x - this.pos.x;
+      const dz = wp.z - this.pos.z;
       const d = Math.hypot(dx, dz);
-      if (d > 1) { mx = (dx / d) * 0.5; mz = (dz / d) * 0.5; this.yaw += angleDiff(this.yaw, Math.atan2(-dx, -dz)) * Math.min(1, dt * 3); }
+      if (d > 1 || (wp !== this.wanderTo && d > 0.3)) { mx = (dx / d) * 0.5; mz = (dz / d) * 0.5; this.yaw += angleDiff(this.yaw, Math.atan2(-dx, -dz)) * Math.min(1, dt * 3); }
     }
 
     // Can't see who it's after: find a way round the walls instead of walking into them.
     const tg = this.target;
-    if (tg && tg.alive && !this.seesTarget && !this.isBoss && this.type !== 'gator' && raid.nav && (mx || mz)) {
+    // It can see you (over a crate, through a gap) but can't walk straight there: go round.
+    if (tg && tg.alive && this.seesTarget) {
+      this.directCheck = (this.directCheck || 0) - dt;
+      if (this.directCheck <= 0) {
+        this.directCheck = 0.5;
+        this.directBlocked = Math.hypot(tg.pos.x - this.pos.x, tg.pos.z - this.pos.z) > 2.5 && !this.clearLine(this.pos, tg.pos);
+      }
+    } else this.directBlocked = false;
+    if (tg && tg.alive && (!this.seesTarget || this.directBlocked) && !this.isBoss && this.type !== 'gator' && raid.nav && (mx || mz)) {
       const wp = this.navStep(tg.pos, dt);
       if (wp) {
         const wx = wp.x - this.pos.x;
@@ -989,7 +1010,25 @@ export class Machine {
           this.yaw += angleDiff(this.yaw, Math.atan2(-wx, -wz)) * Math.min(1, dt * 5);
         }
       }
-    } else this.navPath = null;
+    } else if (!this.wanderBlocked || this.target) this.navPath = null;
+
+    // About to walk into a wall (strafing, backing off, cutting a corner)? Slide along it instead.
+    if ((mx || mz) && !this.isBoss && this.type !== 'dicer' && this.type !== 'gator') {
+      const len = Math.hypot(mx, mz);
+      const ux = mx / len;
+      const uz = mz / len;
+      const free = (x, z) => raid.map.isFree(this.pos.x + x * 0.6, this.pos.z + z * 0.6, this.radius + 0.02);
+      if (!free(ux, uz)) {
+        for (const a of [0.5, -0.5, 1.0, -1.0, 1.5, -1.5]) {
+          const ang = a * this.strafe;
+          const x = ux * Math.cos(ang) - uz * Math.sin(ang);
+          const z = ux * Math.sin(ang) + uz * Math.cos(ang);
+          if (free(x, z)) { mx = x * len; mz = z * len; break; }
+        }
+        // Boxed in every way: keep pushing (the walls slide it along) and strafe the other way next.
+        this.strafe *= -1;
+      }
+    }
 
     // The boss stays inside the casino.
     if (this.isBoss) {
@@ -1060,6 +1099,18 @@ export class Machine {
   }
 
   // The next waypoint on a path to `goal`, refreshed every second and a half.
+  // Could it walk straight from a to b without bumping into anything?
+  clearLine(a, b) {
+    const d = Math.hypot(b.x - a.x, b.z - a.z);
+    const r = (this.radius || 0.6) + 0.1;
+    const n = Math.max(1, Math.ceil(d / 0.7));
+    for (let i = 1; i <= n; i++) {
+      const t = i / n;
+      if (!this.raid.map.isFree(a.x + (b.x - a.x) * t, a.z + (b.z - a.z) * t, r)) return false;
+    }
+    return true;
+  }
+
   navStep(goal, dt) {
     this.navAge = (this.navAge || 0) + dt;
     if (!this.navPath || this.navAge > 1.5 || !this.navGoal || this.navGoal.distanceTo(goal) > 4) {

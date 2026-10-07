@@ -43,7 +43,7 @@ const hud = new Hud();
 let raid = new Raid(hud, save.get().selectedMap || 'vegas');
 const controller = new PlayerController(raid, camera, renderer.domElement);
 // Handy for poking at the game from the browser console (locally only).
-if (DEV) window.degen = raid;
+if (DEV) { window.degen = raid; window.ctl = controller; }
 raid.renderer = renderer;
 raid.camera = camera;
 raid.setOverlay = (n) => setOverlay(n);
