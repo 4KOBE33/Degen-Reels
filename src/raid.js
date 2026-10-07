@@ -512,12 +512,15 @@ export class Raid {
     a.beam.material.opacity = 0.16 + Math.sin(performance.now() / 300) * 0.06;
     if (!a.landed) {
       a.t += dt;
+      // Party: the leader says when it's down, so everyone's crate shows up at the same moment.
+      if (this.isClient && !a.hostLanded) a.t = Math.min(a.t, 7.7);
       const y = Math.max(0, 55 - a.t * 7);
       a.g.position.y = y;
       a.g.rotation.y += dt * 0.4;
       a.g.children[0].visible = a.g.children[1].visible = y > 0.5;
       if (y <= 0) {
         a.landed = true;
+        if (this.isHost) this.net.rel({ k: 'adland' });
         this.scene.remove(a.g);
         sfx.boom(new THREE.Vector3(a.x, 0, a.z), this.listener);
         this.fx.confetti(new THREE.Vector3(a.x, 1.5, a.z), 30);
@@ -563,9 +566,8 @@ export class Raid {
     const name = c.name.replace('💰 ', '');
     setTimeout(() => {
       if (!this.active || !c.alive) return;
-      this.hud.toast(`💰 BOUNTY: ${name} · 🪙 ${amount.toLocaleString('en-US')}`, 'big');
-      this.feed(`💰 Bounty on ${name}: 🪙 ${amount.toLocaleString('en-US')}. They're hostile and armed. Tips on where they are will come in.`);
-    }, 5500);
+      this.shout(`💰 Bounty on ${name}: 🪙 ${amount.toLocaleString('en-US')}. They're hostile and armed. Tips on where they are will come in.`, `💰 BOUNTY: ${name} · 🪙 ${amount.toLocaleString('en-US')}`);
+    }, 8000);
   }
 
   // ---------- extraction ----------
@@ -1698,7 +1700,7 @@ export class Raid {
       this.chips.spawnBurst(at.clone().setY(1.4), target.bounty, null, { speed: 6 });
       this.fx.confetti(at.clone().setY(1.8), 60);
       sfx.jackpot(at, this.listener);
-      this.feed(`💰 Bounty claimed on ${target.name.replace('💰 ', '')}: 🪙 ${target.bounty.toLocaleString('en-US')} on the floor!`);
+      this.shout(`💰 Bounty claimed on ${target.name.replace('💰 ', '')}: 🪙 ${target.bounty.toLocaleString('en-US')} on the floor!`);
       if (attacker && attacker.isPlayer) {
         this.hud.toast(`💰 BOUNTY CLAIMED! Grab the 🪙 ${target.bounty.toLocaleString('en-US')}!`, 'big');
         this.run.bounty = (this.run.bounty || 0) + 1;
@@ -1778,6 +1780,13 @@ export class Raid {
     this.hud.feed(text);
   }
 
+  // A feed line (and maybe a big toast) the whole party sees, not just the leader.
+  shout(text, toast = null) {
+    this.feed(text);
+    if (toast) this.hud.toast(toast, 'big');
+    if (this.isHost) this.net.rel({ k: 'fd', text, toast });
+  }
+
   // ---------- loop ----------
 
   spawnBoss() {
@@ -1826,9 +1835,7 @@ export class Raid {
       else if ((this.bountyPing -= dt) <= 0) {
         this.bountyPing = 45;
         const z = this.map.zones.find((q) => Math.abs(bt.pos.x - q.x) < q.w / 2 && Math.abs(bt.pos.z - q.z) < q.d / 2);
-        const p = this.player;
-        const d = p ? Math.round(Math.hypot(bt.pos.x - p.pos.x, bt.pos.z - p.pos.z)) : 0;
-        this.feed(`💰 Tip: ${bt.name.replace('💰 ', '')} was spotted ${z ? `near ${z.name}` : 'out in the open'} (${d}m from you)`);
+        this.shout(`💰 Tip: ${bt.name.replace('💰 ', '')} was spotted ${z ? `near ${z.name}` : 'out in the open'}`);
       }
     }
     for (const c of this.combatants.slice()) {

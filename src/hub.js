@@ -22,7 +22,7 @@ import { LookPreview } from './preview.js';
 import { BUILD } from './version.js';
 import { Shoe, cardValue, handValue, isNatural } from './cards.js';
 import { MOB_MIN, MOB_MAX, mobDebt, borrow, repay } from './mob.js';
-import { contracts, contractView, claim as claimContract, reroll as rerollContract, resetsIn, readyCount } from './contracts.js';
+import { contracts, contractView, claim as claimContract, reroll as rerollContract, resetsIn, readyCount, today } from './contracts.js';
 
 const $ = (id) => document.getElementById(id);
 const LOADOUT_SLOTS = 8;
@@ -840,6 +840,32 @@ export class Hub {
     $('title').hidden = true;
     document.body.classList.remove('titleup');
     this.render();
+    this.dailyBonus();
+  }
+
+  // Come back every day for chips: the streak climbs for a week, then the 7th day pays big and it
+  // keeps going. Miss a day and it starts over. (Not before the tutorial, which has its own gift.)
+  dailyBonus() {
+    const d = this.data;
+    if (!d.tutorialDone) return;
+    const day = today();
+    if (d.daily && d.daily.day === day) return;
+    const y = new Date();
+    y.setDate(y.getDate() - 1);
+    const yesterday = `${y.getFullYear()}-${String(y.getMonth() + 1).padStart(2, '0')}-${String(y.getDate()).padStart(2, '0')}`;
+    const streak = d.daily && d.daily.day === yesterday ? d.daily.streak + 1 : 1;
+    const PAY = [250, 400, 600, 800, 1000, 1400, 2500];
+    const slot = ((streak - 1) % 7);
+    const reward = PAY[slot];
+    save.update((x) => { x.daily = { day, streak }; x.stash.chips += reward; });
+    this.renderHeader();
+    const boxes = PAY.map((v, i) => `<div class="dbox ${i < slot ? 'got' : i === slot ? 'now' : ''}"><small>Day ${i + 1}</small><b>🪙 ${fmt(v)}</b>${i === 6 ? '<em>🎰</em>' : ''}</div>`).join('');
+    const el = document.createElement('div');
+    el.id = 'dailyBonus';
+    el.innerHTML = `<div class="dcard"><h3>🎁 Daily bonus</h3><p>${streak > 1 ? `🔥 ${streak}-day streak!` : 'Welcome back!'} Here's <b>🪙 ${fmt(reward)}</b>. Come back tomorrow for more.</p><div class="dboxes">${boxes}</div><button class="btn big" data-close="1">Nice!</button></div>`;
+    el.addEventListener('click', (e) => { if (e.target === el || e.target.closest('[data-close]')) el.remove(); });
+    document.body.appendChild(el);
+    sfx.win();
   }
 
   renderTitle() {

@@ -734,7 +734,7 @@ export class Session {
         sfx.boom(v3(e.at), raid.listener);
         raid.shake = Math.max(raid.shake, Math.max(0, 0.6 - raid.player.pos.distanceTo(v3(e.at)) / 30));
         break;
-      case 'fd': raid.hud.feed(e.text); break;
+      case 'fd': raid.hud.feed(e.text); if (e.toast) raid.hud.toast(e.toast, 'big'); break;
       case 'pn': {
         const pk = new ItemPickup(raid, v3(e.p), e.item, e.from ? v3(e.from) : null);
         pk.netId = e.id;
@@ -748,6 +748,7 @@ export class Session {
         break;
       }
       case 'adrop': raid.startAirdrop(e.x, e.z); break;
+      case 'adland': if (raid.airdrop) { raid.airdrop.hostLanded = true; raid.airdrop.t = Math.max(raid.airdrop.t, 8); } break;
       case 'ko': {
         const k = raid.containers[e.i];
         if (k) k.showOpened();
