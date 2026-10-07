@@ -20,6 +20,8 @@ const KINDS = {
   reels: { icon: '🎰', stat: 'reelsPulled', text: (n) => `Spin the Loot Reels ${n} times`, tiers: [[3, 300, 80], [8, 700, 140], [15, 1400, 220]] },
   slots: { icon: '🍒', stat: 'slotPulls', text: (n) => `Pull ${n} slot machine${n > 1 ? 's' : ''} during raids`, tiers: [[2, 350, 90], [4, 800, 150], [8, 1600, 240]] },
   blackjack: { icon: '🃏', stat: 'blackjacks', text: (n) => `Hit ${n} blackjack${n > 1 ? 's' : ''}`, tiers: [[1, 450, 100], [2, 1000, 170], [4, 2200, 260]] },
+  bounty: { icon: '💰', stat: 'bounties', text: () => 'Claim a bounty on a WANTED raider', tiers: [[1, 1200, 180], [1, 1200, 180], [1, 1200, 180]], hardOnly: true },
+  drops: { icon: '🪂', stat: 'supplyDrops', text: (n) => `Crack open ${n} supply drop${n > 1 ? 's' : ''}`, tiers: [[1, 600, 120], [1, 600, 120], [2, 1500, 220]] },
   boss: { icon: '👑', stat: 'bossKills', text: () => 'Bust a casino boss', tiers: [[1, 3500, 350], [1, 3500, 350], [1, 3500, 350]], hardOnly: true },
   map: { icon: '🗺️', stat: 'map', text: (n, m) => `Extract from ${MAPS[m] ? MAPS[m].name : m}`, tiers: [[1, 600, 120], [1, 600, 120], [1, 600, 120]] },
 };

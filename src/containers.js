@@ -1,5 +1,6 @@
 // Things you can search for loot: hold E next to one. Safes take longer but pay better.
 import * as THREE from 'three';
+import { save } from './save.js';
 import { part, toon } from './toon.js';
 import { rollLoot, randInt } from './items.js';
 import { sfx } from './audio.js';
@@ -390,7 +391,11 @@ export class Container {
     const raid = this.raid;
     // Party client: the host opens it and rolls the loot.
     if (raid.isClient) {
-      if (c && c.isPlayer) { raid.net.send({ k: 'open', i: raid.containers.indexOf(this) }); raid.run.containers++; }
+      if (c && c.isPlayer) {
+        raid.net.send({ k: 'open', i: raid.containers.indexOf(this) });
+        raid.run.containers++;
+        if (this.kind === 'drop') save.update((d) => { d.stats.supplyDrops = (d.stats.supplyDrops || 0) + 1; });
+      }
       return;
     }
     if (raid.isHost) raid.net.rel({ k: 'ko', i: raid.containers.indexOf(this) });
@@ -398,6 +403,7 @@ export class Container {
     this.badge.visible = false;
     this.ring.visible = false;
     if (c && c.isPlayer && this.raid.run) this.raid.run.containers++;
+    if (c && c.isPlayer && this.kind === 'drop') save.update((d) => { d.stats.supplyDrops = (d.stats.supplyDrops || 0) + 1; });
     this.lid.position.y = this.spot.y + this.h + 0.5;
     this.lid.rotation.x = -0.9;
     sfx.open(this.spot, this.raid.listener);

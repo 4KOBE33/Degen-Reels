@@ -1704,6 +1704,7 @@ export class Raid {
       if (attacker && attacker.isPlayer) {
         this.hud.toast(`💰 BOUNTY CLAIMED! Grab the 🪙 ${target.bounty.toLocaleString('en-US')}!`, 'big');
         this.run.bounty = (this.run.bounty || 0) + 1;
+        save.update((d) => { d.stats.bounties = (d.stats.bounties || 0) + 1; });
       }
       target.bounty = 0;
     }

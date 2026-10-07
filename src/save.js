@@ -9,6 +9,7 @@ export const STAT_DEFAULTS = {
   raids: 0, extracts: 0, deaths: 0, bossKills: 0, bestHaul: 0, totalHaul: 0, chipsExtracted: 0,
   machines: 0, raiders: 0, gators: 0, crits: 0, throws: 0, containers: 0, slotPulls: 0, diceSixes: 0, bestStun: 0,
   timePlayed: 0, revives: 0, selfRevives: 0, wagered: 0, gambleWon: 0, blackjacks: 0, crashBest: 0, rouletteGreens: 0, reelsPulled: 0, biggestWin: 0, minesBest: 0, plinkoBest: 0,
+  bounties: 0, supplyDrops: 0,
   extractsByMap: {},
 };
 
