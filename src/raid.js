@@ -453,6 +453,7 @@ export class Raid {
     this.streak = null;
     this.bountyOn = null;
     this.bountyTip = null;
+    this.golden = null;
     this.clearAirdrop();
     // A supply drop comes down a bit before halfway through (not in the Lounge or the tutorial).
     this.airdropAt = !this.map.safe && !opts.tutorial && !opts.client ? this.raidTime * (0.5 + Math.random() * 0.15) : -1;
@@ -467,7 +468,7 @@ export class Raid {
     this.kidnap = !this.map.safe && !opts.tutorial && mobDebt() ? new Kidnap(this) : null;
     if (!this.tutorialMode) save.update((d) => { d.stats.raids++; });
     this.hud.raidIntro(this);
-    if (!this.isClient && !this.map.safe && !this.tutorialMode) this.placeBounty();
+    if (!this.isClient && !this.map.safe && !this.tutorialMode) { this.placeBounty(); this.placeGolden(); }
   }
 
   // ---------- supply drop ----------
@@ -543,6 +544,25 @@ export class Raid {
     const a = this.airdrop;
     if (a) { this.scene.remove(a.g); this.scene.remove(a.beam); }
     this.airdrop = null;
+  }
+
+  // Now and then a Golden Machine is out there: it won't fight, it runs, and it's stuffed with chips.
+  placeGolden() {
+    this.golden = null;
+    if (Math.random() > 0.4) return;
+    const pool = this.machines.filter((m) => m.alive && !m.isBoss && m.type !== 'gator' && m.type !== 'dicer' && !(m.def && m.def.fixed));
+    if (!pool.length) return;
+    const m = pool[Math.floor(Math.random() * pool.length)];
+    m.golden = true;
+    m.name = `✨ Golden ${m.name}`;
+    m.maxHp = Math.round(m.maxHp * 1.6);
+    m.hp = m.maxHp;
+    m.parts.bodyMat.color.set(0xffc83d);
+    this.golden = m;
+    // Party: paint it gold on everyone's screen too (once their copy of it exists).
+    // (Said a few times: a friend still loading in would miss the first one.)
+    if (this.isHost) for (const ms of [3000, 10000, 25000, 60000]) setTimeout(() => { if (this.active && m.alive && this.golden === m) this.net.rel({ k: 'gold', i: this.net.id(m) }); }, ms);
+    setTimeout(() => { if (this.active && m.alive) this.shout('✨ Someone spotted a Golden Machine. It runs. It\'s full of chips.', '✨ A GOLDEN MACHINE is loose!'); }, 14000);
   }
 
   // One raider has a price on their head: hostile, better armed, armored up, and worth a pile of
@@ -1457,7 +1477,39 @@ export class Raid {
     }
   }
 
-  spawnRocket(pos, dir, owner, rarity = 0, damage = null) {
+  // Boss rockets: slower, a smaller blast, and a red circle on the ground where each one will land,
+  // so you can see it coming and get out (or roll through it: a dodge roll ignores the blast).
+  bossRocket(pos, dir, owner, damage, at = null) {
+    const r = this.spawnRocket(pos, dir, owner, 0, damage, { speed: 14, splash: 3, warn: true, at });
+    if (this.isHost) this.net.ev({ k: 'rk', o: [pos.x, pos.y, pos.z], d: [dir.x, dir.y, dir.z], m: 1, at: at ? [at.x, at.y, at.z] : null }, pos);
+    return r;
+  }
+
+  // Where a rocket fired from `pos` along `dir` comes down: the first wall or the ground.
+  impactPoint(pos, dir, owner) {
+    const hit = this.raycast(pos, dir, 90, owner, { solidsOnly: true });
+    let pt = hit.hit ? hit.point : null;
+    if (dir.y < -0.01) {
+      const t = -pos.y / dir.y;
+      const ground = pos.clone().addScaledVector(dir, t);
+      if (!pt || t < hit.distance) pt = ground;
+    }
+    return pt;
+  }
+
+  warnCircle(at, radius) {
+    const g = new THREE.Group();
+    const ring = new THREE.Mesh(new THREE.RingGeometry(radius - 0.22, radius, 40), new THREE.MeshBasicMaterial({ color: 0xff2d2d, transparent: true, opacity: 0.9, depthWrite: false, side: THREE.DoubleSide }));
+    const fill = new THREE.Mesh(new THREE.CircleGeometry(radius, 40), new THREE.MeshBasicMaterial({ color: 0xff2d2d, transparent: true, opacity: 0.22, depthWrite: false, side: THREE.DoubleSide }));
+    ring.rotation.x = fill.rotation.x = -Math.PI / 2;
+    g.add(fill, ring);
+    g.position.copy(at).setY(at.y + 0.06);
+    g.renderOrder = 4;
+    this.scene.add(g);
+    return g;
+  }
+
+  spawnRocket(pos, dir, owner, rarity = 0, damage = null, opts = {}) {
     const mesh = new THREE.Group();
     const body = part(new THREE.CylinderGeometry(0.12, 0.12, 0.6, 10), owner.team === 'machine' ? 0xff3fa4 : 0x5ee27a, { ink: 0.025, shadow: false });
     body.rotation.x = Math.PI / 2;
@@ -1468,7 +1520,13 @@ export class Raid {
     mesh.position.copy(pos);
     mesh.lookAt(pos.clone().sub(dir));
     this.scene.add(mesh);
-    this.rockets.push({ mesh, dir: dir.clone(), owner, rarity, damage, life: 3, trail: 0, speed: owner.team === 'machine' ? 20 : WEAPONS.rocket.speed });
+    const rk = { mesh, dir: dir.clone(), owner, rarity, damage, life: opts.speed ? 6 : 3, trail: 0, speed: opts.speed || (owner.team === 'machine' ? 20 : WEAPONS.rocket.speed), splash: opts.splash };
+    if (opts.warn) {
+      const at = opts.at || this.impactPoint(pos, dir, owner);
+      if (at) rk.warn = this.warnCircle(at, opts.splash || WEAPONS.rocket.splash);
+    }
+    this.rockets.push(rk);
+    return rk;
   }
 
   updateRockets(dt) {
@@ -1477,8 +1535,14 @@ export class Raid {
       r.life -= dt;
       const step = r.speed * dt;
       const hit = this.raycast(r.mesh.position, r.dir, step, r.owner);
+      if (r.warn) {
+        const k = 0.6 + Math.sin(performance.now() / 70) * 0.4;
+        r.warn.children[1].material.opacity = 0.5 + k * 0.5;
+        r.warn.children[0].material.opacity = 0.12 + k * 0.18;
+      }
       if (hit.hit || r.life <= 0) {
         this.explode(hit.hit ? hit.point.addScaledVector(r.dir, -0.2) : r.mesh.position.clone(), r);
+        if (r.warn) this.scene.remove(r.warn);
         this.scene.remove(r.mesh);
         this.rockets.splice(i, 1);
         continue;
@@ -1529,7 +1593,8 @@ export class Raid {
         a.vel.y += 7 * k;
         a.onGround = false;
       }
-      this.damage(a, base * (0.4 + 0.6 * k) * (k < 0.3 && d > 0.6 ? 0.35 : 1) * (a === owner ? 0.4 : 1), owner, center);
+      const floor = rocket.splash ? 0.2 : 0.4; // boss rockets: the edge of the blast barely hurts
+      this.damage(a, base * (floor + (1 - floor) * k) * (k < 0.3 && d > 0.6 ? 0.35 : 1) * (a === owner ? 0.4 : 1), owner, center);
     }
   }
 
@@ -1673,6 +1738,15 @@ export class Raid {
         if (Math.random() < def.loot) this.dropAround(at, makeItem('tooth'), 1.5);
       } else if (Math.random() < def.loot) {
         this.dropAround(at, rollLoot(tier), 1.5);
+      }
+      if (target.golden) {
+        const pile = Math.round((900 + Math.random() * 900) * (this.map.toughness || 1) / 50) * 50;
+        this.chips.spawnBurst(at.clone().setY(1.4), pile, null, { speed: 6 });
+        this.dropAround(at, rollLoot(Math.min(4, tier + 1)), 1.5);
+        this.fx.confetti(at.clone().setY(1.6), 50);
+        sfx.jackpot(at, this.listener);
+        this.shout(`✨ The Golden Machine went down: 🪙 ${pile.toLocaleString('en-US')} all over the floor!`);
+        this.golden = null;
       }
       if (attacker && attacker.isPlayer) {
         this.run.kills++;

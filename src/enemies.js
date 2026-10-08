@@ -991,6 +991,19 @@ export class Machine {
       if (d > 1 || (wp !== this.wanderTo && d > 0.3)) { mx = (dx / d) * 0.5; mz = (dz / d) * 0.5; this.yaw += angleDiff(this.yaw, Math.atan2(-dx, -dz)) * Math.min(1, dt * 3); }
     }
 
+    // The Golden Machine never fights: it runs from whoever's after it, fast, and never shoots.
+    if (this.golden && this.target) {
+      const fx = this.pos.x - this.target.pos.x;
+      const fz = this.pos.z - this.target.pos.z;
+      const fd = Math.hypot(fx, fz) || 1;
+      mx = fx / fd;
+      mz = fz / fd;
+      speed *= 1.45;
+      this.burstLeft = 0;
+      this.cooldown = Math.max(this.cooldown, 1);
+      this.yaw += angleDiff(this.yaw, Math.atan2(-mx, -mz)) * Math.min(1, dt * 6);
+    }
+
     // Can't see who it's after: find a way round the walls instead of walking into them.
     const tg = this.target;
     // It can see you (over a crate, through a gap) but can't walk straight there: go round.
@@ -1001,7 +1014,7 @@ export class Machine {
         this.directBlocked = Math.hypot(tg.pos.x - this.pos.x, tg.pos.z - this.pos.z) > 2.5 && !this.clearLine(this.pos, tg.pos);
       }
     } else this.directBlocked = false;
-    if (tg && tg.alive && (!this.seesTarget || this.directBlocked) && !this.isBoss && this.type !== 'gator' && raid.nav && (mx || mz)) {
+    if (tg && tg.alive && !this.golden && (!this.seesTarget || this.directBlocked) && !this.isBoss && this.type !== 'gator' && raid.nav && (mx || mz)) {
       const wp = this.navStep(tg.pos, dt);
       if (wp) {
         const wx = wp.x - this.pos.x;
@@ -1215,10 +1228,12 @@ export class Machine {
     for (let i = 0; i < n; i++) {
       setTimeout(() => {
         if (!this.alive || !t.alive) return;
-        const aim = t.pos.clone().add(new THREE.Vector3((Math.random() - 0.5) * 9, 0, (Math.random() - 0.5) * 9));
-        const origin = aim.clone().add(new THREE.Vector3((Math.random() - 0.5) * 4, 32, (Math.random() - 0.5) * 4));
-        this.raid.spawnRocket(origin, aim.sub(origin).normalize(), this, 0, 34);
-      }, i * 220);
+        // Straight down onto a spot near you, marked on the ground well before it lands.
+        const aim = t.pos.clone().add(new THREE.Vector3((Math.random() - 0.5) * 13, 0, (Math.random() - 0.5) * 13));
+        aim.y = this.raid.map.groundAt(aim.x, aim.z, t.pos.y + 1);
+        const origin = aim.clone().add(new THREE.Vector3(0, 30, 0));
+        this.raid.bossRocket(origin, new THREE.Vector3(0, -1, 0), this, 34, aim.clone());
+      }, i * 260);
     }
     this.raid.feed(this.theme.rain);
   }
@@ -1249,7 +1264,7 @@ export class Machine {
             const origin = this.muzzleWorld();
             origin.y += 1;
             const aim = t.pos.clone().add(new THREE.Vector3((Math.random() - 0.5) * 5, 0.5, (Math.random() - 0.5) * 5));
-            raid.spawnRocket(origin, aim.sub(origin).normalize(), this, 0, Math.round(30 * this.rage.dmg));
+            raid.bossRocket(origin, aim.sub(origin).normalize(), this, Math.round(30 * this.rage.dmg));
           }, i * 300);
         }
       }
@@ -1265,7 +1280,7 @@ export class Machine {
           const origin = this.muzzleWorld();
           origin.y += 1;
           const aim = t.pos.clone().add(new THREE.Vector3((Math.random() - 0.5) * 6, 0.5, (Math.random() - 0.5) * 6));
-          raid.spawnRocket(origin, aim.sub(origin).normalize(), this, 0, 30);
+          raid.bossRocket(origin, aim.sub(origin).normalize(), this, 30);
         }, i * 350);
       }
     } else if (roll < 0.65 && raid.machines.filter((m) => m.alive && m.type === this.theme.summon[1] && m.summoned).length < 4) {

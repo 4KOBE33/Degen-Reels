@@ -82,6 +82,14 @@ export class Session {
   register(actor, id) {
     actor.netId = id;
     this.byId.set(id, actor);
+    // The Golden Machine shows up gold once we've got our copy of it.
+    if (id === this.goldId && actor.parts) this.paintGold(actor);
+  }
+
+  paintGold(m) {
+    m.golden = true;
+    m.parts.bodyMat.color.set(0xffc83d);
+    this.raid.golden = m;
   }
 
   // Is this a person (you or a friend), not a bot?
@@ -747,6 +755,12 @@ export class Session {
         if (pk) { pk.remove(); raid.pickups = raid.pickups.filter((x) => x !== pk); this.pickupsById.delete(e.id); }
         break;
       }
+      case 'gold': {
+        this.goldId = e.i;
+        const m = this.byId.get(e.i);
+        if (m && m.parts) this.paintGold(m);
+        break;
+      }
       case 'adrop': raid.startAirdrop(e.x, e.z); break;
       case 'adland': if (raid.airdrop) { raid.airdrop.hostLanded = true; raid.airdrop.t = Math.max(raid.airdrop.t, 8); } break;
       case 'ko': {
@@ -776,7 +790,10 @@ export class Session {
         raid.throws.spawn(owner, v3(e.o), v3(e.d), e.id, e.roll);
         break;
       }
-      case 'rk': raid.spawnRocket(v3(e.o), v3(e.d), { team: 'raider', name: '?' }, e.r || 0); break;
+      case 'rk':
+        if (e.m) raid.spawnRocket(v3(e.o), v3(e.d), { team: 'machine', name: '?' }, 0, null, { speed: 14, splash: 3, warn: true, at: e.at ? v3(e.at) : null });
+        else raid.spawnRocket(v3(e.o), v3(e.d), { team: 'raider', name: '?' }, e.r || 0);
+        break;
       case 'ch': raid.chips.spawnBurst(v3(e.at), e.n, null, { speed: e.sp || 3 }); break;
       default:
     }

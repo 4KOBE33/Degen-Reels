@@ -424,6 +424,15 @@ export class Hud {
       ctx.fill();
       ctx.stroke();
     }
+    // The Golden Machine, once you're close enough to hear it jingle.
+    const gm = raid.golden;
+    if (gm && gm.alive && gm.pos.distanceTo(p.pos) < 60) {
+      const [gx, gy] = toMini(gm.pos.x, gm.pos.z);
+      ctx.font = '15px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('✨', gx, gy);
+    }
     // The supply drop: always on the map (pinned to the rim) until someone opens it.
     if (raid.airdrop) {
       const [ax, ay] = clampEdge(...toMini(raid.airdrop.x, raid.airdrop.z), 10);
