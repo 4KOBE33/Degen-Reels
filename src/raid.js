@@ -447,8 +447,12 @@ export class Raid {
     if (this.killcam && this.killcam.replay && this.killcam.replay.dispose) this.killcam.replay.dispose();
     this.killcam = null;
     this.hud.killcam(null);
+    // Anything left open on the menu (the daily bonus card) goes away once you drop in.
+    const daily = document.getElementById('dailyBonus');
+    if (daily) daily.remove();
     this.streak = null;
     this.bountyOn = null;
+    this.bountyTip = null;
     this.clearAirdrop();
     // A supply drop comes down a bit before halfway through (not in the Lounge or the tutorial).
     this.airdropAt = !this.map.safe && !opts.tutorial && !opts.client ? this.raidTime * (0.5 + Math.random() * 0.15) : -1;
@@ -1707,6 +1711,7 @@ export class Raid {
         save.update((d) => { d.stats.bounties = (d.stats.bounties || 0) + 1; });
       }
       target.bounty = 0;
+      this.bountyTip = null;
     }
     if (attacker && attacker.isPlayer) { this.run.kills++; this.run.raiders++; this.killPop(target.name, true); }
   }
@@ -1782,10 +1787,10 @@ export class Raid {
   }
 
   // A feed line (and maybe a big toast) the whole party sees, not just the leader.
-  shout(text, toast = null) {
+  shout(text, toast = null, tip = null) {
     this.feed(text);
     if (toast) this.hud.toast(toast, 'big');
-    if (this.isHost) this.net.rel({ k: 'fd', text, toast });
+    if (this.isHost) this.net.rel({ k: 'fd', text, toast, tip });
   }
 
   // ---------- loop ----------
@@ -1832,11 +1837,12 @@ export class Raid {
     // Where's the bounty? A tip every so often.
     const bt = this.bountyOn;
     if (bt && this.active) {
-      if (!bt.alive || !bt.bounty) this.bountyOn = null;
+      if (!bt.alive || !bt.bounty) { this.bountyOn = null; this.bountyTip = null; }
       else if ((this.bountyPing -= dt) <= 0) {
         this.bountyPing = 45;
         const z = this.map.zones.find((q) => Math.abs(bt.pos.x - q.x) < q.w / 2 && Math.abs(bt.pos.z - q.z) < q.d / 2);
-        this.shout(`💰 Tip: ${bt.name.replace('💰 ', '')} was spotted ${z ? `near ${z.name}` : 'out in the open'}`);
+        this.bountyTip = { x: bt.pos.x, z: bt.pos.z };
+        this.shout(`💰 Tip: ${bt.name.replace('💰 ', '')} was spotted ${z ? `near ${z.name}` : 'out in the open'} (it's on your map: M)`, null, this.bountyTip);
       }
     }
     for (const c of this.combatants.slice()) {

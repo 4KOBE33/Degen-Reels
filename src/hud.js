@@ -540,6 +540,25 @@ export class Hud {
       ctx.font = '30px sans-serif';
       ctx.fillText('👑', tx(raid.boss.pos.x), tx(raid.boss.pos.z));
     }
+    // The supply drop, and where the bounty was last seen (a dashed circle: they move).
+    if (raid.airdrop) {
+      ctx.font = '28px sans-serif';
+      ctx.fillText('🪂', tx(raid.airdrop.x), tx(raid.airdrop.z));
+    }
+    if (raid.bountyTip) {
+      const bx = tx(raid.bountyTip.x);
+      const by = tx(raid.bountyTip.z);
+      ctx.save();
+      ctx.setLineDash([6, 5]);
+      ctx.strokeStyle = '#ffd23f';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(bx, by, 26, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
+      ctx.font = '22px sans-serif';
+      ctx.fillText('💰', bx, by);
+    }
     const p = raid.player;
     ctx.save();
     ctx.translate(tx(p.pos.x), tx(p.pos.z));

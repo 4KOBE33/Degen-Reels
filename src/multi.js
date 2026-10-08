@@ -734,7 +734,7 @@ export class Session {
         sfx.boom(v3(e.at), raid.listener);
         raid.shake = Math.max(raid.shake, Math.max(0, 0.6 - raid.player.pos.distanceTo(v3(e.at)) / 30));
         break;
-      case 'fd': raid.hud.feed(e.text); if (e.toast) raid.hud.toast(e.toast, 'big'); break;
+      case 'fd': raid.hud.feed(e.text); if (e.toast) raid.hud.toast(e.toast, 'big'); if (e.tip) raid.bountyTip = e.tip; if (/Bounty claimed/.test(e.text)) raid.bountyTip = null; break;
       case 'pn': {
         const pk = new ItemPickup(raid, v3(e.p), e.item, e.from ? v3(e.from) : null);
         pk.netId = e.id;

@@ -366,9 +366,16 @@ export class RaiderBrain {
           this.strafeIn = 0.25 + Math.random() * (1.1 - this.skill * 0.6);
           if (Math.random() < 0.7) this.strafe *= -1;
         }
-        const s = 0.6 + this.skill * 0.6;
-        mx += (-dz / d) * this.strafe * s;
-        mz += (dx / d) * this.strafe * s;
+        // Walls right on both sides (a tunnel, a doorway)? Nowhere to strafe: plant and shoot
+        // instead of bouncing off one wall and then the other.
+        const px = -dz / d;
+        const pz = dx / d;
+        const room = (k) => raid.map.isFree(c.pos.x + px * 1.3 * k, c.pos.z + pz * 1.3 * k, 0.45);
+        this.boxedCheck = (this.boxedCheck || 0) - dt;
+        if (this.boxedCheck <= 0) { this.boxedCheck = 0.4; this.boxedIn = !room(1) && !room(-1); }
+        const s = this.boxedIn ? 0 : 0.6 + this.skill * 0.6;
+        mx += px * this.strafe * s;
+        mz += pz * this.strafe * s;
         // Jump peeks.
         if (this.los && this.skill > 0.7 && c.onGround && Math.random() < dt * 0.6 * this.skill) c.wantJump = true;
       }

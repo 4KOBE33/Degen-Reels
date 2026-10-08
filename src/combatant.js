@@ -365,7 +365,7 @@ export class Combatant {
       dead: !this.alive,
       downed: this.downed,
       // Hide the name tag when they're right on top of you, or it fills the screen.
-      showTag: !this.isPlayer && !(this.raid.player && this.raid.player !== this && Math.hypot(this.raid.player.pos.x - this.pos.x, this.raid.player.pos.z - this.pos.z) < 2.6),
+      showTag: !this.isPlayer && !(this.raid.player && this.raid.player !== this && Math.hypot(this.raid.player.pos.x - this.pos.x, this.raid.player.pos.z - this.pos.z) < 4.2),
       roll: this.rolling ? this.rolling.t / PLAYER.rollTime : 0,
     });
     if (!this.isPlayer) this.char.setTag(this.name, `${Math.ceil(this.hp)}`, Math.ceil(this.armor));
