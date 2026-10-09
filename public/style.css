@@ -1546,3 +1546,20 @@ body.lowhp #vignette.beat { animation: lowbeat 0.5s ease-out; }
 #dailyBonus .dbox em { font-style: normal; position: absolute; top: -10px; left: 50%; transform: translateX(-50%); }
 @keyframes dpop { 0% { transform: scale(0.8); opacity: 0; } 100% { transform: scale(1); opacity: 1; } }
 @media (max-width: 520px) { #dailyBonus .dboxes { grid-template-columns: repeat(4, 1fr); } }
+/* Sniper scope: a round lens, black all round it, a fine reticle with range marks. */
+#scope { position: absolute; inset: 0; display: none; pointer-events: none; overflow: hidden; }
+body.scoped #scope { display: block; }
+body.scoped #crosshair, body.scoped #cdRing { display: none !important; }
+#scope .lens { position: absolute; left: 50%; top: 50%; width: min(82vh, 82vw); height: min(82vh, 82vw); transform: translate(-50%, -50%); border-radius: 50%; box-shadow: 0 0 0 200vmax #07040c, inset 0 0 0 6px #111, inset 0 0 60px 22px rgba(0, 0, 0, 0.85); animation: scopesway 3.2s ease-in-out infinite; }
+#scope .sh, #scope .sv { position: absolute; background: #0b0710; }
+#scope .sh { left: 0; right: 0; top: 50%; height: 2px; margin-top: -1px; background: linear-gradient(90deg, #0b0710 0 44%, transparent 44% 56%, #0b0710 56% 100%); }
+#scope .sv { top: 0; bottom: 0; left: 50%; width: 2px; margin-left: -1px; background: linear-gradient(180deg, #0b0710 0 44%, transparent 44% 60%, #0b0710 60% 100%); }
+#scope .sh::before, #scope .sv::before { content: ''; position: absolute; background: #0b0710; }
+#scope .sh::before { left: 0; width: 22%; top: -3px; height: 8px; }
+#scope .sv::before { top: 0; height: 22%; left: -3px; width: 8px; }
+#scope .sdot { position: absolute; left: 50%; top: 50%; width: 6px; height: 6px; margin: -3px 0 0 -3px; border-radius: 50%; background: #ff2d55; box-shadow: 0 0 6px #ff2d55; }
+/* Range marks below the centre: holdovers for long shots. */
+#scope .mils { position: absolute; left: 50%; top: 60%; width: 2px; height: 30%; margin-left: -1px; background: repeating-linear-gradient(180deg, #0b0710 0 2px, transparent 2px 18px); }
+#scope .mils::before { content: ''; position: absolute; left: -10px; top: 0; width: 22px; height: 100%; background: repeating-linear-gradient(180deg, #0b0710 0 2px, transparent 2px 36px); }
+@keyframes scopesway { 0%, 100% { margin-left: 0; margin-top: 0; } 25% { margin-left: 2px; margin-top: 1px; } 50% { margin-left: 0; margin-top: 2px; } 75% { margin-left: -2px; margin-top: 1px; } }
+@media (prefers-reduced-motion: reduce) { #scope .lens { animation: none; } }

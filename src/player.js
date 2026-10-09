@@ -80,7 +80,8 @@ export class PlayerController {
         return;
       }
       // Slower turning while aiming down sights.
-      const s = BASE_SENSITIVITY * this.sensitivity * (this.aimHeld ? 0.55 : 1);
+      // Scoped in: slower still, matched to how far it zooms, so the reticle doesn't fly about.
+      const s = BASE_SENSITIVITY * this.sensitivity * (this.scoped ? this.scopeFactor * 1.1 : this.aimHeld ? 0.55 : 1);
       this.c.yaw -= e.movementX * s;
       this.c.pitch = Math.max(-1.0, Math.min(0.9, this.c.pitch - e.movementY * s));
     });
@@ -283,7 +284,13 @@ export class PlayerController {
     const raid = this.raid;
     const zoomed = c.aiming;
     this.zoom += ((zoomed ? 1 : 0) - this.zoom) * Math.min(1, dt * 12);
-    const scope = zoomed && WEAPONS[c.weapon].zoom ? 0.45 : 0.75;
+    // Scoped guns: a real scope (sniper about 5x, the rifle about 2.5x) once you're aimed in.
+    const w = WEAPONS[c.weapon] || {};
+    const scopeK = w.zoom ? (c.weapon === 'sniper' ? 0.2 : 0.4) : 0.75;
+    this.scopeFactor = scopeK;
+    this.scoped = !!(this.raid.active && zoomed && w.zoom && this.zoom > 0.6 && c.alive && !c.downed && !c.using && !c.rolling);
+    document.body.classList.toggle('scoped', this.scoped);
+    const scope = zoomed && w.zoom ? scopeK : 0.75;
     const fov = this.fov * (1 - this.zoom * (1 - scope));
     if (Math.abs(this.camera.fov - fov) > 0.01) {
       this.camera.fov = fov;
@@ -293,7 +300,7 @@ export class PlayerController {
     const head = c.head(new THREE.Vector3());
     const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(c.pitch, c.yaw, 0, 'YXZ'));
     // Downed: always third person, from a bit higher up so you can see yourself crawl.
-    const fp = this.firstPerson && c.alive && !c.downed;
+    const fp = (this.firstPerson || this.scoped) && c.alive && !c.downed;
     c.char.firstPerson(fp);
 
     if (fp) {

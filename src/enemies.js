@@ -805,7 +805,8 @@ export class Machine {
       let bestD = this.def.aggro;
       for (const a of raid.combatants) {
         if (!a.alive || a.downed) continue;
-        const d = a.pos.distanceTo(this.pos);
+        // Raider bots have to get closer before a machine bothers with them (you're the prize).
+        const d = a.pos.distanceTo(this.pos) * (a.brain && !a.human ? 1.65 : 1);
         if (d < bestD && this.canSee(a)) { bestD = d; best = a; }
       }
       if (best) {
@@ -824,13 +825,25 @@ export class Machine {
       if (!this.target) this.wanderTo = this.home.clone();
     } else if (this.def.fixed) {
       this.wanderTo = null;
-    } else if (!this.target && (!this.wanderTo || Math.random() < 0.05)) {
-      // Somewhere near home it can actually stand, in plain sight of home (not inside a wall or
-      // through it in the next room). No luck: stay put.
-      this.wanderTo = this.home.clone();
-      for (let k = 0; k < 6; k++) {
-        const p = this.home.clone().add(new THREE.Vector3((Math.random() - 0.5) * 16, 0, (Math.random() - 0.5) * 16));
-        if (this.clearLine(this.home, p)) { this.wanderTo = p; break; }
+    } else if (!this.target) {
+      // Patrol: walk somewhere near home, hang about for a few seconds, then go somewhere else.
+      // Spots in plain sight of home first; failing that, one round a corner it can path to.
+      const arrived = !this.wanderTo || Math.hypot(this.wanderTo.x - this.pos.x, this.wanderTo.z - this.pos.z) < 1.5;
+      if (arrived) this.loiter = (this.loiter ?? 1.5 + Math.random() * 3) - 0.4;
+      if (!this.wanderTo || (arrived && this.loiter <= 0) || Math.random() < 0.02) {
+        this.loiter = undefined;
+        let pick = null;
+        for (let k = 0; k < 6 && !pick; k++) {
+          const p = this.home.clone().add(new THREE.Vector3((Math.random() - 0.5) * 22, 0, (Math.random() - 0.5) * 22));
+          if (this.clearLine(this.home, p) && Math.hypot(p.x - this.pos.x, p.z - this.pos.z) > 3) pick = p;
+        }
+        if (!pick && this.raid.nav) {
+          const p = this.home.clone().add(new THREE.Vector3((Math.random() - 0.5) * 26, 0, (Math.random() - 0.5) * 26));
+          const path = this.raid.map.isFree(p.x, p.z, this.bodyR + 0.1) && this.raid.nav.find(this.pos, p);
+          if (path && !path.partial && path.length <= 4) pick = p;
+        }
+        this.wanderTo = pick || this.home.clone();
+        this.wanderCheck = 0;
       }
     }
     if (Math.random() < 0.15) this.strafe *= -1;

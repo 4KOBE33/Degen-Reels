@@ -1603,6 +1603,9 @@ export class Raid {
     if (attacker && attacker !== target && attacker.team === 'machine' && target.team === 'machine') return;
     // Harder maps hit harder: anything a machine does to a person, scaled by the map's danger.
     if (attacker && attacker.team === 'machine' && target.team !== 'machine') amount *= (this.map.dmgScale || 1) * (attacker.isBoss && this.map.boss ? this.map.boss.dmg : 1);
+    // Raider bots take it easier from machines, so they're still around (looting, fighting, coming
+    // for you) later in the raid instead of getting wiped out in the first couple of minutes.
+    if (attacker && attacker.team === 'machine' && target.brain && !target.human) amount *= 0.3;
     amount = Math.round(amount);
     if (amount <= 0) return;
     // Mid-roll: it whiffs.
