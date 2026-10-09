@@ -120,8 +120,9 @@ function skyDome([topC, midC, lowC]) {
 // how hard everything hits you, how many machines, how many raiders (and how sharp), and the boss.
 export const DIFFICULTY = {
   Safe: { hp: 1, dmg: 1, count: 1, raiders: 1, skill: 1, boss: { hp: 1, dmg: 1, rate: 1 } },
-  Medium: { hp: 1, dmg: 1, count: 1, raiders: 1, skill: 1, boss: { hp: 1, dmg: 1, rate: 1 } },
-  Hard: { hp: 1.35, dmg: 1.25, count: 1.3, raiders: 1.25, skill: 1.08, boss: { hp: 1.6, dmg: 1.25, rate: 1.15 } },
+  // Medium bosses are the ones people learn on: less health, softer hits, specials a bit slower.
+  Medium: { hp: 1, dmg: 1, count: 1, raiders: 1, skill: 1, boss: { hp: 0.7, dmg: 0.7, rate: 0.9, adds: 2, addDmg: 0.5, addSpeed: 0.75 } },
+  Hard: { hp: 1.35, dmg: 1.25, count: 1.3, raiders: 1.25, skill: 1.08, boss: { hp: 1.6, dmg: 1.25, rate: 1.15, adds: 3, addDmg: 0.75, addSpeed: 0.85 } },
   Deadly: { hp: 1.7, dmg: 1.5, count: 1.4, raiders: 1.4, skill: 1.15, boss: { hp: 2.4, dmg: 1.5, rate: 1.3 } },
 };
 

@@ -1606,6 +1606,8 @@ export class Raid {
     // Raider bots take it easier from machines, so they're still around (looting, fighting, coming
     // for you) later in the raid instead of getting wiped out in the first couple of minutes.
     if (attacker && attacker.team === 'machine' && target.brain && !target.human) amount *= 0.3;
+    // The boss's backup hits softer on easier maps.
+    if (attacker && attacker.addDmg) amount *= attacker.addDmg;
     amount = Math.round(amount);
     if (amount <= 0) return;
     // Mid-roll: it whiffs.

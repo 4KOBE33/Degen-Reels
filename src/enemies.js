@@ -912,7 +912,7 @@ export class Machine {
     const def = this.def;
     let mx = 0;
     let mz = 0;
-    let speed = def.speed * this.rage.speed;
+    let speed = def.speed * this.rage.speed * (this.addSpeed || 1);
     this.invuln = Math.max(0, this.invuln - dt);
     if (this.isBoss) {
       // Weaker = angrier.
@@ -1218,9 +1218,8 @@ export class Machine {
     }
     // Backup arrives.
     const call = n === 2 ? this.theme.adds2 : this.theme.adds3;
-    for (const type of call) {
-      const m = raid.spawnMachine(type, this.pos.x + (Math.random() - 0.5) * 12, this.pos.z + (Math.random() - 0.5) * 12);
-      m.summoned = true;
+    for (const type of call.slice(0, this.addCap(call.length))) {
+      const m = this.callAdd(type, this.pos.x + (Math.random() - 0.5) * 12, this.pos.z + (Math.random() - 0.5) * 12);
       m.target = this.target;
     }
   }
@@ -1251,6 +1250,26 @@ export class Machine {
     this.raid.feed(this.theme.rain);
   }
 
+  // Backup the boss calls in: weaker and slower on easier maps (map.boss.addDmg / addSpeed), so
+  // the fight is about the boss, not a swarm you can't outrun.
+  callAdd(type, x, z) {
+    const m = this.raid.spawnMachine(type, x, z);
+    const b = this.raid.map.boss || {};
+    m.summoned = true;
+    m.addDmg = b.addDmg ?? 1;
+    m.addSpeed = b.addSpeed ?? 1;
+    return m;
+  }
+
+  // How many of its backup can be up at once.
+  addCap(n) { const b = this.raid.map.boss; return Math.min(n, b && b.adds ? b.adds : n); }
+
+  // Easier bosses (Medium) wait a little longer between specials; harder ones keep the normal pace.
+  specialPace() {
+    const b = this.raid.map.boss;
+    return b && b.rate < 1 ? 1 / b.rate : 1;
+  }
+
   // The Pit Boss's special attacks, cycling every few seconds. More of them, faster, each phase.
   bossMoves(dt, t, d) {
     this.phase -= dt;
@@ -1259,14 +1278,13 @@ export class Machine {
     const roll = Math.random();
     const ph = this.bossPhase;
     if (ph >= 2) {
-      this.phase = (ph === 3 ? 2.2 : 3.0) + Math.random() * 1.2;
+      this.phase = ((ph === 3 ? 2.2 : 3.0) + Math.random() * 1.2) * this.specialPace();
       if (d < (ph === 3 ? 9 : 7)) raid.slam(this, ph === 3 ? 12 : 9, ph === 3 ? 42 : 34);
       else if (roll < 0.3) this.coinRing(ph === 3 ? 26 : 18, Math.round(6 * this.rage.dmg));
       else if (roll < 0.55 && ph === 3) this.jackpotRain(t, 7);
-      else if (roll < 0.55 && raid.machines.filter((m) => m.alive && m.type === this.theme.summon[0] && m.summoned).length < 3) {
+      else if (roll < 0.55 && raid.machines.filter((m) => m.alive && m.type === this.theme.summon[0] && m.summoned).length < this.addCap(3)) {
         for (let i = 0; i < 2; i++) {
-          const m = raid.spawnMachine(this.theme.summon[0], this.pos.x + (Math.random() - 0.5) * 8, this.pos.z + (Math.random() - 0.5) * 8);
-          m.summoned = true;
+          const m = this.callAdd(this.theme.summon[0], this.pos.x + (Math.random() - 0.5) * 8, this.pos.z + (Math.random() - 0.5) * 8);
           m.target = t;
         }
         raid.feed(`📣 ${this.name} called in backup!`);
@@ -1283,7 +1301,7 @@ export class Machine {
       }
       return;
     }
-    this.phase = 3.5 + Math.random() * 1.5;
+    this.phase = (3.5 + Math.random() * 1.5) * this.specialPace();
     if (d < 7) {
       raid.slam(this, 8, 30);
     } else if (roll < 0.4) {
@@ -1296,10 +1314,9 @@ export class Machine {
           raid.bossRocket(origin, aim.sub(origin).normalize(), this, 30);
         }, i * 350);
       }
-    } else if (roll < 0.65 && raid.machines.filter((m) => m.alive && m.type === this.theme.summon[1] && m.summoned).length < 4) {
+    } else if (roll < 0.65 && raid.machines.filter((m) => m.alive && m.type === this.theme.summon[1] && m.summoned).length < this.addCap(4)) {
       for (let i = 0; i < 2; i++) {
-        const m = raid.spawnMachine(this.theme.summon[1], this.pos.x + (Math.random() - 0.5) * 8, this.pos.z + (Math.random() - 0.5) * 8);
-        m.summoned = true;
+        const m = this.callAdd(this.theme.summon[1], this.pos.x + (Math.random() - 0.5) * 8, this.pos.z + (Math.random() - 0.5) * 8);
         m.target = t;
       }
       raid.feed(`📣 ${this.name} whistled for more help!`);
