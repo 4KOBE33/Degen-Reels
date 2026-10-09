@@ -473,6 +473,27 @@ body.killcam #app canvas { filter: saturate(0.45) contrast(1.1); }
 .payline { position: absolute; left: 4px; right: 4px; top: 50%; height: 4px; margin-top: -2px; background: rgba(230, 57, 70, 0.75); border-radius: 2px; box-shadow: 0 0 8px #e63946; pointer-events: none; }
 .cabinet.bigwin { animation: bigwin 0.5s ease-in-out 4 alternate; }
 @keyframes bigwin { to { box-shadow: 0 0 40px 8px #ffd23f, inset 0 6px 0 rgba(255, 255, 255, 0.2); } }
+.slots5 { background: linear-gradient(#7c2bd9, #3b0d78); }
+.slots5 .reel { background: linear-gradient(#d9cdb6, #fff8e6 25%, #fff8e6 75%, #d9cdb6); }
+.slots5 .strip span { transition: transform 0.2s; }
+.slots5 .strip span.hit { animation: slotHit 0.6s ease-in-out infinite alternate; }
+.slots5 .strip span.star { animation: slotStar 0.5s ease-in-out infinite alternate; }
+@keyframes slotHit { from { transform: scale(1); filter: drop-shadow(0 0 2px #ffd23f); } to { transform: scale(1.18); filter: drop-shadow(0 0 10px #ffd23f); } }
+@keyframes slotStar { from { transform: rotate(-8deg) scale(1); filter: drop-shadow(0 0 4px #60a5fa); } to { transform: rotate(8deg) scale(1.2); filter: drop-shadow(0 0 12px #60a5fa); } }
+.slines { position: absolute; inset: 8px; width: calc(100% - 16px); height: calc(100% - 16px); pointer-events: none; overflow: visible; }
+.slines polyline { fill: none; stroke: #ff3fa4; stroke-width: 0.07; stroke-linecap: round; stroke-linejoin: round; opacity: 0.85; filter: drop-shadow(0 0 0.06px #ffd23f); vector-effect: none; animation: slineGlow 0.6s ease-in-out infinite alternate; }
+@keyframes slineGlow { to { stroke: #ffd23f; } }
+.lanemarks { position: absolute; left: -6px; right: -6px; top: 8px; bottom: 8px; display: grid; grid-template-rows: repeat(3, 1fr); pointer-events: none; }
+.lanemarks i { position: relative; }
+.lanemarks i::before, .lanemarks i::after { content: ''; position: absolute; top: 50%; margin-top: -5px; border: 5px solid transparent; }
+.lanemarks i::before { left: 0; border-left-color: #ffd23f; }
+.lanemarks i::after { right: 0; border-right-color: #ffd23f; }
+.prize.slotwin { border-color: #ffd23f; }
+.prize.slotwin.r2, .prize.slotwin.r3 { border-color: var(--rc); }
+.prize.slotwin { animation: slotPop 0.3s ease-out; }
+@keyframes slotPop { from { opacity: 0; transform: scale(0.9); } }
+@media (min-width: 900px) and (min-height: 700px) { .gview .cabinet.slots5 { zoom: 1.3; } }
+.slinesl span { display: inline-block; margin-right: 10px; letter-spacing: 0; }
 .spinbtn { width: 100%; margin: 0; }
 .prize { display: flex; gap: 14px; align-items: center; text-align: left; width: 100%; max-width: 520px; padding: 12px 16px; border-radius: 16px; border: 4px solid var(--rc, #9ca3af); background: rgba(255, 255, 255, 0.06); animation: kcIn 0.35s ease-out; }
 .prize.empty { justify-content: center; text-align: center; opacity: 0.7; border-style: dashed; font-weight: 800; animation: none; }

@@ -3756,27 +3756,39 @@ function theLounge(k) {
   const GH = 4; // gallery height
   const GW = 4; // gallery width
   const RO = R + GW;
-  // A roulette-wheel floor: red and black wedges round a gold ring.
+  // An LED floor: a dark grid of glowing tiles that brighten toward the middle, gold rings and the
+  // house spade in the centre.
   const wedges = canvasTexture(1024, 1024, (c, w) => {
     const r = w / 2;
-    for (let i = 0; i < 24; i++) {
-      c.beginPath();
-      c.moveTo(r, r);
-      c.arc(r, r, r, (i / 24) * Math.PI * 2, ((i + 1) / 24) * Math.PI * 2);
-      c.closePath();
-      c.fillStyle = i % 2 ? '#1b0f2b' : '#8c1230';
-      c.fill();
+    c.fillStyle = '#0c0718';
+    c.fillRect(0, 0, w, w);
+    const n = 28;
+    const cell = w / n;
+    for (let i = 0; i < n; i++) {
+      for (let j = 0; j < n; j++) {
+        const cx = (i + 0.5) * cell;
+        const cy = (j + 0.5) * cell;
+        const d = Math.hypot(cx - r, cy - r) / r;
+        if (d > 0.97) continue;
+        const ring = Math.floor(d * 7);
+        c.fillStyle = ring % 2 ? `rgba(46, 230, 214, ${0.1 + 0.25 * (1 - d)})` : `rgba(255, 63, 164, ${0.12 + 0.28 * (1 - d)})`;
+        c.fillRect(cx - cell * 0.42, cy - cell * 0.42, cell * 0.84, cell * 0.84);
+      }
     }
-    c.lineWidth = 10;
-    c.strokeStyle = '#d4a63a';
-    for (const rr of [r * 0.98, r * 0.47, r * 0.2]) { c.beginPath(); c.arc(r, r, rr, 0, Math.PI * 2); c.stroke(); }
-    c.fillStyle = '#2a1748';
-    c.beginPath(); c.arc(r, r, r * 0.2, 0, Math.PI * 2); c.fill();
+    c.lineWidth = 12;
+    c.shadowBlur = 24;
+    for (const [rr, col] of [[r * 0.97, '#ffd23f'], [r * 0.62, '#2ee6d6'], [r * 0.3, '#ffd23f']]) {
+      c.shadowColor = col;
+      c.strokeStyle = col;
+      c.beginPath(); c.arc(r, r, rr, 0, Math.PI * 2); c.stroke();
+    }
+    c.shadowBlur = 0;
+    c.fillStyle = '#1b0f2b';
+    c.beginPath(); c.arc(r, r, r * 0.3 - 6, 0, Math.PI * 2); c.fill();
+    // Lane stripes from each spawn pad toward the middle.
+    c.fillStyle = 'rgba(255, 210, 63, 0.35)';
+    for (const sx of [-1, 1]) for (let k = 0; k < 4; k++) c.fillRect(r + sx * (r * 0.38 + k * 34) - 8, r - 30, 16, 60);
   });
-  const mat = new THREE.Mesh(new THREE.CircleGeometry(R, 64), new THREE.MeshBasicMaterial({ map: wedges }));
-  mat.rotation.x = -Math.PI / 2;
-  mat.position.y = 0.06;
-  statics.add(mat);
   // Spawn pads: red on the west, blue on the east.
   for (const [side, col] of [[-1, 0xff3f5f], [1, 0x3fa9ff]]) {
     const pad = new THREE.Mesh(new THREE.CircleGeometry(1.6, 32), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.55 }));
@@ -3806,40 +3818,90 @@ function theLounge(k) {
   });
   banner.wrapS = THREE.RepeatWrapping;
   banner.repeat.set(-2, 1); // negative so the words read the right way from inside the pit
-  const innerWall = new THREE.Mesh(new THREE.CylinderGeometry(R, R, GH, 64, 1, true), toon(0x3a1d5c, { side: THREE.BackSide }));
+  const innerWall = new THREE.Mesh(new THREE.CylinderGeometry(R, R, GH, 64, 1, true), toon(0x1a0d2e, { side: THREE.BackSide }));
   innerWall.position.y = GH / 2;
   const band = new THREE.Mesh(new THREE.CylinderGeometry(R - 0.05, R - 0.05, 1.0, 64, 1, true), new THREE.MeshBasicMaterial({ map: banner, side: THREE.BackSide }));
   band.position.y = 2.4;
-  const pad = part(new THREE.TorusGeometry(R - 0.1, 0.22, 8, 64), 0xb5172b, { ink: 0.01, shadow: false });
+  const pad = part(new THREE.TorusGeometry(R - 0.1, 0.22, 8, 64), 0x2a1748, { ink: 0.01, shadow: false });
   pad.rotation.x = Math.PI / 2;
   pad.position.y = 0.9;
   statics.add(innerWall, band, pad);
+  // Neon strips round the inside of the pit wall: cyan at the floor, pink under the gallery lip.
+  for (const [y, col] of [[0.25, 0x2ee6d6], [1.75, 0xff3fa4], [3.1, 0xff3fa4], [GH - 0.12, 0x2ee6d6]]) {
+    const strip = new THREE.Mesh(new THREE.TorusGeometry(R - 0.12, 0.06, 6, 96), new THREE.MeshBasicMaterial({ color: col }));
+    strip.rotation.x = Math.PI / 2;
+    strip.position.y = y;
+    statics.add(strip);
+  }
   // The gallery: a ring floor 4m up, an outer wall down to the casino floor, and a gold rail on
   // the inside edge.
-  const deck = new THREE.Mesh(new THREE.RingGeometry(R, RO, 64), toon(0x5a2a6a, { side: THREE.DoubleSide }));
+  const deck = new THREE.Mesh(new THREE.RingGeometry(R, RO, 64), toon(0x2a1748, { side: THREE.DoubleSide }));
   deck.rotation.x = -Math.PI / 2;
   deck.position.y = GH;
-  const carpetRing = new THREE.Mesh(new THREE.RingGeometry(R + 0.8, RO - 0.6, 64), new THREE.MeshBasicMaterial({ color: 0x7a1028, side: THREE.DoubleSide }));
+  const carpetRing = new THREE.Mesh(new THREE.RingGeometry(R + 0.8, RO - 0.6, 64), new THREE.MeshBasicMaterial({ color: 0x6a0f2c, side: THREE.DoubleSide }));
   carpetRing.rotation.x = -Math.PI / 2;
   carpetRing.position.y = GH + 0.02;
-  const outerWall = new THREE.Mesh(new THREE.CylinderGeometry(RO, RO, GH, 64, 1, true), toon(0x2b1640));
+  // The outside of the stadium, seen from the casino floor: a dark facade with a lit marquee band,
+  // gold columns and neon at the top and bottom.
+  const outerWall = new THREE.Mesh(new THREE.CylinderGeometry(RO, RO, GH, 64, 1, true), toon(0x1a0d2e));
   outerWall.position.y = GH / 2;
-  statics.add(deck, carpetRing, outerWall);
-  for (const [y, r] of [[GH + 1.05, R + 0.15], [GH + 0.55, R + 0.15]]) {
-    const rail = part(new THREE.TorusGeometry(r, y > GH + 1 ? 0.09 : 0.05, 6, 80), 0xd4a63a, { ink: 0.01, shadow: false });
-    rail.rotation.x = Math.PI / 2;
-    rail.position.y = y;
-    statics.add(rail);
+  const marqueeTex = canvasTexture(2048, 160, (c, w, h) => {
+    const g = c.createLinearGradient(0, 0, 0, h);
+    g.addColorStop(0, '#2a0f3a'); g.addColorStop(0.5, '#4a1a5c'); g.addColorStop(1, '#2a0f3a');
+    c.fillStyle = g;
+    c.fillRect(0, 0, w, h);
+    for (let x = 12; x < w; x += 32) for (const y of [10, h - 10]) { c.fillStyle = (x / 32) % 2 < 1 ? '#ffd23f' : '#fff6e0'; c.beginPath(); c.arc(x, y, 6, 0, Math.PI * 2); c.fill(); }
+    const bits = ['THE PIT', '★', '1 v 1', '★', 'WINNER TAKES ALL', '★', 'PLACE YOUR BETS', '★'];
+    c.font = "bold 76px 'Luckiest Guy', 'Arial Black', sans-serif";
+    c.textBaseline = 'middle';
+    c.shadowBlur = 18;
+    let x = 30;
+    let k = 0;
+    while (x < w) {
+      const t = bits[k % bits.length];
+      const col = t === '★' ? '#ffd23f' : ['#ff3fa4', '#2ee6d6', '#fff6e0'][Math.floor(k / 2) % 3];
+      c.shadowColor = col;
+      c.fillStyle = col;
+      c.fillText(t, x, h / 2 + 4);
+      x += c.measureText(t).width + 50;
+      k++;
+    }
+  });
+  marqueeTex.wrapS = THREE.RepeatWrapping;
+  marqueeTex.repeat.set(3, 1);
+  const marquee = new THREE.Mesh(new THREE.CylinderGeometry(RO + 0.06, RO + 0.06, 1.3, 96, 1, true), new THREE.MeshBasicMaterial({ map: marqueeTex }));
+  marquee.position.y = 2.3;
+  statics.add(deck, carpetRing, outerWall, marquee);
+  for (const [y, col] of [[0.12, 0xff3fa4], [1.55, 0xffd23f], [3.05, 0xffd23f], [GH - 0.06, 0x2ee6d6]]) {
+    const strip = new THREE.Mesh(new THREE.TorusGeometry(RO + 0.08, 0.07, 6, 96), new THREE.MeshBasicMaterial({ color: col }));
+    strip.rotation.x = Math.PI / 2;
+    strip.position.y = y;
+    statics.add(strip);
   }
-  for (let i = 0; i < 32; i++) {
-    const a = (i / 32) * Math.PI * 2;
-    const post = part(new THREE.CylinderGeometry(0.06, 0.06, 1.1, 6), 0xd4a63a, { ink: 0, shadow: false });
+  for (let i = 0; i < 12; i++) {
+    const a = ((i + 0.5) / 12) * Math.PI * 2;
+    const col = part(new THREE.BoxGeometry(0.5, GH, 0.5), 0xd4a63a, { ink: 0.02, shadow: false });
+    col.position.set(Math.cos(a) * (RO + 0.2), GH / 2, Math.sin(a) * (RO + 0.2));
+    col.rotation.y = -a;
+    const cap = new THREE.Mesh(new THREE.SphereGeometry(0.3, 10, 8), new THREE.MeshBasicMaterial({ color: i % 2 ? 0xff3fa4 : 0x2ee6d6 }));
+    cap.position.set(Math.cos(a) * (RO + 0.2), GH + 0.3, Math.sin(a) * (RO + 0.2));
+    statics.add(col, cap);
+  }
+  // A glass rail round the inside edge of the gallery, with a neon top bar.
+  const glass = new THREE.Mesh(new THREE.CylinderGeometry(R + 0.15, R + 0.15, 1.1, 96, 1, true), new THREE.MeshBasicMaterial({ color: 0x9be7ff, transparent: true, opacity: 0.14, depthWrite: false, side: THREE.DoubleSide }));
+  glass.position.y = GH + 0.55;
+  const topBar = new THREE.Mesh(new THREE.TorusGeometry(R + 0.15, 0.08, 6, 96), new THREE.MeshBasicMaterial({ color: 0x2ee6d6 }));
+  topBar.rotation.x = Math.PI / 2;
+  topBar.position.y = GH + 1.1;
+  const footBar = part(new THREE.TorusGeometry(R + 0.15, 0.06, 6, 96), 0xd4a63a, { ink: 0, shadow: false });
+  footBar.rotation.x = Math.PI / 2;
+  footBar.position.y = GH + 0.05;
+  statics.add(glass, topBar, footBar);
+  for (let i = 0; i < 24; i++) {
+    const a = (i / 24) * Math.PI * 2;
+    const post = part(new THREE.CylinderGeometry(0.05, 0.05, 1.1, 6), 0xd8dce6, { ink: 0, shadow: false });
     post.position.set(Math.cos(a) * (R + 0.15), GH + 0.55, Math.sin(a) * (R + 0.15));
     statics.add(post);
-    // Neon strip lights round the outside of the gallery.
-    const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.14, 8, 6), new THREE.MeshBasicMaterial({ color: i % 2 ? 0xff3fa4 : 0xffd23f }));
-    bulb.position.set(Math.cos(a) * (RO + 0.05), GH - 0.25, Math.sin(a) * (RO + 0.05));
-    statics.add(bulb);
   }
   // Solid gallery: overlapping posts of floor round the ring (you can walk on top), a rail you
   // can't fall over, and walls that keep the fight in the pit.
@@ -3878,8 +3940,8 @@ function theLounge(k) {
     k.addRayBlocker(-2, 2, Math.min(z0, z1), Math.max(z0, z1), 0, GH);
   }
   // Spotlights from the ceiling down onto the pit floor.
-  for (const [x, z] of [[-6, -6], [6, 6], [-6, 6], [6, -6]]) {
-    const cone = new THREE.Mesh(new THREE.ConeGeometry(3.2, CEIL - 0.5, 24, 1, true), new THREE.MeshBasicMaterial({ color: 0xfff1b8, transparent: true, opacity: 0.07, depthWrite: false, side: THREE.DoubleSide }));
+  for (const [x, z, col] of [[-6, -6, 0xff3fa4], [6, 6, 0xff3fa4], [-6, 6, 0x2ee6d6], [6, -6, 0x2ee6d6]]) {
+    const cone = new THREE.Mesh(new THREE.ConeGeometry(3.2, CEIL - 0.5, 24, 1, true), new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.08, depthWrite: false, side: THREE.DoubleSide }));
     cone.position.set(x, (CEIL - 0.5) / 2, z);
     statics.add(cone);
   }
@@ -3983,13 +4045,51 @@ function theLounge(k) {
     statics.add(holder);
     circle(x, z, 1.35, 2.2);
   }
-  const pitSign = neonSign('THE PIT', '#ff3fa4', 14);
-  pitSign.position.set(0, 7.5, 0);
-  statics.add(pitSign);
-  const pitSign2 = neonSign('THE PIT', '#ff3fa4', 14);
-  pitSign2.position.set(0, 7.5, 0);
-  pitSign2.rotation.y = Math.PI;
-  statics.add(pitSign2);
+  // A jumbotron hanging over the middle of the pit, a screen on each side.
+  const screenTex = canvasTexture(512, 192, (c, w, h) => {
+    c.fillStyle = '#07040f';
+    c.fillRect(0, 0, w, h);
+    c.fillStyle = 'rgba(46, 230, 214, 0.08)';
+    for (let y = 0; y < h; y += 4) c.fillRect(0, y, w, 2);
+    c.textAlign = 'center';
+    c.textBaseline = 'middle';
+    c.shadowBlur = 20;
+    c.shadowColor = '#ff3fa4';
+    c.fillStyle = '#ff3fa4';
+    c.font = "bold 88px 'Luckiest Guy', 'Arial Black', sans-serif";
+    c.fillText('THE PIT', w / 2, h * 0.42);
+    c.shadowColor = '#2ee6d6';
+    c.fillStyle = '#2ee6d6';
+    c.font = "bold 30px 'Luckiest Guy', 'Arial Black', sans-serif";
+    c.fillText('♠ 1v1 · WINNER TAKES ALL ♠', w / 2, h * 0.8);
+  });
+  const jumbo = new THREE.Group();
+  jumbo.position.set(0, 8.1, 0);
+  const jbody = part(new THREE.BoxGeometry(6, 2.3, 6), 0x1b0f2b, { ink: 0.02, shadow: false });
+  jumbo.add(jbody);
+  const screenMat = new THREE.MeshBasicMaterial({ map: screenTex });
+  for (let i = 0; i < 4; i++) {
+    const a = (i / 4) * Math.PI * 2;
+    const scr = new THREE.Mesh(new THREE.PlaneGeometry(5.5, 2.0), screenMat);
+    scr.position.set(Math.sin(a) * 3.02, 0, Math.cos(a) * 3.02);
+    scr.rotation.y = a;
+    jumbo.add(scr);
+  }
+  for (const y of [1.2, -1.2]) {
+    const trim = part(new THREE.BoxGeometry(6.3, 0.18, 6.3), 0xd4a63a, { ink: 0, shadow: false });
+    trim.position.y = y;
+    jumbo.add(trim);
+  }
+  const under = new THREE.Mesh(new THREE.CircleGeometry(2.2, 32), new THREE.MeshBasicMaterial({ color: 0xffd23f }));
+  under.rotation.x = Math.PI / 2;
+  under.position.y = -1.3;
+  jumbo.add(under);
+  for (const [cx, cz] of [[-2.5, -2.5], [2.5, 2.5], [-2.5, 2.5], [2.5, -2.5]]) {
+    const cable = part(new THREE.CylinderGeometry(0.04, 0.04, CEIL - 9.25, 4), 0x0a0614, { ink: 0, shadow: false });
+    cable.position.set(cx, (CEIL - 8.1 + 1.15) / 2, cz);
+    jumbo.add(cable);
+  }
+  statics.add(jumbo);
   zones.push({ name: 'The Pit', x: 0, z: 0, w: R * 2, d: R * 2, tier: 1 });
   minimap.push({ x: 0, z: 0, w: R * 2, d: R * 2, color: '#7a1028', label: 'The Pit' });
 
@@ -4014,14 +4114,15 @@ function theLounge(k) {
   // Every Back Room game has a table here, plus the Showdown table for poker. The games themselves
   // (wheels, cards, rockets, reels) are built on top by tables.js; the reels and Plinko are full
   // cabinets of their own, so they get no round table.
+  // Two rows down the east and west sides, well clear of The Pit and its ramps.
   const tables = [
-    { x: -34, z: -32, game: 'blackjack', label: 'BLACKJACK', color: '#5ee27a' },
-    { x: 34, z: -32, game: 'roulette', label: 'ROULETTE', color: '#ff5d5d' },
-    { x: -34, z: 32, game: 'crash', label: 'CRASH', color: '#2ee6d6' },
-    { x: 34, z: 32, game: 'mines', label: 'MINES', color: '#c77dff' },
-    { x: -24, z: 0, game: 'plinko', label: 'PLINKO', color: '#ff9f1c' },
-    { x: 24, z: 0, game: 'poker', label: 'POKER SHOWDOWN', color: '#ffd23f' },
-    { x: 0, z: -34, game: 'slots', label: 'LOOT REELS', color: '#ff3fa4' },
+    { x: -38, z: -28, game: 'blackjack', label: 'BLACKJACK', color: '#5ee27a' },
+    { x: -40, z: 0, game: 'plinko', label: 'PLINKO', color: '#ff9f1c' },
+    { x: -38, z: 28, game: 'crash', label: 'CRASH', color: '#2ee6d6' },
+    { x: 38, z: -28, game: 'roulette', label: 'ROULETTE', color: '#ff5d5d' },
+    { x: 38, z: 0, game: 'poker', label: 'POKER SHOWDOWN', color: '#ffd23f' },
+    { x: 38, z: 28, game: 'mines', label: 'MINES', color: '#c77dff' },
+    { x: 0, z: -40, game: 'slots', label: 'LOOT REELS', color: '#ff3fa4' },
   ];
   const CABINETS = ['slots', 'plinko'];
   const felt = toon(0x1f8a4c);
@@ -4034,6 +4135,33 @@ function theLounge(k) {
     top.position.set(tx, 1.12, tz);
     statics.add(leg, rimT, top);
     circle(tx, tz, 2.6, 1.15);
+  }
+  // Every game sits on its own round rug with a glowing edge, with brass lamps round it.
+  for (const t of tables) {
+    const col = new THREE.Color(t.color);
+    const rug = new THREE.Mesh(new THREE.CircleGeometry(5.4, 40), new THREE.MeshBasicMaterial({ color: col.clone().multiplyScalar(0.22) }));
+    rug.rotation.x = -Math.PI / 2;
+    rug.position.set(t.x, 0.045, t.z);
+    const edge = new THREE.Mesh(new THREE.RingGeometry(5.4, 5.75, 48), new THREE.MeshBasicMaterial({ color: col }));
+    edge.rotation.x = -Math.PI / 2;
+    edge.position.set(t.x, 0.05, t.z);
+    const inner = new THREE.Mesh(new THREE.RingGeometry(4.7, 4.82, 48), new THREE.MeshBasicMaterial({ color: 0xd4a63a }));
+    inner.rotation.x = -Math.PI / 2;
+    inner.position.set(t.x, 0.05, t.z);
+    statics.add(rug, edge, inner);
+    for (let i = 0; i < 4; i++) {
+      const a = Math.PI / 4 + (i * Math.PI) / 2;
+      const lx = t.x + Math.cos(a) * 5.2;
+      const lz = t.z + Math.sin(a) * 5.2;
+      const pole = part(new THREE.CylinderGeometry(0.07, 0.1, 2.4, 8), 0xd4a63a, { ink: 0.02, shadow: false });
+      pole.position.set(lx, 1.2, lz);
+      const foot = part(new THREE.CylinderGeometry(0.3, 0.35, 0.12, 12), 0xd4a63a, { ink: 0, shadow: false });
+      foot.position.set(lx, 0.06, lz);
+      const globe = new THREE.Mesh(new THREE.SphereGeometry(0.26, 12, 10), new THREE.MeshBasicMaterial({ color: col.clone().lerp(new THREE.Color(0xffffff), 0.45) }));
+      globe.position.set(lx, 2.55, lz);
+      statics.add(pole, foot, globe);
+      circle(lx, lz, 0.25, 2.4);
+    }
   }
   // A long bar on the north wall.
   const bar = part(new THREE.BoxGeometry(30, 1.25, 2.2), 0x6b3a1e);
@@ -4078,13 +4206,13 @@ function theLounge(k) {
     if (bz < 0) bs.rotation.y = Math.PI;
     statics.add(bs);
   }
-  const lights = [[0, 0, 0xff3fa4], [-35, -30, 0xffd23f], [35, -30, 0x2ee6d6], [-35, 30, 0xc77dff], [35, 30, 0xffd23f], [0, 40, 0x5ee27a], [-26, 50, 0xfff1d6]];
+  const lights = [[0, 0, 0xff3fa4], [-38, -14, 0xffd23f], [38, -14, 0x2ee6d6], [-38, 14, 0xc77dff], [38, 14, 0xffd23f], [0, -40, 0xff3fa4], [0, 45, 0x5ee27a]];
   return {
     casino: { x: 0, z: 0, w: 0, d: 0, doors: [] },
     vault: { x: 0, z: -5000, doorZ: -5000 },
     extracts: [],
     lights,
-    spawns: [[-40, 40], [40, 40], [-40, -40], [40, -40], [-20, 45], [20, 45], [-45, 0], [45, 0]],
+    spawns: [[-40, 42], [40, 42], [-40, -42], [40, -42], [-20, 45], [20, 45], [-22, 0], [22, 0]],
     lounge: { arena: { x: 0, z: 0, r: R }, champion: { x: 8, z: 25 }, exit: { x: 0, z: H - 3.5 }, tables, armory: { x: -26, z: H - 4.5, rot: Math.PI } },
   };
 }

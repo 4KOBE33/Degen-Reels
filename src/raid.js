@@ -439,6 +439,7 @@ export class Raid {
     this.elapsed = 0;
     for (const e of this.extracts) { e.call = null; e.cooldown = 0; if (e.ride) e.ride.visible = false; }
     this.bossSpawned = false;
+    this.bossWarned = false;
     this.boss = null;
     this.setBossLock(false);
     this.warned = {};
@@ -1984,6 +1985,11 @@ export class Raid {
       this.elapsed += dt;
     } else {
       this.timeLeft -= dt;
+    }
+    // A heads-up half a minute before the boss arrives.
+    if (!this.map.noBoss && !this.bossSpawned && !this.bossWarned && this.active && this.raidTime - this.timeLeft >= BOSS_TIME - 30) {
+      this.bossWarned = true;
+      this.hud.toast(`👑 ${this.bossName} hits the casino floor in 30 seconds!`, 'big');
     }
     if (!this.isClient && !this.bossSpawned && !this.map.noBoss && this.elapsed >= BOSS_TIME) this.spawnBoss();
     // The Lounge never locks down.

@@ -1,7 +1,7 @@
 // The Hub between raids: stash and loadout, the Back Room (gambling), the Fence (selling),
 // your look, your records (stats, achievements, collection log) and settings.
 // Everything here is plain HTML on top of the 3D backdrop.
-import { GUN_TIERS, bossTheme, BACKPACK_SLOTS, BAG_UPGRADES, HUB_SLOTS, ITEMS, LOOT, QUALITY, RARITY_BY_TIER, WEAPONS, bagBonus } from './config.js';
+import { BOSS_TIME, GUN_TIERS, bossTheme, BACKPACK_SLOTS, BAG_UPGRADES, HUB_SLOTS, ITEMS, LOOT, QUALITY, RARITY_BY_TIER, WEAPONS, bagBonus } from './config.js';
 import {
   itemInfo, isGun, rollLoot, addToList, addToStash, makeGun, makeItem, fullAmmo, weightedIndex, holdRoom, holdLimitText,
 } from './items.js';
@@ -40,6 +40,8 @@ export function betLock(b, d) {
 }
 export const chipLabel = (b) => (b >= 1000000 ? `${b / 1000000}M` : b >= 1000 ? `${b / 1000}K` : String(b));
 const fmt = (n) => Math.round(n).toLocaleString('en-US');
+// Seconds as a raid clock reading (14:00).
+const clock = (t) => `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, '0')}`;
 const hex = (c) => `#${Number(c).toString(16).padStart(6, '0')}`;
 
 // ---------- card games ----------
@@ -99,6 +101,53 @@ export function reelPull(m) {
 }
 export const PRIZE_SYMBOL = ['🍒', '🔔', '7️⃣', '💎'];
 
+// ---------- Lucky Slots (Back Room) ----------
+// Three reels, three rows, five paylines (the rows and both diagonals). Bet anything: each line
+// plays a fifth of it. Three of a kind on a line pays; two cherries from the left pay a little;
+// three or more ⭐ anywhere start free spins. 7️⃣ and 💎 lines also throw in a gun. About 92% back
+// in chips over time, plus the guns.
+const SLOT_W = { '🍒': 24, '🍋': 22, '🎲': 18, '🔔': 15, '🪙': 11, '⭐': 6, '7️⃣': 6, '💎': 3 };
+const SLOT_PAY = { '🍒': 14, '🍋': 21, '🎲': 10, '🔔': 42, '🪙': 85, '7️⃣': 210, '💎': 777 };
+const SLOT_CHERRY2 = 3.5;
+const SLOT_FREE = { 3: 8, 4: 12, 5: 15 };
+const SLOT_LINES = [[[0, 0], [1, 0], [2, 0]], [[0, 1], [1, 1], [2, 1]], [[0, 2], [1, 2], [2, 2]], [[0, 0], [1, 1], [2, 2]], [[0, 2], [1, 1], [2, 0]]];
+const SLOT_SYMS = Object.keys(SLOT_W);
+const slotSymbol = () => {
+  let x = Math.random() * Object.values(SLOT_W).reduce((a, b) => a + b, 0);
+  for (const k of SLOT_SYMS) { x -= SLOT_W[k]; if (x < 0) return k; }
+  return SLOT_SYMS[0];
+};
+// One spin: the grid (grid[reel][row]), which lines hit, the chip win, free spins and any gun.
+export function slotSpin(bet) {
+  const grid = [0, 1, 2].map(() => [0, 1, 2].map(slotSymbol));
+  const lineBet = bet / 5;
+  const lines = [];
+  let win = 0;
+  let gunRarity = -1;
+  SLOT_LINES.forEach((L, i) => {
+    const [a, b, c] = L.map(([x, y]) => grid[x][y]);
+    if (a === b && b === c && SLOT_PAY[a]) {
+      const w = Math.round(lineBet * SLOT_PAY[a]);
+      lines.push({ i, cells: L, sym: a, x: SLOT_PAY[a], win: w });
+      win += w;
+      if (a === '💎') gunRarity = Math.max(gunRarity, 3);
+      else if (a === '7️⃣') gunRarity = Math.max(gunRarity, 2);
+    } else if (a === '🍒' && b === '🍒') {
+      const w = Math.round(lineBet * SLOT_CHERRY2);
+      lines.push({ i, cells: L.slice(0, 2), sym: '🍒', x: SLOT_CHERRY2, win: w, two: true });
+      win += w;
+    }
+  });
+  const stars = grid.flat().filter((v) => v === '⭐').length;
+  const free = SLOT_FREE[Math.min(5, stars)] || 0;
+  let gun = null;
+  if (gunRarity >= 0) {
+    const pool = [...new Set(GUN_TIERS.flat())].filter((k) => !WEAPONS[k].melee);
+    gun = makeGun(pool[Math.floor(Math.random() * pool.length)], gunRarity);
+  }
+  return { grid, lines, win, stars, free, gun };
+}
+
 // Rough odds from one pull, for the machine cards.
 function reelOdds(tier) {
   const table = LOOT[tier];
@@ -109,12 +158,12 @@ function reelOdds(tier) {
 }
 
 const GAMES = [
-  ['slots', '🎰', 'Loot Reels', 'Spin for a mystery prize'],
   ['blackjack', '🃏', 'Blackjack', 'Beat the dealer to 21'],
-  ['roulette', '🎡', 'Roulette', 'Pick a color, spin the wheel'],
-  ['crash', '🚀', 'Crash', 'Cash out before it blows'],
-  ['mines', '💎', 'Mines', 'Find gems, dodge the bombs'],
   ['plinko', '🔴', 'Plinko', 'Drop a ball, pray for the edges'],
+  ['crash', '🚀', 'Crash', 'Cash out before it blows'],
+  ['roulette', '🎡', 'Roulette', 'Pick a color, spin the wheel'],
+  ['mines', '💎', 'Mines', 'Find gems, dodge the bombs'],
+  ['slots', '🎰', 'Lucky Slots', '5 lines, free spins, guns on big hits'],
 ];
 // Auto-drop speeds for Plinko (balls a second).
 const PLINKO_SPEEDS = [1, 2, 4, 8, 15];
@@ -188,7 +237,7 @@ export class Hub {
     this.onSettings = onSettings;
     this.onJoinRaid = onJoinRaid;
     this.tab = 'loadout';
-    this.game = 'slots';
+    this.game = 'blackjack';
     this.bet = 100;
     this.bj = null;
     this.crash = null;
@@ -487,7 +536,7 @@ export class Hub {
     const partyMember = this.net && this.net.inParty && !this.net.isHost;
     const tiles = order.map((id) => {
       const m = MAPS[id];
-      const facts = m.safe ? ['🛡️ No machines', '🥊 1v1s', '🎲 Casino games'] : [`⏱️ ${Math.round((m.raidTime || 1080) / 60)} min`, `📏 ${m.size}`, m.indoor ? '🏚️ Indoors' : `👑 ${bossTheme(id).name}`];
+      const facts = m.safe ? ['🛡️ No machines', '🥊 1v1s', '🎲 Casino games'] : [`⏱️ ${Math.round((m.raidTime || 1080) / 60)} min`, `📏 ${m.size}`, `👑 at ${clock((m.raidTime || 1080) - BOSS_TIME)}`];
       return `<button class="maptile m-${id} ${d.selectedMap === id ? 'on' : ''}" data-act="pickmap" data-m="${id}" ${partyMember && d.selectedMap !== id ? 'disabled' : ''}>
         <span class="mticon">${m.icon}</span><span class="tag d-${m.danger.toLowerCase()}">${m.danger}</span>
         <b>${m.name}</b><small>${m.blurb}</small>
@@ -507,7 +556,7 @@ export class Hub {
     const freeKit = hasFreeKit(lo);
     const selId = MAPS[d.selectedMap] ? d.selectedMap : 'vegas';
     const sel = MAPS[selId];
-    const facts = sel.safe ? ['🛡️ No machines, no raiders', '🥊 1v1s in The Pit'] : [`⏱️ ${Math.round((sel.raidTime || 1080) / 60)} min raid`, `📏 ${sel.size} map`, sel.indoor ? `👑 ${bossTheme(selId).name}` : `👑 ${bossTheme(selId).name} at 4:00`];
+    const facts = sel.safe ? ['🛡️ No machines, no raiders', '🥊 1v1s in The Pit'] : [`⏱️ ${Math.round((sel.raidTime || 1080) / 60)} min raid`, `📏 ${sel.size} map`, `👑 ${bossTheme(selId).name} when the clock hits ${clock((sel.raidTime || 1080) - BOSS_TIME)}`];
     const packed = lo.weapons.filter(Boolean).length + lo.items.length;
     const pocket = (() => {
       const n = pocketSlots(d.bag || 0);
@@ -1006,7 +1055,7 @@ export class Hub {
       <label class="slider">Music <b id="musVal">${Math.round((s.music ?? 0.45) * 100)}%</b><input type="range" id="mus" min="0" max="1" step="0.05" value="${s.music ?? 0.45}"></label>
       <div class="qrow"><span>Voice chat</span>${['off', 'ptt', 'open'].map((v) => `<button class="subtab ${(s.voice || 'off') === v ? 'on' : ''}" data-act="voice" data-v="${v}">${{ off: 'Off', ptt: `Push to talk (${keyName('talk')})`, open: 'Open mic' }[v]}</button>`).join('')}</div>
       <p class="hint">Talk to your party. In a raid, voices get quieter with distance (and anyone close enough can hear you, enemies too). Your browser will ask for the microphone.</p>
-      <div class="qrow"><span>Tutorial tips</span>${['auto', 'on', 'off'].map((t) => `<button class="subtab ${(s.tutorial || 'auto') === t ? 'on' : ''}" data-act="tutorial" data-t="${t}">${{ auto: 'First 3 raids', on: 'Always', off: 'Off' }[t]}</button>`).join('')}</div>
+      <div class="qrow"><span>Tutorial tips</span>${['auto', 'on', 'off'].map((t) => `<button class="subtab ${(s.tutorial || 'auto') === t ? 'on' : ''}" data-act="tiptoggle" data-t="${t}">${{ auto: 'First 3 raids', on: 'Always', off: 'Off' }[t]}</button>`).join('')}</div>
       <div class="qrow"><span>Graphics</span>${['auto', 'low', 'medium', 'high'].map((q) => `<button class="subtab ${(s.quality || 'auto') === q ? 'on' : ''}" data-act="quality" data-q="${q}">${q === 'auto' ? 'Auto' : QUALITY[q].label}</button>`).join('')}</div>
       <p class="hint">Lower graphics if the game stutters, especially if you lead a party (your computer runs the world for everyone). Auto lowers it for you when frames get slow.</p>
       <h3>Controls</h3>
@@ -1068,33 +1117,37 @@ export class Hub {
   }
 
   renderReels() {
-    const m = HUB_SLOTS[this.machine];
     const r = this.reels;
     const running = r && r.running;
-    const machines = HUB_SLOTS.map((mc, i) => {
-      const odds = reelOdds(mc.tier);
-      return `<button class="machine m${i} ${this.machine === i ? 'on' : ''}" data-act="machine" data-i="${i}" ${running ? 'disabled' : ''}>
-        <b>${mc.name}</b><span>🪙 ${fmt(mc.cost)}</span><small>Epic ${odds.epic.toFixed(1)}% · Legendary ${odds.legendary.toFixed(1)}%</small></button>`;
-    }).join('');
+    const free = this.slotFree || 0;
+    const winCells = new Set(r && !running && r.res ? r.res.lines.flatMap((l) => l.cells.map(([x, y]) => `${x}${y}`)) : []);
     const strips = r ? r.strips : [0, 1, 2].map(() => this.randomStrip(3));
-    const reels = strips.map((strip, k) => `<div class="reel"><div class="strip" id="strip${k}" style="${r && r.animating ? '' : `transform:translateY(${-(strip.length - 3) * ROW}px)`}">${strip.map((s) => `<span>${s}</span>`).join('')}</div></div>`).join('');
-    let prize = '<div class="prize empty">Three of a kind pays big: 🍒 1.5x · 🔔 Rare gun 3x · 7️⃣ Epic gun 6x · 💎 Legendary 25x. Every pull pays something.</div>';
-    if (r && !r.running && r.prize) {
-      const p = r.prize;
-      const it = p.item;
-      const info = it && itemInfo(it);
-      const hit = REEL_HITS[p.hit] || REEL_HITS[0];
-      const head = hit.sym && hit.sym !== 'item' ? `${hit.sym}${hit.sym}${hit.sym} · PAYS ${hit.x}x` : p.hit === 1 ? 'TWO COINS' : 'SO CLOSE';
-      prize = `<div class="prize r${info ? info.rarity : 0}"><span class="pi">${it ? iconHtml(it, 'gicon big') : '🪙'}</span><div><small>${head}${r.isNew ? ' · NEW TO YOUR COLLECTION!' : ''}</small>
-        ${it ? `<b style="color:${info.css}">${escapeHtml(info.name)}</b>` : ''}${p.chips ? `<b>${it ? '+ ' : ''}🪙 ${fmt(p.chips)} chips</b>` : ''}
-        <small>${it ? `Worth 🪙 ${fmt(info.value)} · sent to your stash` : 'Paid out to your stash'}</small></div></div>`;
+    const reels = strips.map((strip, k) => `<div class="reel"><div class="strip" id="strip${k}" style="${r && r.animating ? '' : `transform:translateY(${-(strip.length - 3) * ROW}px)`}">${strip.map((sym, j) => {
+      const row = j - (strip.length - 3);
+      return `<span class="${row >= 0 && winCells.has(`${k}${row}`) ? 'hit' : ''} ${row >= 0 && sym === '⭐' && r && !running && r.res && r.res.stars >= 3 ? 'star' : ''}">${sym}</span>`;
+    }).join('')}</div></div>`).join('');
+    // The winning lines, drawn over the reels.
+    const lineSvg = r && !running && r.res && r.res.lines.length ? `<svg class="slines" viewBox="0 0 3 3" preserveAspectRatio="none">${r.res.lines.map((l) => `<polyline points="${l.cells.map(([x, y]) => `${x + 0.5},${y + 0.5}`).join(' ')}" />`).join('')}</svg>` : '';
+    let result = `<div class="prize empty">5 lines. 3 in a row pays: 🍒 ${SLOT_PAY['🍒']}x · 🍋 ${SLOT_PAY['🍋']}x · 🔔 ${SLOT_PAY['🔔']}x · 🪙 ${SLOT_PAY['🪙']}x · 7️⃣ ${SLOT_PAY['7️⃣']}x + Epic gun · 💎 ${SLOT_PAY['💎']}x + Legendary gun (of the line bet). ⭐⭐⭐ anywhere: free spins.</div>`;
+    if (r && !running && r.res) {
+      const res = r.res;
+      const info = res.gun && itemInfo(res.gun);
+      const rows = res.lines.map((l) => `<span>${l.two ? '🍒🍒' : `${l.sym}${l.sym}${l.sym}`} ×${l.x} → 🪙 ${fmt(l.win)}</span>`).join('');
+      result = res.win || res.free || res.gun
+        ? `<div class="prize ${res.gun ? `r${info.rarity}` : ''} slotwin">${res.gun ? `<span class="pi">${iconHtml(res.gun, 'gicon big')}</span>` : ''}<div>
+          <b>${res.win ? `WIN 🪙 ${fmt(res.win)}` : ''}${res.free ? ` ⭐ ${res.free} FREE SPINS!` : ''}</b>
+          ${res.gun ? `<b style="color:${info.css}">+ ${escapeHtml(info.name)}</b>` : ''}<small class="slinesl">${rows}</small></div></div>`
+        : '<div class="prize empty">No win this time.</div>';
     }
-    const big = r && !running && r.prize && r.prize.hit >= 3;
-    return this.split(`<div class="cabinet m${this.machine} ${running ? 'spinning' : ''} ${big ? 'bigwin' : ''}">
-        <div class="cabtop">${m.name.toUpperCase()}</div>
-        <div class="reelwin">${reels}<div class="payline"></div></div>
-      </div>`, `<div class="machines">${machines}</div>
-        <button class="btn big spinbtn" data-act="pull" ${running ? 'disabled' : ''}>${running ? 'SPINNING…' : `PULL · 🪙 ${fmt(m.cost)}`}</button>${prize}`);
+    const auto = this.slotAuto || 0;
+    const big = r && !running && r.res && (r.res.win >= r.bet * 10 || r.res.gun || r.res.free);
+    return this.split(`<div class="cabinet slots5 ${running ? 'spinning' : ''} ${big ? 'bigwin' : ''}">
+        <div class="cabtop">LUCKY SLOTS${free ? ` · ⭐ ${free} FREE` : ''}</div>
+        <div class="reelwin">${reels}${lineSvg}<div class="lanemarks"><i></i><i></i><i></i></div></div>
+      </div>`, `${this.betChips(running || free > 0)}
+        <button class="btn big spinbtn" data-act="pull" ${running ? 'disabled' : ''}>${running ? 'SPINNING…' : free ? `⭐ FREE SPIN (${free} left)` : `SPIN · 🪙 ${fmt(this.bet)}`}</button>
+        <div class="minecount"><small>AUTO</small>${[10, 25, 50].map((n) => `<button class="subtab ${auto && this.slotAutoN === n ? 'on' : ''}" data-act="slotauto" data-v="${n}">${auto && this.slotAutoN === n ? `■ ${auto}` : `×${n}`}</button>`).join('')}</div>
+        ${result}`);
   }
 
   renderBlackjack() {
@@ -1641,7 +1694,7 @@ export class Hub {
         save.update((x) => { x.settings.voice = b.dataset.v; });
         if (this.onSettings) this.onSettings();
         break;
-      case 'tutorial': save.update((x) => { x.settings.tutorial = b.dataset.t; }); break;
+      case 'tiptoggle': save.update((x) => { x.settings.tutorial = b.dataset.t; }); break;
       case 'shopsec': this.shopSec = b.dataset.s; break;
       case 'buygun': {
         const lv = levelInfo(d.xp).level;
@@ -1756,6 +1809,14 @@ export class Hub {
       }
       case 'machine': if (!(this.reels && this.reels.running)) { this.machine = i; this.reels = null; } break;
       case 'pull': this.pullReels(); return;
+      case 'slotauto': {
+        const n = Number(b.dataset.v);
+        if (this.slotAuto && this.slotAutoN === n) { this.slotAuto = 0; break; }
+        this.slotAuto = n;
+        this.slotAutoN = n;
+        if (!(this.reels && this.reels.running)) { this.pullReels(); return; }
+        break;
+      }
       case 'deal': this.deal(); break;
       case 'hit': if (this.bj && this.bj.state === 'play') this.bjHit(); break;
       case 'stand': if (this.bj && this.bj.state === 'play') this.bjNext(); break;
@@ -1790,54 +1851,52 @@ export class Hub {
 
   pullReels() {
     if (this.reels && this.reels.running) return;
-    const m = HUB_SLOTS[this.machine];
-    if (!this.spend(m.cost)) return;
-    const { prize, finals } = reelPull(m);
-    // Each strip ends [..., above, final, below]; it scrolls so `final` sits on the payline.
-    const strips = finals.map((f, k) => [...this.randomStrip(24 + k * 6), f, ...this.randomStrip(1)]);
-    const r = { running: true, animating: true, strips, prize, isNew: false };
+    const freeSpin = (this.slotFree || 0) > 0;
+    const bet = freeSpin ? this.slotFreeBet : this.bet;
+    if (!freeSpin && !this.spend(bet)) { this.slotAuto = 0; return; }
+    if (freeSpin) this.slotFree--;
+    const res = slotSpin(bet);
+    // Each strip ends [..., top, middle, bottom]: it scrolls so those three fill the window.
+    const strips = res.grid.map((col, k) => [...this.randomStrip(22 + k * 6), ...col]);
+    const r = { running: true, animating: true, strips, res, bet };
     this.reels = r;
     sfx.lever();
     this.render();
-    // Start the scroll on the next frame so the transition runs.
     requestAnimationFrame(() => requestAnimationFrame(() => {
-      strips.forEach((s, k) => {
+      strips.forEach((st, k) => {
         const el = document.getElementById(`strip${k}`);
         if (!el) return;
-        el.style.transition = `transform ${1.3 + k * 0.45}s cubic-bezier(0.12, 0.8, 0.22, 1.04)`;
-        el.style.transform = `translateY(${-(s.length - 3) * ROW}px)`;
+        el.style.transition = `transform ${1.0 + k * 0.35}s cubic-bezier(0.12, 0.8, 0.22, 1.04)`;
+        el.style.transform = `translateY(${-(st.length - 3) * ROW}px)`;
       });
     }));
-    // Tick sounds while spinning, a clunk as each reel stops.
     let ticks = 0;
-    const tick = setInterval(() => { if (++ticks < 22) sfx.tick(); else clearInterval(tick); }, 90);
-    [0, 1, 2].forEach((k) => setTimeout(() => sfx.reelStop(), (1.3 + k * 0.45) * 1000));
+    const tick = setInterval(() => { if (++ticks < 18) sfx.tick(); else clearInterval(tick); }, 80);
+    [0, 1, 2].forEach((k) => setTimeout(() => sfx.reelStop(), (1.0 + k * 0.35) * 1000));
     setTimeout(() => {
       r.running = false;
       r.animating = false;
-      const { payout, isNew } = this.awardReel(m, prize);
-      r.isNew = isNew;
-      if (prize.hit >= 4) sfx.jackpot(); else if (prize.hit >= 2) sfx.win(); else sfx.pickup();
-      if (this.tab === 'backroom' && this.game === 'slots') this.render();
-      else this.renderHeader();
-    }, (1.3 + 2 * 0.45) * 1000 + 150);
-  }
-
-  // Pay out a Loot Reels pull: chips to the bank, gear to the stash (and the collection log).
-  awardReel(m, prize) {
-    let out = null;
-    let isNew = false;
-    if (prize.chips) this.earn(prize.chips);
-    if (prize.item) {
-      const key = itemKey(prize.item);
-      isNew = !this.data.collection[key];
-      save.update((x) => addToStash(x.stash.items, { ...prize.item }));
-      out = progress((x) => { x.collection[key] = (x.collection[key] || 0) + 1; });
-    }
-    const payout = (prize.chips || 0) + (prize.item ? itemInfo(prize.item).value : 0);
-    this.settleBet('🎰', m.cost, payout, (s) => { s.reelsPulled++; });
-    if (out) this.announce(out);
-    return { payout, isNew };
+      if (res.free) { this.slotFree = (this.slotFree || 0) + res.free; this.slotFreeBet = bet; }
+      if (res.win) this.earn(res.win);
+      let out = null;
+      if (res.gun) {
+        const key = itemKey(res.gun);
+        save.update((x) => addToStash(x.stash.items, { ...res.gun }));
+        out = progress((x) => { x.collection[key] = (x.collection[key] || 0) + 1; });
+      }
+      const payout = res.win + (res.gun ? itemInfo(res.gun).value : 0);
+      this.settleBet('🎰', freeSpin ? 0 : bet, payout, (st) => { st.reelsPulled++; if (payout - bet > st.biggestWin) st.biggestWin = payout - bet; });
+      if (out) this.announce(out);
+      if (res.gun || res.win >= bet * 25) sfx.jackpot(); else if (res.free || res.win > bet) sfx.win(); else if (res.win) sfx.pickup(); else sfx.deny();
+      if (this.tab === 'backroom' && this.game === 'slots') this.render(); else this.renderHeader();
+      // Auto-spin (and free spins under auto) carry on by themselves.
+      const here = !$('hub').hidden && this.tab === 'backroom' && this.game === 'slots';
+      if (here && ((this.slotAuto || 0) > 0 || this.slotFree > 0 && (this.slotAuto || 0) > 0)) {
+        if (!this.slotFree) this.slotAuto--;
+        if (this.slotAuto > 0 || this.slotFree > 0) setTimeout(() => { if (!$('hub').hidden && this.tab === 'backroom' && this.game === 'slots') this.pullReels(); }, res.win || res.free ? 900 : 450);
+        else this.render();
+      }
+    }, (1.0 + 2 * 0.35) * 1000 + 120);
   }
 
   // ---------- Blackjack ----------
