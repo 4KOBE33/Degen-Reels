@@ -184,6 +184,12 @@ function reelOdds(tier) {
 
 // The "what's new" card, shown once after an update.
 const WHATS_NEW = {
+  89: [
+    ['⚔️', 'ROYALE (new main mode)', '24 drop in from the blimp, one walks out. Steer your chute, start with a Pea Shooter, stay inside the closing House Edge. Prizes by placement and kills, and your stash is never at risk. Switch modes at the top of the map screen.'],
+    ['🎒', 'Extraction is still here', 'Flip to EXTRACTION on the map screen to raid like before.'],
+    ['🐦', 'Seagulls', 'On the Neon Boardwalk, gulls steal chips left lying on the sand.'],
+    ['🎲', 'Side bets & Featured map', 'Bet on your own haul before an extraction raid, and play the Featured map of the day for +25% chips and XP.'],
+  ],
   88: [
     ['🎡', 'New map: Neon Boardwalk', 'A seaside strip at sunset: an arcade row on the boardwalk, a beach full of umbrellas, the Lucky Lighthouse, and a pier out to the Big Wheel. Bust Commodore Clams in the Salty Sevens.'],
     ['🚨', 'Heat', 'Bust machines and the House notices: up to five stars. Every star adds 15% to machine chips, but it sends hunter crews after you. Lie low (or bust the crew) to cool off.'],
@@ -660,7 +666,7 @@ export class Hub {
           <li>🪂 Jump out of the blimp and <b>steer your chute</b> (WASD) to where you want to land.</li>
           <li>🔫 Everyone starts with a Pea Shooter and a bandage. Crack crates, spin gun wheels, take what you can.</li>
           <li>⭕ Stay inside the circle. Outside, the <b>House Edge</b> eats your health, faster every round.</li>
-          <li>👑 The ${bossTheme(selId).name} still shows up in the casino at 4:00, sitting on the best loot in the place.</li>
+          <li>👑 ${bossTheme(selId).name} still shows up in the casino at 4:00, sitting on the best loot in the place.</li>
           <li>💰 Chips and XP by placement and kills. <b>Nothing you bring or find is at risk</b>: your stash stays home.</li>
         </ul>
         <div class="royalestats"><span>🏆 Wins <b>${fmt(s.royaleWins || 0)}</b></span><span>🎯 Best <b>${s.royaleBest ? `#${s.royaleBest}` : '-'}</b></span><span>💀 Kills <b>${fmt(s.royaleKills || 0)}</b></span><span>🎮 Games <b>${fmt(s.royaleGames || 0)}</b></span></div>
