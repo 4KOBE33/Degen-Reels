@@ -4970,7 +4970,9 @@ function jackpotIsland(k) {
 
   // ----- The sea all round, with a wall at the waterline -----
   const seaMat = new THREE.MeshBasicMaterial({ color: 0x1f9bc4 });
-  for (const [x, z, w, d] of [[0, -(L + H) / 2, H * 2 + 400, H - L + 200], [0, (L + H) / 2, H * 2 + 400, H - L + 200], [-(L + H) / 2, 0, H - L + 200, L * 2], [(L + H) / 2, 0, H - L + 200, L * 2]]) {
+  const SW = H - L + 200; // how wide each strip of sea is, starting right at the shoreline
+  const SC = L + SW / 2;
+  for (const [x, z, w, d] of [[0, -SC, H * 2 + 400, SW], [0, SC, H * 2 + 400, SW], [-SC, 0, SW, L * 2], [SC, 0, SW, L * 2]]) {
     const sea = new THREE.Mesh(new THREE.PlaneGeometry(w, d), seaMat);
     sea.rotation.x = -Math.PI / 2;
     sea.position.set(x, 0.05, z);

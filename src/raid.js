@@ -95,6 +95,7 @@ export class Raid {
     this.chips = new ChipSystem(this);
     this.listener = new THREE.Vector3();
     this.focus = new THREE.Vector3(0, 0, 40);
+    this.fx.focus = this.focus;
     this.shake = 0;
     this.frozen = false;
 
@@ -1845,6 +1846,8 @@ export class Raid {
     // Raider bots take it easier from machines, so they're still around (looting, fighting, coming
     // for you) later in the raid instead of getting wiped out in the first couple of minutes.
     if (attacker && attacker.team === 'machine' && target.brain && !target.human) amount *= 0.3;
+    // Royale: bots go easier on each other, so the island isn't empty by the time you've found a gun.
+    if (this.royaleMode && attacker && attacker.brain && !attacker.human && target.brain && !target.human) amount *= 0.5;
     // The boss's backup hits softer on easier maps.
     if (attacker && attacker.addDmg) amount *= attacker.addDmg;
     // Glass Cannon: everything hits harder. Only once: a friend's own game already scaled the hits
@@ -2158,6 +2161,7 @@ export class Raid {
     else if (this.spectating && this.spectating.alive) this.focus.copy(this.spectating.pos);
     this.listener.copy(this.focus).setY(1.5);
 
+    this.pathsThisFrame = 0;
     if (!this.isClient) for (const b of this.bots) b.update(dt);
     this.updateAirdrop(dt);
     this.updateHeat(dt);

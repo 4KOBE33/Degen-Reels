@@ -88,8 +88,16 @@ export class RaiderBrain {
     const d = Math.hypot(to.x - c.pos.x, to.z - c.pos.z);
     this.pathAge += dt;
     const stale = !this.path || !this.pathTo || this.pathTo.distanceTo(to) > 3 || this.pathAge > 4;
-    if (stale && raid.nav) {
-      this.path = raid.nav.find(c.pos, to) || [to.clone()];
+    // Only a couple of bots plan a route each frame (planning across a big map is the slow part);
+    // the rest keep walking the way they were going and plan next frame.
+    if (stale && raid.nav && (raid.pathsThisFrame || 0) >= 2) {
+      if (!this.path) this.path = [to.clone()];
+    } else if (stale && raid.nav) {
+      raid.pathsThisFrame = (raid.pathsThisFrame || 0) + 1;
+      // A long trip (across the Royale island): plan the next 60m or so at a time.
+      const leg = d > 75 ? new THREE.Vector3(c.pos.x + ((to.x - c.pos.x) * 60) / d, 0, c.pos.z + ((to.z - c.pos.z) * 60) / d) : null;
+      this.legged = !!leg;
+      this.path = raid.nav.find(c.pos, leg || to, raid.royaleMode ? 2500 : undefined) || [(leg || to).clone()];
       this.pathTo = to.clone();
       this.pathAge = 0;
       // Can't actually get there: don't walk into the wall nearest it. Forget that crate (or
@@ -107,6 +115,8 @@ export class RaiderBrain {
       this.path.shift();
       wp = this.path[0];
     }
+    // End of this leg of a long trip: plan the next one.
+    if (this.legged && wp && this.path.length === 1 && Math.hypot(wp.x - c.pos.x, wp.z - c.pos.z) < 4) this.pathAge = 99;
     wp = wp || to;
     const dx = wp.x - c.pos.x;
     const dz = wp.z - c.pos.z;

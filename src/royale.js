@@ -6,7 +6,7 @@
 import * as THREE from 'three';
 import { buildPartyBus } from './lobby.js';
 
-export const ROYALE_SIZE = 24;
+export const ROYALE_SIZE = 40;
 // How long the party bus takes to cross the island, and how high it flies.
 export const BUS_TIME = 45;
 const BUS_Y = 110;
@@ -45,7 +45,8 @@ export class Royale {
     const half = raid.map.half;
     const rnd = seeded(seed || 1);
     // Circle centers, each one inside the last.
-    const circles = [{ x: 0, z: 0, r: half * 1.3 }];
+    // The first circle takes in the whole island, so you can see the wall from the bus.
+    const circles = [{ x: 0, z: 0, r: half * 0.93 }];
     for (const ph of PHASES) {
       const prev = circles[circles.length - 1];
       const r = half * ph.r;
@@ -92,10 +93,33 @@ export class Royale {
 
   buildVisuals() {
     const scene = this.raid.scene;
-    // The wall of the circle: a tall see-through cylinder, scaled to the radius every frame.
-    const wall = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 120, 96, 1, true), new THREE.MeshBasicMaterial({ color: 0xff3fa4, transparent: true, opacity: 0.16, side: THREE.DoubleSide, depthWrite: false }));
-    wall.position.y = 55;
+    // The wall of the circle: a tall glowing curtain with stripes running up it, strongest at the
+    // ground, scaled to the radius every frame.
+    const c = document.createElement('canvas');
+    c.width = 64;
+    c.height = 128;
+    const ctx = c.getContext('2d');
+    for (let y = 0; y < 128; y++) {
+      const a = 0.08 + Math.pow(y / 127, 1.6) * 0.8;
+      for (let x = 0; x < 64; x++) {
+        const stripe = ((x + y) % 32) < 12 ? 1 : 0.55;
+        ctx.fillStyle = `rgba(255, ${stripe === 1 ? 63 : 120}, ${stripe === 1 ? 164 : 200}, ${a * stripe})`;
+        ctx.fillRect(x, 127 - y, 1, 1);
+      }
+    }
+    const tex = new THREE.CanvasTexture(c);
+    tex.wrapS = THREE.RepeatWrapping;
+    tex.repeat.set(90, 1);
+    this.wallTex = tex;
+    const wall = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 90, 128, 1, true), new THREE.MeshBasicMaterial({ map: tex, transparent: true, side: THREE.DoubleSide, depthWrite: false, fog: false }));
+    wall.position.y = 44;
     wall.renderOrder = 3;
+    // The edge of the circle right now, painted on the ground.
+    const edge = new THREE.Mesh(new THREE.RingGeometry(0.992, 1, 160), new THREE.MeshBasicMaterial({ color: 0xff3fa4, side: THREE.DoubleSide, depthWrite: false }));
+    edge.rotation.x = -Math.PI / 2;
+    edge.position.y = 0.35;
+    scene.add(edge);
+    this.edge = edge;
     // Where it's closing to: a white ring on the ground.
     const ring = new THREE.Mesh(new THREE.RingGeometry(0.985, 1, 128), new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.6, side: THREE.DoubleSide, depthWrite: false }));
     ring.rotation.x = -Math.PI / 2;
@@ -183,9 +207,23 @@ export class Royale {
     const s = this.state();
     this.wall.scale.set(Math.max(0.5, s.r), 1, Math.max(0.5, s.r));
     // (Bigger than the map at the start: nothing to see yet.)
-    this.wall.visible = s.r < raid.map.half * 1.05;
+    this.wall.visible = s.r > 0.5;
     this.wall.position.x = s.x;
     this.wall.position.z = s.z;
+    this.wallTex.offset.x = (this.wallTex.offset.x + dt * (s.closing ? 0.6 : 0.15)) % 1;
+    this.edge.scale.set(Math.max(0.5, s.r), Math.max(0.5, s.r), 1);
+    this.edge.position.x = s.x;
+    this.edge.position.z = s.z;
+    // Tell everyone when the circle's about to move, and when it starts closing.
+    const key = `${s.phase}${s.closing ? 'c' : 'w'}${!s.closing && s.left < 20 ? 's' : ''}`;
+    if (key !== this.lastKey && raid.player && raid.player.alive && s.phase < 5) {
+      if (this.lastKey !== undefined) {
+        if (s.closing) raid.hud.toast(`🔴 The House Edge is closing in! Get inside the white ring (${Math.round(s.left)}s).`, 'big');
+        else if (s.left < 20) raid.hud.toast(`⭕ The circle starts closing in ${Math.round(s.left)}s. Head for the white ring.`);
+        else raid.hud.toast('⭕ The circle stopped. Next one marked in white on your map.');
+      }
+      this.lastKey = key;
+    }
     this.ring.scale.set(Math.max(0.5, s.next.r), Math.max(0.5, s.next.r), 1);
     this.ring.position.x = s.next.x;
     this.ring.position.z = s.next.z;
@@ -226,6 +264,6 @@ export class Royale {
   }
 
   dispose() {
-    for (const o of [this.wall, this.ring, this.bus]) if (o) this.raid.scene.remove(o);
+    for (const o of [this.wall, this.ring, this.edge, this.bus]) if (o) this.raid.scene.remove(o);
   }
 }

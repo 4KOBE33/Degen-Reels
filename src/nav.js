@@ -135,7 +135,7 @@ export class NavGrid {
   }
 
   // World-space waypoints from `from` to `to`, or null if there's no way there.
-  find(from, to) {
+  find(from, to, max = MAX_EXPANSIONS) {
     const s = this.anchor(from);
     const g = this.anchor(to);
     if (!s || !g) return null;
@@ -152,7 +152,7 @@ export class NavGrid {
     let found = null;
     let best = { x: sx, z: sz, h: h(sx, sz) };
     let n = 0;
-    while (open.size && n < MAX_EXPANSIONS) {
+    while (open.size && n < max) {
       const cur = open.pop();
       n++;
       if (cur.x === gx && cur.z === gz) { found = cur; break; }

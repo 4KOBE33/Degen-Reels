@@ -9,6 +9,35 @@ const ringGeo = new THREE.TorusGeometry(1, 0.08, 6, 32);
 const confettiGeo = new THREE.PlaneGeometry(0.16, 0.1);
 const CONFETTI = [0xffd23f, 0xff5d5d, 0x4dabff, 0x5ee27a, 0xff7eb6, 0xc77dff];
 
+// Damage numbers repeat a lot ("12", "25!"), so their textures are drawn once and reused.
+const NUMBER_TEX = new Map();
+function numberTexture(text, color) {
+  const key = `${text}|${color}`;
+  const hit = NUMBER_TEX.get(key);
+  if (hit) return hit;
+  const canvas = document.createElement('canvas');
+  canvas.width = 320;
+  canvas.height = 160;
+  const c = canvas.getContext('2d');
+  c.scale(2, 2); // 2x for sharp text
+  c.font = "56px 'Luckiest Guy', 'Arial Black', sans-serif";
+  c.textAlign = 'center';
+  c.textBaseline = 'middle';
+  c.lineJoin = 'round';
+  c.lineWidth = 10;
+  c.strokeStyle = '#1b0f2b';
+  c.fillStyle = color;
+  c.strokeText(text, 80, 42);
+  c.fillText(text, 80, 42);
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  if (NUMBER_TEX.size < 400) {
+    tex.userData.cached = true;
+    NUMBER_TEX.set(key, tex);
+  }
+  return tex;
+}
+
 export class Fx {
   constructor(scene) {
     this.scene = scene;
@@ -28,7 +57,7 @@ export class Fx {
       if (it.life <= 0) {
         this.scene.remove(it.obj);
         if (it.obj.material && it.obj.material.userData.disposable) {
-          if (it.obj.material.map) it.obj.material.map.dispose();
+          if (it.obj.material.map && !it.obj.material.map.userData.cached) it.obj.material.map.dispose();
           it.obj.material.dispose();
         }
         this.items.splice(i, 1);
@@ -112,22 +141,9 @@ export class Fx {
 
   // Floating "-14" style numbers.
   number(pos, text, color = '#ff5d5d', size = 1) {
-    const canvas = document.createElement('canvas');
-    canvas.width = 320;
-    canvas.height = 160;
-    const c = canvas.getContext('2d');
-    c.scale(2, 2); // 2x for sharp text
-    c.font = "56px 'Luckiest Guy', 'Arial Black', sans-serif";
-    c.textAlign = 'center';
-    c.textBaseline = 'middle';
-    c.lineJoin = 'round';
-    c.lineWidth = 10;
-    c.strokeStyle = '#1b0f2b';
-    c.fillStyle = color;
-    c.strokeText(text, 80, 42);
-    c.fillText(text, 80, 42);
-    const tex = new THREE.CanvasTexture(canvas);
-    tex.colorSpace = THREE.SRGBColorSpace;
+    // Too far away to read anyway (bots chipping at each other across the map): skip it.
+    if (this.focus && pos.distanceToSquared(this.focus) > 90 * 90) return;
+    const tex = numberTexture(text, color);
     const mat = new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false });
     mat.userData.disposable = true;
     const sprite = new THREE.Sprite(mat);

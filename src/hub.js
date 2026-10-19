@@ -626,7 +626,7 @@ export class Hub {
     const play = playOf(d);
     const partyMember = this.net && this.net.inParty && !this.net.isHost;
     const modes = [
-      ['royale', '⚔️ ROYALE', '24 drop in, one walks out. Your stash is safe.'],
+      ['royale', '⚔️ ROYALE', '40 drop in, one walks out. Your stash is safe.'],
       ['extract', '🎒 EXTRACTION', 'Bring your gear, loot, get out alive.'],
       ['lounge', '🍸 THE LOUNGE', 'Hang out, gamble, 1v1 in the Pit.'],
     ];
@@ -654,7 +654,7 @@ export class Hub {
     const m = MAPS[ROYALE_MAP];
     return `<section class="lobby">
         <div class="lobbystage"><div id="lobbySlot" class="lobbyslot"></div>
-          <div class="lobbymap"><span>${m.icon}</span><b>${m.name}</b><small>👥 24 players · ⏱️ ~10 min · 📏 ${m.size}</small></div>
+          <div class="lobbymap"><span>${m.icon}</span><b>${m.name}</b><small>👥 40 players · ⏱️ ~10 min · 📏 ${m.size}</small></div>
           <button class="btn lobbyplay" id="lobbyPlay" data-act="lobbyplay">PLAY</button></div>
         <div class="lobbyside">
           ${this.renderParty()}
