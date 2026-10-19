@@ -417,6 +417,10 @@ export class Session {
         if (!d.d && pup.downed) { pup.downed = false; pup.reviveSpot = null; }
         break;
       }
+      case 'emo':
+        raid.emote(pup, d.i, true);
+        this.ev({ k: 'emo', i: d.i, id: this.id(pup), own: from }, pup.pos);
+        break;
       case 'shot':
         this.ev({ k: 'tr', f: d.f, to: d.to, c: d.c, w: d.w, own: from }, v3(d.f));
         break;
@@ -738,6 +742,7 @@ export class Session {
     const raid = this.raid;
     if (e.own === this.me) return;
     switch (e.k) {
+      case 'emo': { const c = this.byId.get(e.id) || (e.id === this.me ? raid.player : null); if (c) raid.emote(c, e.i, true); break; }
       case 'tr': {
         const f = v3(e.f);
         raid.fx.tracer(f, v3(e.to), e.c);

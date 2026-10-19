@@ -186,6 +186,7 @@ function reelOdds(tier) {
 const WHATS_NEW = {
   88: [
     ['🚨', 'Heat', 'Bust machines and the House notices: up to five stars. Every star adds 15% to machine chips, but it sends hunter crews after you. Lie low (or bust the crew) to cool off.'],
+    ['💬', 'Emotes', 'Press J to say something over your head: Jackpot!, Too easy, Let it ride... Your party sees it. Going down? It calls for a revive.'],
     ['💎', 'Better vault loot', 'Vault chests never drop Common guns, and top-tier crates roll better rarities.'],
     ['🏆', 'New goals', 'Achievements for a 5-raid extract streak and for beating all five House Rules, plus a Hi-Lo daily contract.'],
   ],
@@ -947,15 +948,17 @@ export class Hub {
     if (!this.data.tutorialDone) return;
     let seen = 0;
     try { seen = Number(localStorage.getItem('bth-seen-build')) || 0; } catch (e) { return; }
-    const notes = WHATS_NEW[BUILD];
-    if (!notes || seen >= BUILD) return;
+    // Everything since the last build you saw (a first-timer just gets this one's).
+    const builds = Object.keys(WHATS_NEW).map(Number).filter((b) => b <= BUILD && b > (seen || BUILD - 1)).sort((x, y) => y - x);
+    const notes = builds.flatMap((b) => WHATS_NEW[b]);
+    if (!notes.length || seen >= BUILD) return;
     if (document.getElementById('dailyBonus')) { setTimeout(() => this.whatsNew(), 800); return; }
     if (!$('hub') || $('hub').hidden) return;
     try { localStorage.setItem('bth-seen-build', String(BUILD)); } catch (e) { /* fine */ }
     const el = document.createElement('div');
     el.id = 'dailyBonus';
     el.className = 'whatsnew';
-    el.innerHTML = `<div class="dcard"><h3>✨ New in Build ${BUILD}</h3><ul class="wnlist">${notes.map(([icon, title, text]) => `<li><span>${icon}</span><div><b>${title}</b><small>${text}</small></div></li>`).join('')}</ul><button class="btn big" data-close="1">Let's go!</button></div>`;
+    el.innerHTML = `<div class="dcard"><h3>✨ New in Build ${builds.length > 1 ? `${builds[builds.length - 1]}–${BUILD}` : BUILD}</h3><ul class="wnlist">${notes.map(([icon, title, text]) => `<li><span>${icon}</span><div><b>${title}</b><small>${text}</small></div></li>`).join('')}</ul><button class="btn big" data-close="1">Let's go!</button></div>`;
     el.addEventListener('click', (e) => { if (e.target === el || e.target.closest('[data-close]')) el.remove(); });
     document.body.appendChild(el);
   }

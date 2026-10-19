@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 import { WEAPONS, ITEMS, PLAYER } from './config.js';
 import { actionsFor, capturing } from './keys.js';
+import { EMOTE_CYCLE, EMOTE_DOWN } from './raid.js';
 
 const BASE_SENSITIVITY = 0.0016;
 const AUTO = new Set(['smg', 'fists', 'spoon']);
@@ -155,6 +156,7 @@ export class PlayerController {
     if (a === 'bag') this.onToggle('bag');
     if (a === 'map') this.onToggle('map');
     if (a === 'pov') this.togglePov();
+    if (a === 'emote') this.raid.emote(c, c.downed ? EMOTE_DOWN : (this.emoteAt = ((this.emoteAt ?? -1) + 1) % EMOTE_CYCLE));
   }
 
   // Throwable wheel: hold to open, point the mouse at one, let go. A quick tap just cycles.

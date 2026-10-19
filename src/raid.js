@@ -18,6 +18,13 @@ import { NavGrid } from './nav.js';
 import { Recorder, Replay } from './replay.js';
 import { RaiderBrain } from './bots.js';
 import { rollRule, applyRule } from './rules.js';
+import { bubbleTexture } from './training.js';
+
+// Emotes: a speech bubble over your head for a couple of seconds. J cycles through the first few;
+// going down always says the last one.
+export const EMOTES = ['🤑 JACKPOT!', '😎 Too easy', '🎲 Let it ride!', '👋 Over here!', '🔥 I\'m on fire!', '🙏 Revive me!'];
+export const EMOTE_CYCLE = EMOTES.length - 1;
+export const EMOTE_DOWN = EMOTES.length - 1;
 import { ItemPickup } from './pickups.js';
 import {
   makeGun, makeItem, rollLoot, randInt, pick, addToList, itemInfo, isGun, rollRarity, fullAmmo, holdRoom, holdLimitText,
@@ -488,6 +495,40 @@ export class Raid {
     if (!this.isClient && !this.map.safe && !this.tutorialMode) {
       for (let i = 0; i < ((this.rule && this.rule.bounties) || 1); i++) this.placeBounty();
       this.placeGolden();
+    }
+  }
+
+  // ---------- emotes ----------
+  emote(c, i, fromNet = false) {
+    if (!c || !c.alive || !EMOTES[i]) return;
+    const now = performance.now();
+    if (!fromNet && c.emoteAt && now - c.emoteAt < 1500) return;
+    c.emoteAt = now;
+    // Party: the host shows everyone; a friend asks the host to.
+    if (!fromNet && this.net) {
+      if (this.isClient) this.net.send({ k: 'emo', i });
+      else this.net.ev({ k: 'emo', i, id: this.net.id(c) }, c.pos);
+    }
+    if (c.emoteSprite) { c.char.root.remove(c.emoteSprite); c.emoteSprite.material.map.dispose(); c.emoteSprite.material.dispose(); }
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: bubbleTexture(EMOTES[i]), transparent: true, depthWrite: false }));
+    s.scale.set(3.4, 1.06, 1);
+    s.position.y = 2.9;
+    s.renderOrder = 6;
+    c.char.root.add(s);
+    c.emoteSprite = s;
+    c.emoteUntil = now + 2600;
+    if (c.isPlayer || c.human) this.feed(`💬 ${c.name}: ${EMOTES[i]}`);
+    sfx.pickup(c.pos, this.listener);
+  }
+  updateEmotes() {
+    const now = performance.now();
+    for (const c of this.combatants) {
+      if (c.emoteSprite && (now > c.emoteUntil || !c.alive)) {
+        c.char.root.remove(c.emoteSprite);
+        c.emoteSprite.material.map.dispose();
+        c.emoteSprite.material.dispose();
+        c.emoteSprite = null;
+      }
     }
   }
 
@@ -2031,6 +2072,7 @@ export class Raid {
     if (!this.isClient) for (const b of this.bots) b.update(dt);
     this.updateAirdrop(dt);
     this.updateHeat(dt);
+    this.updateEmotes();
     // Where's the bounty? A tip every so often.
     const bt = this.bountyOn;
     if (bt && this.active) {

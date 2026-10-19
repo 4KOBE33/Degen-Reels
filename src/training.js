@@ -141,7 +141,7 @@ const STEPS = [
 ];
 
 // A speech bubble drawn on a canvas, as a sprite over the coach's head.
-function bubbleTexture(text) {
+export function bubbleTexture(text) {
   const c = document.createElement('canvas');
   c.width = 512;
   c.height = 160;
