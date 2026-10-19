@@ -762,6 +762,7 @@ export class Session {
         break;
       }
       case 'adrop': raid.startAirdrop(e.x, e.z); break;
+      case 'hh': raid.startHappyHour(e.e); break;
       case 'adland': if (raid.airdrop) { raid.airdrop.hostLanded = true; raid.airdrop.t = Math.max(raid.airdrop.t, 8); } break;
       case 'ko': {
         const k = raid.containers[e.i];

@@ -415,7 +415,7 @@ export class Container {
     for (let i = 0; i < n; i++) {
       const loot = fixed ? fixed[i] : rollLoot(this.tier);
       const at = this.spot.clone().add(new THREE.Vector3((Math.random() - 0.5) * 2, 0, (Math.random() - 0.5) * 2));
-      if (loot.chips) this.raid.chips.spawnBurst(at.setY(this.spot.y + this.h + 0.3), loot.chips, null, { speed: 1.5 });
+      if (loot.chips) this.raid.chips.spawnBurst(at.setY(this.spot.y + this.h + 0.3), loot.chips * this.raid.chipBoost(), null, { speed: 1.5 });
       else {
         // Spill out toward the person who opened it, fanned out a little.
         const dir = c ? new THREE.Vector3(c.pos.x - this.spot.x, 0, c.pos.z - this.spot.z) : new THREE.Vector3(0, 0, 1);

@@ -468,6 +468,10 @@ export class Raid {
     this.clearAirdrop();
     // A supply drop comes down a bit before halfway through (not in the Lounge or the tutorial).
     this.airdropAt = !this.map.safe && !opts.tutorial && !opts.client ? this.raidTime * (0.5 + Math.random() * 0.15) : -1;
+    // Happy Hour: a minute of double chips, somewhere in the first third of most raids.
+    this.happyEnd = null;
+    this.happyOver = false;
+    this.happyAt = !this.map.safe && !opts.tutorial && !opts.client && Math.random() < 0.7 ? this.raidTime * (0.15 + Math.random() * 0.2) : -1;
     this.run = {
       kills: 0, machines: 0, raiders: 0, gators: 0, boss: false, crits: 0, throws: 0, containers: 0, slotPulls: 0, diceSixes: 0, bestStun: 0, started: performance.now(),
     };
@@ -483,6 +487,18 @@ export class Raid {
       for (let i = 0; i < ((this.rule && this.rule.bounties) || 1); i++) this.placeBounty();
       this.placeGolden();
     }
+  }
+
+  // ---------- Happy Hour ----------
+  // Tracked on the raid clock (timeLeft), which every player in a party counts down together.
+  happyHour() { return this.happyEnd !== null && this.timeLeft > this.happyEnd; }
+  chipBoost() { return this.happyHour() ? 2 : 1; }
+  startHappyHour(end) {
+    this.happyEnd = end;
+    if (this.isHost) this.net.rel({ k: 'hh', e: end });
+    this.hud.toast('🍸 HAPPY HOUR! Every chip drop is doubled for 60 seconds!', 'big');
+    this.feed('🍸 Happy Hour: double chips from machines and crates for a minute.');
+    sfx.jackpot();
   }
 
   // ---------- supply drop ----------
@@ -517,6 +533,14 @@ export class Raid {
   }
 
   updateAirdrop(dt) {
+    if (this.happyAt > 0 && this.active && !this.isClient && this.raidTime - this.timeLeft >= this.happyAt) {
+      this.happyAt = -1;
+      this.startHappyHour(this.timeLeft - 60);
+    }
+    if (this.happyEnd !== null && !this.happyOver && this.timeLeft <= this.happyEnd) {
+      this.happyOver = true;
+      this.hud.toast('🍸 Last call: Happy Hour is over.');
+    }
     if (this.airdropAt > 0 && this.active && !this.isClient && this.raidTime - this.timeLeft >= this.airdropAt) {
       this.airdropAt = -1;
       // Somewhere open, away from the edges.
@@ -1743,7 +1767,7 @@ export class Raid {
       const def = target.def;
       this.fx.explosion(target.center(new THREE.Vector3()), target.isBoss ? 8 : 1.8);
       sfx.bust(at, this.listener);
-      this.chips.spawnBurst(target.center(new THREE.Vector3()), randInt(def.chips[0], def.chips[1]), null, { speed: target.isBoss ? 7 : 3 });
+      this.chips.spawnBurst(target.center(new THREE.Vector3()), randInt(def.chips[0], def.chips[1]) * this.chipBoost(), null, { speed: target.isBoss ? 7 : 3 });
       const tier = this.map.tierAt(at.x, at.z);
       if (target.isBoss) {
         const haul = [...Array.from({ length: 5 }, () => rollLoot(4)), makeGun(pick(['rifle', 'rocket', 'sniper', 'minigun', 'ar', 'dbarrel']), Math.random() < 0.25 ? 3 : 2), makeItem('keycard')];
