@@ -53,6 +53,14 @@ const drawCard = () => shoe.draw();
 const cardHtml = (c, hidden, i = 0) => (hidden ? `<span class="pcard back" style="--i:${i}"></span>`
   : `<span class="pcard ${c.suit === '♥' || c.suit === '♦' ? 'red' : ''}" style="--i:${i}"><i>${c.rank}</i><em>${c.suit}</em><i class="flip">${c.rank}</i></span>`);
 
+// Roulette bets: what each one covers and what it pays (the zero beats everything but green).
+const ROULETTE_PAYS = { red: 2, black: 2, odd: 2, even: 2, low: 2, high: 2, d1: 3, d2: 3, d3: 3, green: 14 };
+export function rouletteWins(kind, n) {
+  if (n === 0) return kind === 'green';
+  return (kind === 'red' && RED.has(n)) || (kind === 'black' && !RED.has(n)) || (kind === 'odd' && n % 2 === 1) || (kind === 'even' && n % 2 === 0)
+    || (kind === 'low' && n <= 18) || (kind === 'high' && n >= 19) || (kind === `d${Math.ceil(n / 12)}`);
+}
+
 // ---------- Hi-Lo ----------
 // Every card is a fresh draw (an endless deck), aces low. Each call pays its true odds less a 3%
 // edge: "higher or same" on a 7 is right 7 times in 13, so it pays 13 / 7 × 0.97.
@@ -1214,11 +1222,12 @@ export class Hub {
     const grad = WHEEL.map((n, i) => `${n === 0 ? '#16a34a' : RED.has(n) ? '#d62828' : '#1b0f2b'} ${(i * seg).toFixed(3)}deg ${((i + 1) * seg).toFixed(3)}deg`).join(', ');
     const labels = WHEEL.map((n, i) => `<span style="transform:rotate(${((i + 0.5) * seg).toFixed(2)}deg)"><i>${n}</i></span>`).join('');
     const angle = r ? r.angle : 0;
-    const choices = [['red', 'Red', '2x'], ['black', 'Black', '2x'], ['odd', 'Odd', '2x'], ['even', 'Even', '2x'], ['green', 'Green 0', '14x']];
+    const choices = [['red', 'Red', '2x'], ['black', 'Black', '2x'], ['odd', 'Odd', '2x'], ['even', 'Even', '2x'], ['low', '1–18', '2x'], ['high', '19–36', '2x'],
+      ['d1', '1–12', '3x'], ['d2', '13–24', '3x'], ['d3', '25–36', '3x'], ['green', 'Green 0', '14x']];
     return this.split(`<div class="wheelwrap"><div class="pointer">▼</div>
           <div class="rwheel" style="background:conic-gradient(${grad});transform:rotate(${angle}deg)">${labels}</div><div class="hubcap">${r && !r.spinning ? `<b class="${r.color}">${r.n}</b>` : '🎡'}</div></div>`,
     `${this.betChips(r && r.spinning)}
-        <div class="rbets">${choices.map(([k, n, x]) => `<button class="rbet ${k}" data-act="spin" data-k="${k}" ${r && r.spinning ? 'disabled' : ''}><b>${n}</b><small>pays ${x}</small></button>`).join('')}</div>
+        <div class="rbets">${choices.map(([k, n, x]) => `<button class="rbet ${k}" data-act="spin" data-k="${k}" ${r && r.spinning ? 'disabled' : ''}><b>${n}</b><small>${x}</small></button>`).join('')}</div>
       ${r && r.msg ? `<p class="msg ${r.won ? 'win' : 'loss'}">${r.msg}</p>` : '<p class="hint">Pick what to bet on. The wheel does the rest.</p>'}`);
   }
 
@@ -2174,8 +2183,8 @@ export class Hub {
     setTimeout(() => {
       clearInterval(ticks);
       const color = n === 0 ? 'green' : RED.has(n) ? 'red' : 'black';
-      const won = kind === color || (n !== 0 && ((kind === 'odd' && n % 2 === 1) || (kind === 'even' && n % 2 === 0)));
-      const pays = kind === 'green' ? 14 : 2;
+      const won = rouletteWins(kind, n);
+      const pays = ROULETTE_PAYS[kind] || 2;
       if (won) { this.earn(bet * pays); sfx.win(); } else sfx.deny();
       this.roulette = { spinning: false, angle, n, color, won, msg: `${n} ${color.toUpperCase()}. ${won ? `Won 🪙 ${fmt(bet * pays)}!` : `Lost 🪙 ${fmt(bet)}.`}` };
       this.settleBet('🎡', bet, won ? bet * pays : 0, (s) => { if (won && kind === 'green') s.rouletteGreens++; });
