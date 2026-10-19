@@ -1677,3 +1677,8 @@ body.scoped #crosshair, body.scoped #cdRing { display: none !important; }
 .maptile.m-boardwalk { background: linear-gradient(150deg, #2a9d8f, #1d3557 55%, #e76f51); }
 .gearhead.m-boardwalk { background: linear-gradient(120deg, #1d3557, #e76f51); }
 .tag.featured { background: #ffd23f; color: var(--ink); margin-left: 6px; animation: jpGlow 1.4s ease-in-out infinite alternate; }
+.sidebet { margin-top: 10px; padding: 10px 12px; border-radius: 14px; border: 2px dashed rgba(255, 210, 63, 0.5); background: rgba(255, 210, 63, 0.06); display: grid; gap: 6px; }
+.sidebet > b { font: 400 18px var(--display); letter-spacing: 0.5px; color: var(--gold); }
+.sidebet > small { font-size: 12px; font-weight: 700; opacity: 0.8; }
+.sidebet .minecount { flex-wrap: wrap; gap: 5px; }
+.sidebet .sbline { margin: 0; font-weight: 800; color: #5ee27a; font-size: 13px; }

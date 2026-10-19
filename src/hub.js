@@ -202,6 +202,11 @@ const WHATS_NEW = {
   ],
 };
 
+// Side bets on yourself: put chips on hauling at least this much out of the raid (on top of what
+// you brought in). Lose the bet if you die or come up short.
+export const SIDE_TARGETS = [[2000, 2], [5000, 3], [10000, 5]];
+const SIDE_STAKES = [0, 100, 500, 1000, 5000, 25000];
+
 const GAMES = [
   ['blackjack', '🃏', 'Blackjack', 'Beat the dealer to 21'],
   ['plinko', '🔴', 'Plinko', 'Drop a ball, pray for the edges'],
@@ -631,8 +636,19 @@ export class Hub {
           <div class="grid">${lo.items.map((it, i) => this.itemCard(it, freeKit ? 'freelocked' : 'unpack', i)).join('')}${Array(Math.max(0, LOADOUT_SLOTS - lo.items.length)).fill('<div class="item empty"></div>').join('')}</div>
           <p class="hint">${freeKit ? 'Free gear can\'t be swapped piece by piece: put the whole thing back to pack your own.' : 'Click anything here to send it back to your stash.'}</p>
           ${pocket}
+          ${sel.safe ? '' : this.renderSideBet()}
         </section>
       </div>`;
+  }
+
+  renderSideBet() {
+    const sb = this.sideBet || (this.sideBet = { stake: 0, target: SIDE_TARGETS[0][0] });
+    const chips = this.data.stash.chips;
+    const mult = (SIDE_TARGETS.find(([t]) => t === sb.target) || SIDE_TARGETS[0])[1];
+    const stakes = SIDE_STAKES.filter((v) => v === 0 || v <= chips).map((v) => `<button class="subtab ${sb.stake === v ? 'on' : ''}" data-act="sidestake" data-v="${v}">${v ? `🪙 ${chipLabel(v)}` : 'No bet'}</button>`).join('');
+    const targets = SIDE_TARGETS.map(([t, x]) => `<button class="subtab ${sb.target === t ? 'on' : ''}" data-act="sidetarget" data-v="${t}">🪙 ${chipLabel(t)}+ pays ${x}x</button>`).join('');
+    return `<div class="sidebet"><b>🎲 Side bet on yourself</b><small>Bet you'll get out with at least this much loot (on top of what you're bringing). Die or come up short and the House keeps it.</small>
+      <div class="minecount"><small>STAKE</small>${stakes}</div>${sb.stake ? `<div class="minecount"><small>HAUL</small>${targets}</div><p class="sbline">Bet 🪙 ${fmt(sb.stake)} to win 🪙 ${fmt(sb.stake * mult)} if you haul 🪙 ${fmt(sb.target)}+.</p>` : ''}</div>`;
   }
 
   // The stash, sorted into shelves: guns, supplies, throwables, valuables (to sell) and the rest.
@@ -2011,6 +2027,8 @@ export class Hub {
       case 'minestart': this.startMines(); break;
       case 'mine': this.pickMine(i); break;
       case 'minecash': this.cashMines(); break;
+      case 'sidestake': (this.sideBet || (this.sideBet = { stake: 0, target: SIDE_TARGETS[0][0] })).stake = Number(b.dataset.v) || 0; break;
+      case 'sidetarget': (this.sideBet || (this.sideBet = { stake: 0, target: SIDE_TARGETS[0][0] })).target = Number(b.dataset.v); break;
       case 'crashauto': this.crashAuto = Number(b.dataset.x) || 0; break;
       case 'hilostart': this.startHilo(); break;
       case 'hilo': this.callHilo(b.dataset.d); break;
@@ -2401,6 +2419,15 @@ export class Hub {
     if (!restoring) loadout.pocket = !hasFreeKit(lo) && lo.weapons.some(Boolean) ? pocketSlots(d.bag || 0) : 0;
     else loadout.pocket = pocketSlots(d.bag || 0);
     if (!restoring) save.update((x) => { x.loadout = { weapons: [null, null], items: [] }; delete x.insured; });
+    // A side bet: the stake goes in now, along with what you're bringing (so only new loot counts).
+    const mapId = party ? party.mapId : d.selectedMap;
+    const sb = this.sideBet;
+    if (!restoring && sb && sb.stake > 0 && MAPS[mapId] && !MAPS[mapId].safe) {
+      const base = [...loadout.weapons.filter(Boolean), ...loadout.items].reduce((n, it) => n + itemInfo(it).value, 0);
+      const mult = (SIDE_TARGETS.find(([t]) => t === sb.target) || SIDE_TARGETS[0])[1];
+      if (this.spend(sb.stake)) save.update((x) => { x.sideBet = { stake: sb.stake, target: sb.target, mult, base }; });
+      sb.stake = 0;
+    }
     this.loStage = 'maps';
     this.onDeploy({
       party,

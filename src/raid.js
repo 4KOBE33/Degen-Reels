@@ -1068,6 +1068,19 @@ export class Raid {
     // Sitting at a Lounge table when it ended (the leader left, say): get up.
     if (this.duel && this.duel.tables.seat) this.duel.tables.leave();
     this.result = { ...result, run: this.run, time: this.raidTime - this.timeLeft, newFinds: [] };
+    // A side bet on yourself, placed before you dropped in: settle it.
+    const sb = save.get().sideBet;
+    if (sb && !this.map.safe && !this.tutorialMode) {
+      const haul = result.success ? Math.max(0, (result.value || 0) - (sb.base || 0)) : 0;
+      const won = result.success && haul >= sb.target;
+      const payout = won ? sb.stake * sb.mult : 0;
+      save.update((d) => {
+        delete d.sideBet;
+        d.stash.chips += payout;
+        if (won) { d.stats.gambleWon = (d.stats.gambleWon || 0) + payout; d.stats.sideBetsWon = (d.stats.sideBetsWon || 0) + 1; }
+      });
+      this.result.sideBet = { ...sb, haul, won, payout };
+    }
     // Stats, collection log, XP and achievements.
     // The Lounge is for hanging out and dueling: no raid XP or stats for walking in and out.
     this.result.progress = this.map.safe || this.tutorialMode ? null : recordRaid(this.result, this.mapId);

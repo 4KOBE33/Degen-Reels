@@ -884,6 +884,8 @@ export class Hud {
       if (r.lostStreak >= 2) line += `<br><b class="streakline lost">💔 Your ${r.lostStreak}-raid streak is over.</b>`;
     }
     $('resultsTitle').textContent = title;
+    const sb = r.sideBet;
+    if (sb) line += sb.won ? `<br><b class="streakline">🎲 Side bet won! Hauled 🪙 ${sb.haul.toLocaleString('en-US')} (needed ${sb.target.toLocaleString('en-US')}): +🪙 ${sb.payout.toLocaleString('en-US')}</b>` : `<br><b class="streakline lost">🎲 Side bet lost: ${r.success ? `hauled 🪙 ${sb.haul.toLocaleString('en-US')} of the ${sb.target.toLocaleString('en-US')} you needed` : 'you didn\'t make it out'}. The House keeps 🪙 ${sb.stake.toLocaleString('en-US')}.</b>`;
     $('resultsLine').innerHTML = `${line}${insuredNote}<br><small>Machines destroyed: ${r.run.machines} · Raiders busted: ${r.run.raiders}${(r.run.bestStreak || 0) >= 2 ? ` · ⚡ Best kill streak: ${r.run.bestStreak}` : ''}${r.run.bounty ? ' · 💰 Bounty claimed!' : ''}${r.run.peakHeat ? ` · 🚨 Heat ${'★'.repeat(r.run.peakHeat)}` : ''}${r.run.rule ? ` · House Rules: ${escapeHtml(r.run.rule)}` : ''}${r.run.boss ? ` · 👑 Took down ${this.raid && this.raid.bossName ? this.raid.bossName : 'the boss'}!` : ''}</small>`;
     $('resultsItems').innerHTML = r.items.length || r.chips
       ? `${r.chips ? `<span class="chip">🪙 ${r.chips} chips</span>` : ''}${r.items.map((it) => `<span class="chip ${r.success ? '' : 'lost'}" style="color:${itemInfo(it).css}">${iconHtml(it)} ${escapeHtml(itemTitle(it).slice(itemInfo(it).icon.length + 1))}</span>`).join('')}`
