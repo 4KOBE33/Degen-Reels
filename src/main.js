@@ -8,6 +8,7 @@ import { Hub } from './hub.js';
 import { PlayerController } from './player.js';
 import { initAudio, setVolume } from './audio.js';
 import { save } from './save.js';
+import { MAPS } from './map.js';
 import { keyName, renderBinds, wireBinds } from './keys.js';
 import { ITEMS, QUALITY } from './config.js';
 import { BUILD } from './version.js';
@@ -406,7 +407,8 @@ const hub = new Hub({
     const exits = [0, 1, 2, 3].sort(() => Math.random() - 0.5).slice(0, 2);
     const spawns = raid.mapId === mapId ? raid.map.spawns : null;
     const spawn = spawns ? spawns[Math.floor(Math.random() * spawns.length)] : null;
-    net.start({ mapId, seed, exits, spawn, build: BUILD });
+    const royale = (save.get().playMode || 'royale') === 'royale' && MAPS[mapId] && !MAPS[mapId].safe;
+    net.start({ mapId, seed, exits, spawn, build: BUILD, royale });
   },
   onSettings() { applySettings(); voice.apply(); },
   onJoinRaid() { askToJoin(true); },
@@ -433,7 +435,7 @@ const hub = new Hub({
       const slot = Math.max(0, mates.findIndex((m) => m.id === net.id));
       const spawn = myTeam ? blue : red;
       const join = info.join || null;
-      raid.deploy({ ...opts, opts: { client: !session.host, exits: info.exits, spawn, slot, party: info.members.length, at: join && join.pos, restore: join && join.restore } });
+      raid.deploy({ ...opts, opts: { royale: !!info.royale, client: !session.host, exits: info.exits, spawn, slot, party: info.members.length, at: join && join.pos, restore: join && join.restore } });
       if (join) { session.applyJoin(join); clearBackup(); if (join.restore) clearSafety(); }
       if (session.host) session.addFriends(new THREE.Vector3(spawn[0], 0, spawn[1]));
       else session.register(raid.player, `p${net.id}`);

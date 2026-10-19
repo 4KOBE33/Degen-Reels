@@ -777,6 +777,8 @@ export class Session {
       }
       case 'adrop': raid.startAirdrop(e.x, e.z); break;
       case 'hh': raid.startHappyHour(e.e); break;
+      // Royale: our squad is the last one standing (the host worked it out).
+      case 'rwin': if (raid.player && raid.player.alive) raid.royaleWin(); break;
       case 'adland': if (raid.airdrop) { raid.airdrop.hostLanded = true; raid.airdrop.t = Math.max(raid.airdrop.t, 8); } break;
       case 'ko': {
         const k = raid.containers[e.i];

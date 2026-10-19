@@ -20,6 +20,7 @@ import { RaiderBrain } from './bots.js';
 import { rollRule, applyRule } from './rules.js';
 import { bubbleTexture } from './training.js';
 import { Gulls } from './gulls.js';
+import { Royale, ROYALE_SIZE, ROYALE_TIME, placementPrize } from './royale.js';
 
 // Emotes: a speech bubble over your head for a couple of seconds. J cycles through the first few;
 // going down always says the last one.
@@ -35,7 +36,7 @@ import { part, toon } from './toon.js';
 import { save } from './save.js';
 import { sfx } from './audio.js';
 import { keyName } from './keys.js';
-import { recordRaid } from './progress.js';
+import { recordRaid, progress } from './progress.js';
 import { featuredMap, FEATURED_BONUS } from './contracts.js';
 import { randomLook } from './looks.js';
 import { Duel } from './duel.js';
@@ -229,7 +230,8 @@ export class Raid {
     boss.pos.x = Math.max(c.x - c.w / 2 + 4, Math.min(c.x + c.w / 2 - 4, boss.pos.x));
     boss.pos.z = Math.max(c.z - c.d / 2 + 4, Math.min(c.z + c.d / 2 - 4, boss.pos.z));
     const inside = this.combatants.some((a) => (a.isPlayer || a.human) && a.alive && this.inCasino(a.pos, 2.5));
-    if (!lock.on && inside) this.setBossLock(true);
+    // (Not in a Royale: the circle moves on, and being shut in with the boss would be a death sentence.)
+    if (!lock.on && inside && !this.royaleMode) this.setBossLock(true);
     else if (lock.on && !this.combatants.some((a) => (a.isPlayer || a.human) && a.alive && this.inCasino(a.pos))) {
       // Everyone who went in is dead: he resets.
       boss.hp = boss.maxHp;
@@ -364,6 +366,8 @@ export class Raid {
 
   // opts (multiplayer): { client, exits: [i, i], spawn: [x, z], slot } — host and clients agree on these.
   deploy({ name, look, loadout, opts = {} }) {
+    if (this.royale) { this.royale.dispose(); this.royale = null; }
+    this.royaleMode = !!opts.royale && !this.map.safe;
     // Reset the map.
     for (const p of this.pickups) p.remove();
     this.pickups = [];
@@ -384,7 +388,7 @@ export class Raid {
       this.combatants = this.combatants.filter((c) => c !== this.player);
     }
     // House Rules: a twist for this raid (none in the Lounge or the tutorial).
-    this.ruleId = this.map.safe || opts.tutorial || this.map.tutorial ? null : rollRule(this.seed);
+    this.ruleId = this.map.safe || opts.tutorial || this.map.tutorial ? null : rollRule(this.seed, opts.royale ? ['bounty'] : []);
     this.rule = applyRule(this.ruleId);
     if (opts.client) {
       // Clients don't run machines or bots; they arrive in the host's snapshots.
@@ -412,7 +416,7 @@ export class Raid {
     // Two of the four exits are open each raid.
     const order = opts.exits ? [0, 1, 2, 3].sort((a, b) => (opts.exits.includes(b) ? 1 : 0) - (opts.exits.includes(a) ? 1 : 0)) : [0, 1, 2, 3].sort(() => Math.random() - 0.5);
     this.extracts.forEach((e, i) => {
-      e.active = this.tutorialMode || order.indexOf(i) < 2;
+      e.active = !this.royaleMode && (this.tutorialMode || order.indexOf(i) < 2);
       e.beam.material.color.setHex(e.active ? 0x5ee27a : 0xff5d5d);
       e.ring.material.color.setHex(e.active ? 0x5ee27a : 0xff5d5d);
       e.beam.visible = e.active;
@@ -456,7 +460,7 @@ export class Raid {
       if (!opts.client) this.duel.spawnChampion();
     }
 
-    this.raidTime = this.map.raidTime || RAID_TIME;
+    this.raidTime = this.royaleMode ? ROYALE_TIME : this.map.raidTime || RAID_TIME;
     this.timeLeft = this.raidTime;
     this.elapsed = 0;
     for (const e of this.extracts) { e.call = null; e.cooldown = 0; if (e.ride) e.ride.visible = false; }
@@ -493,13 +497,72 @@ export class Raid {
     this.result = null;
     // Owe the Mob and walked into a real raid anyway? They'll be along shortly.
     if (this.kidnap) this.kidnap.cleanup();
-    this.kidnap = !this.map.safe && !opts.tutorial && mobDebt() ? new Kidnap(this) : null;
+    this.kidnap = !this.map.safe && !opts.tutorial && !this.royaleMode && mobDebt() ? new Kidnap(this) : null;
     if (!this.tutorialMode) save.update((d) => { d.stats.raids++; });
     this.hud.raidIntro(this);
-    if (!this.isClient && !this.map.safe && !this.tutorialMode) {
+    if (this.royaleMode) this.startRoyale(opts);
+    else if (!this.isClient && !this.map.safe && !this.tutorialMode) {
       for (let i = 0; i < ((this.rule && this.rule.bounties) || 1); i++) this.placeBounty();
       this.placeGolden();
     }
+  }
+
+  // ---------- Royale ----------
+  // Fill the lobby with bots, put everyone in the air, and hand out the starting kit.
+  startRoyale(opts) {
+    this.royale = new Royale(this, this.seed !== null ? this.seed : Math.floor(Math.random() * 2 ** 31));
+    this.royaleKills = 0;
+    this.royalePlace = null;
+    const p = this.player;
+    if (!opts.client) {
+      // Thin out the machines: they're loot and trouble now, not the main event.
+      for (const m of this.machines) if (!m.isBoss && Math.random() < 0.6) { m.alive = false; this.scene.remove(m.group); }
+      this.machines = this.machines.filter((m) => m.alive);
+      const people = this.combatants.filter((c) => c.isPlayer || c.human).length + Math.max(0, (opts.party || 1) - 1);
+      while (this.bots.length < ROYALE_SIZE - people) this.spawnRaider();
+      while (this.bots.length > ROYALE_SIZE - people) { const b = this.bots.pop(); this.removeCombatant(b.c); }
+      this.bots.forEach((b, i) => {
+        b.hostile = true;
+        b.leaveAt = Infinity;
+        b.c.weapons = [makeGun(pick(['pistol', 'pistol', 'smg', 'revolver', 'shotgun']), 0), null];
+        b.c.active = 0;
+        b.c.refreshWeapon();
+        b.c.backpack = [makeItem('bandage', 1)];
+        this.royale.dropIn(b.c, i, this.bots.length);
+      });
+    }
+    if (p) this.royale.dropIn(p, 0, 1);
+    this.hud.toast(`🪂 ROYALE · ${ROYALE_SIZE} in, one walks out. Steer your chute, grab a gun, stay inside the circle.`, 'big');
+  }
+
+  // You won: last one (or one squad) standing.
+  royaleWin() {
+    if (!this.active) return;
+    this.royalePlace = 1;
+    this.hud.toast('👑 WINNER WINNER, CASINO DINNER!', 'big');
+    sfx.jackpot();
+    if (this.isHost) this.net.rel({ k: 'rwin' });
+    this.finish({ success: true, where: 'the last circle', items: [], chips: 0, value: 0, royale: true });
+  }
+
+  // Placement, prize, XP and stats. Nothing you picked up comes home: everyone starts fresh.
+  finishRoyale() {
+    const r = this.result;
+    const place = this.royalePlace || Math.max(1, this.royale ? this.royale.left() + (this.player && this.player.alive ? 0 : 1) : 1);
+    const kills = this.run.raiders || 0;
+    const prize = placementPrize(place, kills);
+    r.royale = { place, of: ROYALE_SIZE, kills, prize };
+    const before = save.get().xp;
+    r.progress = progress((d) => {
+      d.stash.chips += prize.chips;
+      d.xp += prize.xp;
+      d.stats.royaleGames = (d.stats.royaleGames || 0) + 1;
+      if (place === 1) d.stats.royaleWins = (d.stats.royaleWins || 0) + 1;
+      d.stats.royaleBest = Math.min(d.stats.royaleBest || 99, place);
+      d.stats.royaleKills = (d.stats.royaleKills || 0) + kills;
+    });
+    r.progress.xp = save.get().xp - before || prize.xp;
+    this.royale.over = true;
   }
 
   // ---------- emotes ----------
@@ -540,7 +603,7 @@ export class Raid {
   // Bust machines and the House notices: heat climbs (a star for every few busts, up to five), it
   // sends hunter crews after you, and every star adds 15% to the chips machines drop. Lie low for a
   // bit and it cools off. The host (or you, solo) keeps everyone's heat; friends hear when theirs moves.
-  heatOn() { return !this.map.safe && !this.tutorialMode && !this.isClient; }
+  heatOn() { return !this.map.safe && !this.tutorialMode && !this.isClient && !this.royaleMode; }
   heatBonus(c) { return 1 + 0.15 * Math.floor((c && c.heat) || 0); }
   addHeat(c, amt) {
     if (!c || !(c.isPlayer || c.human) || !this.heatOn()) return;
@@ -992,7 +1055,7 @@ export class Raid {
     const kept = (p.pocket || []).filter(Boolean).map((it) => { const x = { ...it }; delete x.free; return x; });
     if (kept.length) save.update((d) => { for (const it of kept) addToStash(d.stash.items, it); });
     p.pocket = (p.pocket || []).map(() => null);
-    const lostStreak = !this.map.safe && !this.tutorialMode ? save.get().stats.extractStreak || 0 : 0;
+    const lostStreak = !this.map.safe && !this.tutorialMode && !this.royaleMode ? save.get().stats.extractStreak || 0 : 0;
     const featured = !this.map.safe && !this.tutorialMode && featuredMap() === this.mapId;
     if (lostStreak) save.update((d) => { d.stats.extractStreak = 0; });
     this.finish({ success: false, reason, by, items, chips: p.chips, value, kept: kept.map((it) => itemInfo(it).name), lostStreak, featured });
@@ -1070,7 +1133,7 @@ export class Raid {
     this.result = { ...result, run: this.run, time: this.raidTime - this.timeLeft, newFinds: [] };
     // A side bet on yourself, placed before you dropped in: settle it.
     const sb = save.get().sideBet;
-    if (sb && !this.map.safe && !this.tutorialMode) {
+    if (sb && !this.map.safe && !this.tutorialMode && !this.royaleMode) {
       const haul = result.success ? Math.max(0, (result.value || 0) - (sb.base || 0)) : 0;
       const won = result.success && haul >= sb.target;
       const payout = won ? sb.stake * sb.mult : 0;
@@ -1083,7 +1146,8 @@ export class Raid {
     }
     // Stats, collection log, XP and achievements.
     // The Lounge is for hanging out and dueling: no raid XP or stats for walking in and out.
-    this.result.progress = this.map.safe || this.tutorialMode ? null : recordRaid(this.result, this.mapId);
+    if (this.royaleMode) this.finishRoyale();
+    else this.result.progress = this.map.safe || this.tutorialMode ? null : recordRaid(this.result, this.mapId);
     if (this.tutorialMode) this.result.tutorial = true;
     if (this.killcam) this.hud.killcam(this.killcam);
     else this.hud.raidOver(this.result);
@@ -1880,7 +1944,9 @@ export class Raid {
     }
     if (target.hp <= 0) {
       // Raiders and you go down first; machines just blow up.
-      if (target.team !== 'machine' && !target.isBoss) this.down(target, attacker);
+      // Royale: bots don't crawl around waiting to be finished off; they're just out.
+      if (this.royaleMode && ((target.brain && !target.human) || (target.isPlayer && !this.net))) this.kill(target, attacker);
+      else if (target.team !== 'machine' && !target.isBoss) this.down(target, attacker);
       else this.kill(target, attacker);
     }
   }
@@ -1945,9 +2011,10 @@ export class Raid {
     this.fx.confetti(at.clone().setY(1.4), 25);
     if (target.using) target.using = null;
     if (target.isPlayer) {
-      this.feed(`${attacker ? attacker.name : 'Something'} got you`);
+      const by = attacker ? attacker.name : this.royale && this.royale.outside(target.pos) ? 'The House Edge' : 'Something';
+      this.feed(`${by} got you`);
       this.startKillcam(target, attacker);
-      this.fail('dead', attacker ? attacker.name : null);
+      this.fail('dead', attacker ? attacker.name : by === 'Something' ? null : by);
       return;
     }
     this.spillLoot(at, [...target.weapons.filter(Boolean), ...target.backpack]);
@@ -1956,7 +2023,7 @@ export class Raid {
     target.backpack = [];
     target.chips = 0;
     target.removeIn = 8;
-    this.feed(`${attacker ? attacker.name : 'Something'} busted ${target.name}`);
+    this.feed(attacker ? `${attacker.name} busted ${target.name}` : this.royale && this.royale.outside(target.pos) ? `⭕ The House Edge took ${target.name}` : `Something busted ${target.name}`);
     if (target.bounty) {
       // Bounty paid out right there: a fountain of chips anyone can grab (mostly whoever's closest).
       this.chips.spawnBurst(at.clone().setY(1.4), target.bounty, null, { speed: 6 });
@@ -2093,6 +2160,7 @@ export class Raid {
     if (!this.isClient) for (const b of this.bots) b.update(dt);
     this.updateAirdrop(dt);
     this.updateHeat(dt);
+    if (this.royale) this.royale.update(dt);
     this.updateEmotes();
     // Where's the bounty? A tip every so often.
     const bt = this.bountyOn;
@@ -2176,7 +2244,7 @@ export class Raid {
     if (!this.isClient && !this.bossSpawned && !this.map.noBoss && this.elapsed >= BOSS_TIME) this.spawnBoss();
     // The Lounge never locks down.
     if (this.map.safe) this.timeLeft = Math.max(this.timeLeft, 600);
-    if (this.active && !this.map.safe) {
+    if (this.active && !this.map.safe && !this.royaleMode) {
       for (const mark of [300, 120, 60, 30]) {
         if (this.timeLeft <= mark && !this.warned[mark]) {
           this.warned[mark] = true;

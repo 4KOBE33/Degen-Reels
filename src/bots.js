@@ -161,6 +161,7 @@ export class RaiderBrain {
       if (!k || k.opened || k.claimedBy || this.skip.has(k)) continue;
       // The vault's behind a locked door until somebody opens it.
       if (k.kind === 'vault' && !raid.vaultOpen) continue;
+      if (raid.royale && this.zoneGoal(k.spot)) continue;
       const d = k.spot.distanceTo(c.pos);
       if (d < bestD) { bestD = d; best = k; }
     }
@@ -176,6 +177,22 @@ export class RaiderBrain {
     if (d > EXTRACT_RADIUS + 6 || d < EXTRACT_RADIUS * 0.5) return;
     // The usual pathing (round counters and walls), still shooting on the way.
     this.steer(this.goal, dt, false);
+  }
+
+  // Royale: a spot well inside where the circle is headed, if `at` is outside it (else null).
+  zoneGoal(at) {
+    const s = this.raid.royale.state();
+    const n = s.next;
+    const d = Math.hypot(at.x - n.x, at.z - n.z);
+    if (d < n.r * 0.85 || n.r < 1 && d < 6) return null;
+    if (!this.zoneSpot || this.zoneFor !== n) {
+      const a = Math.random() * Math.PI * 2;
+      const r = Math.random() * n.r * 0.55;
+      const [x, z] = this.raid.openSpot(n.x + Math.cos(a) * r, n.z + Math.sin(a) * r);
+      this.zoneSpot = new THREE.Vector3(x, 0, z);
+      this.zoneFor = n;
+    }
+    return this.zoneSpot;
   }
 
   // Nothing left to shoot with: both guns empty and no Ammo Boxes to reload from.
@@ -196,14 +213,16 @@ export class RaiderBrain {
     for (const a of raid.actors) {
       if (!a.alive || a === c || a === this.friend) continue;
       // Someone's down: friendly raiders don't shoot them, hostile ones finish the job.
-      const person = a.isPlayer || a.human;
+      const person = a.isPlayer || a.human || (raid.royaleMode && !!a.brain);
       if (a.downed && !(person && this.hostile)) continue;
       // Give you a few seconds after dropping in before anyone comes for you.
       if (person && raid.elapsed < 12 && c.lastAttacker !== a) continue;
       const enemy = a.team === 'machine' || (person && (this.hostile || c.lastAttacker === a)) || a === c.lastAttacker;
       if (!enemy) continue;
       const d = a.pos.distanceTo(c.pos);
-      if (d > (a === c.lastAttacker ? 60 : 36)) continue;
+      // (Late in a Royale everyone's close and nobody's hiding: they'll spot you from farther.)
+      const late = raid.royale && raid.royale.state().phase >= 2;
+      if (d > (a === c.lastAttacker ? 60 : late ? 70 : 36)) continue;
       // Whoever's shooting at me first, then the closest.
       const score = d - (a === c.lastAttacker ? 25 : 0) - (person && this.hostile ? 8 : 0);
       if (score < bestScore) { bestScore = score; best = a; }
@@ -243,6 +262,24 @@ export class RaiderBrain {
       }
     }
 
+    // Royale: get inside where the circle's closing to, before anything else.
+    if (raid.royale) {
+      const z = this.zoneGoal(c.pos);
+      if (z) { this.goal = z; this.goalKind = 'zone'; if (this.goalContainer) { this.goalContainer.claimedBy = null; this.goalContainer = null; } return; }
+      if (this.goalKind === 'zone') this.goal = null;
+      // From the third circle on: stop looting and go find somebody.
+      if (!best && raid.royale.state().phase >= 2) {
+        let prey = null;
+        let pd = 170;
+        for (const a of raid.combatants) {
+          if (a === c || !a.alive || !(a.isPlayer || a.human || a.brain)) continue;
+          const d = a.pos.distanceTo(c.pos);
+          if (d < pd) { pd = d; prey = a; }
+        }
+        if (prey) { this.goal = prey.pos.clone(); this.goalKind = 'hunt'; return; }
+      }
+      if (this.goalKind === 'hunt') this.goal = null;
+    }
     // Someone called a ride nearby? Friendly raiders who are done looting hitch along.
     const called = raid.extracts.find((e) => e.call && Math.hypot(e.x - c.pos.x, e.z - c.pos.z) < 70);
     if (called && !this.hostile && this.age > this.leaveAt * 0.6) this.leaveAt = Math.min(this.leaveAt, this.age);
@@ -286,6 +323,15 @@ export class RaiderBrain {
       this.los = this.canSee(t);
       if (this.los) this.lastSeen = t.pos.clone();
       this.fight(t, dt);
+      this.unstick(dt);
+      return;
+    }
+    if (c.gliding) return;
+    // Caught outside the circle: run for it (shooting on the way only if it's right there).
+    if (raid.royale && raid.royale.outside(c.pos)) {
+      const z = this.zoneGoal(c.pos) || new THREE.Vector3(raid.royale.state().x, 0, raid.royale.state().z);
+      this.steer(z, dt, true);
+      this.faceMove(dt);
       this.unstick(dt);
       return;
     }

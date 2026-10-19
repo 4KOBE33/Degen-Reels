@@ -310,7 +310,21 @@ export class Combatant {
       if (this.isPlayer) sfx.jump();
     }
 
-    this.vel.y -= PLAYER.gravity * live.gravity * dt;
+    // Royale drop: floating down under a chute. You steer; bots glide to a spot of their own.
+    if (this.gliding) {
+      if (this.glideTo) {
+        const dx = this.glideTo.x - this.pos.x;
+        const dz = this.glideTo.z - this.pos.z;
+        const d = Math.hypot(dx, dz) || 1;
+        const sp = Math.min(16, d);
+        this.vel.x = (dx / d) * sp;
+        this.vel.z = (dz / d) * sp;
+      } else {
+        this.vel.x = this.move.x * 18;
+        this.vel.z = this.move.y * 18;
+      }
+      this.vel.y = -7;
+    } else this.vel.y -= PLAYER.gravity * live.gravity * dt;
     this.pos.addScaledVector(this.vel, dt);
     const wasOnGround = this.onGround;
     const r = resolve(this.pos, this.vel, PLAYER.radius, this.raid.map);
@@ -320,6 +334,7 @@ export class Combatant {
       if (this.pos.y - g < 0.45) { this.pos.y = g; this.vel.y = 0; r.onGround = true; }
     }
     this.onGround = r.onGround;
+    if (this.gliding && r.onGround) { this.gliding = false; this.glideTo = null; this.vel.set(0, 0, 0); }
     // Waiting for the bell in The Pit: stay on your mark (you can still look around).
     if (this.pin) {
       this.pos.x = this.pin.x;

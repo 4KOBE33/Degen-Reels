@@ -238,9 +238,14 @@ export class Hud {
     this.slow -= dt;
     if (this.slow <= 0) {
       this.slow = 0.2;
-      this.set('timer', `⏰ ${clock(raid.timeLeft)}`);
+      const ry = raid.royale ? raid.royale.state() : null;
+      this.set('timer', ry ? `👥 ${raid.royale.left()} left · ${ry.closing ? '🔴' : '⭕'} ${clock(ry.left)}` : `⏰ ${clock(raid.timeLeft)}`);
       this.set('zone', `${escapeHtml(raid.map.zoneName(p.pos.x, p.pos.z))} <span class="tier t${raid.map.tierAt(p.pos.x, p.pos.z)}">${['', 'SAFE-ISH', 'RISKY', 'DEADLY', 'VAULT'][raid.map.tierAt(p.pos.x, p.pos.z)]}</span>${raid.rule ? ` <span class="rulechip" title="${escapeHtml(raid.rule.desc)}">${raid.rule.icon} ${escapeHtml(raid.rule.name)}</span>` : ''}${p.heatStars ? ` <span class="rulechip heat">🚨 ${'★'.repeat(p.heatStars)}${'☆'.repeat(5 - p.heatStars)}</span>` : ''}${raid.happyHour && raid.happyHour() ? ` <span class="rulechip happy">🍸 2× CHIPS ${Math.ceil(raid.timeLeft - raid.happyEnd)}s</span>` : ''}`);
-      this.set('exits', raid.extracts.filter((e) => e.active).map((e) => `<div>🟢 ${e.name} · ${Math.round(Math.hypot(e.x - p.pos.x, e.z - p.pos.z))}m ${bearing(p, e.x, e.z)}</div>`).join(''));
+      if (ry) {
+        const out = Math.hypot(p.pos.x - ry.x, p.pos.z - ry.z) - ry.r;
+        const toNext = Math.hypot(p.pos.x - ry.next.x, p.pos.z - ry.next.z) - ry.next.r;
+        this.set('exits', `${out > 0 ? `<div class="zoneout">☠️ OUTSIDE THE CIRCLE · ${Math.round(out)}m back in ${bearing(p, ry.x, ry.z)} · −${ry.dmg}/s</div>` : toNext > 0 ? `<div>⚪ Next circle ${Math.round(toNext)}m ${bearing(p, ry.next.x, ry.next.z)}</div>` : '<div>✅ Inside the next circle</div>'}<div>💀 ${raid.royaleKills || raid.run.raiders || 0} kills</div>`);
+      } else this.set('exits', raid.extracts.filter((e) => e.active).map((e) => `<div>🟢 ${e.name} · ${Math.round(Math.hypot(e.x - p.pos.x, e.z - p.pos.z))}m ${bearing(p, e.x, e.z)}</div>`).join(''));
       const now = performance.now();
       this.feedItems = this.feedItems.filter((f) => now - f.t < 7000);
       this.set('feed', this.feedItems.map((f) => `<div>${escapeHtml(f.text)}</div>`).join(''));
@@ -368,6 +373,27 @@ export class Hud {
     ctx.closePath();
     ctx.fill();
     ctx.restore();
+
+    // Royale: the circle (pink) and where it's closing to (white, dashed).
+    if (raid.royale) {
+      const s = raid.royale.state();
+      const k = size / view;
+      ctx.lineWidth = 2.5;
+      ctx.strokeStyle = '#ff3fa4';
+      ctx.beginPath();
+      ctx.arc(...toMini(s.x, s.z), Math.max(1, s.r * k), 0, Math.PI * 2);
+      ctx.stroke();
+      if (s.next.r < s.r - 1) {
+        ctx.save();
+        ctx.setLineDash([5, 4]);
+        ctx.strokeStyle = '#ffffff';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(...toMini(s.next.x, s.next.z), Math.max(1, s.next.r * k), 0, Math.PI * 2);
+        ctx.stroke();
+        ctx.restore();
+      }
+    }
 
     // Rare loot nearby (Epic and up) glows on the map.
     for (const pk of raid.pickups) {
@@ -553,6 +579,22 @@ export class Hud {
     if (raid.airdrop) {
       ctx.font = '28px sans-serif';
       ctx.fillText('🪂', tx(raid.airdrop.x), tx(raid.airdrop.z));
+    }
+    if (raid.royale) {
+      const s = raid.royale.state();
+      ctx.save();
+      ctx.lineWidth = 4;
+      ctx.strokeStyle = '#ff3fa4';
+      ctx.beginPath();
+      ctx.arc(tx(s.x), tx(s.z), Math.max(1, tx(s.x + s.r) - tx(s.x)), 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.setLineDash([8, 6]);
+      ctx.strokeStyle = '#ffffff';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(tx(s.next.x), tx(s.next.z), Math.max(1, tx(s.next.x + s.next.r) - tx(s.next.x)), 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.restore();
     }
     if (raid.bountyTip) {
       const bx = tx(raid.bountyTip.x);
@@ -856,7 +898,11 @@ export class Hud {
     const insuredNote = r.kept && r.kept.length ? ` 🔒 Your Safe Pocket kept your ${r.kept.map(escapeHtml).join(' and ')}.` : '';
     let title;
     let line;
-    if (r.tutorial && r.success) {
+    if (r.royale) {
+      const R = r.royale;
+      title = R.place === 1 ? '👑 WINNER WINNER, CASINO DINNER!' : `#${R.place} OF ${R.of}`;
+      line = `${R.place === 1 ? 'Last one standing. The House pays out.' : r.by ? `${escapeHtml(r.by)} got you.` : 'The House Edge got you.'} <b>${R.kills} kill${R.kills === 1 ? '' : 's'}</b> · prize <b>🪙 ${R.prize.chips.toLocaleString('en-US')}</b>`;
+    } else if (r.tutorial && r.success) {
       title = '🎓 TUTORIAL COMPLETE!';
       const stars = (this.raid && this.raid.tutorialStars) || [];
       line = `${stars.length ? `<b class="tutstars">${'⭐'.repeat(stars.length)}${'☆'.repeat(Math.max(0, 3 - stars.length))}</b> ${stars.map(escapeHtml).join(' · ')}<br>` : '<b class="tutstars">☆☆☆</b> No bonus stars this time: try for a crit, a triple grenade kill and a flawless fight.<br>'}You got out alive, and everything you carried is yours to keep. Next up: pick a real map, pack a gun and go. Sell what you find at the 💰 Fence, then try your luck in the 🎰 Back Room.`;
@@ -887,7 +933,7 @@ export class Hud {
     const sb = r.sideBet;
     if (sb) line += sb.won ? `<br><b class="streakline">🎲 Side bet won! Hauled 🪙 ${sb.haul.toLocaleString('en-US')} (needed ${sb.target.toLocaleString('en-US')}): +🪙 ${sb.payout.toLocaleString('en-US')}</b>` : `<br><b class="streakline lost">🎲 Side bet lost: ${r.success ? `hauled 🪙 ${sb.haul.toLocaleString('en-US')} of the ${sb.target.toLocaleString('en-US')} you needed` : 'you didn\'t make it out'}. The House keeps 🪙 ${sb.stake.toLocaleString('en-US')}.</b>`;
     $('resultsLine').innerHTML = `${line}${insuredNote}<br><small>Machines destroyed: ${r.run.machines} · Raiders busted: ${r.run.raiders}${(r.run.bestStreak || 0) >= 2 ? ` · ⚡ Best kill streak: ${r.run.bestStreak}` : ''}${r.run.bounty ? ' · 💰 Bounty claimed!' : ''}${r.run.peakHeat ? ` · 🚨 Heat ${'★'.repeat(r.run.peakHeat)}` : ''}${r.run.rule ? ` · House Rules: ${escapeHtml(r.run.rule)}` : ''}${r.run.boss ? ` · 👑 Took down ${this.raid && this.raid.bossName ? this.raid.bossName : 'the boss'}!` : ''}</small>`;
-    $('resultsItems').innerHTML = r.items.length || r.chips
+    $('resultsItems').innerHTML = r.royale ? '' : r.items.length || r.chips
       ? `${r.chips ? `<span class="chip">🪙 ${r.chips} chips</span>` : ''}${r.items.map((it) => `<span class="chip ${r.success ? '' : 'lost'}" style="color:${itemInfo(it).css}">${iconHtml(it)} ${escapeHtml(itemTitle(it).slice(itemInfo(it).icon.length + 1))}</span>`).join('')}`
       : '<span class="chip">Nothing</span>';
     $('resultsItems').classList.toggle('lost', !r.success);

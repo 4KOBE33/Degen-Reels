@@ -278,6 +278,9 @@ const groupOf = (tab) => Object.keys(TAB_GROUPS).find((g) => TAB_GROUPS[g].some(
 const FREE_LOCKED = 'The free loadout is locked in. Raid with it as is.';
 const hasFreeKit = (lo) => lo.weapons.some((g) => g && g.free) || lo.items.some((it) => it.free);
 
+// Royale or extraction (the Lounge is always just the Lounge).
+const isRoyale = (d) => (d.playMode || 'royale') === 'royale' && MAPS[d.selectedMap] && !MAPS[d.selectedMap].safe;
+
 export class Hub {
   constructor({ onDeploy, onMapChange, onPartyStart = null, onSettings = null, onJoinRaid = null, net = null }) {
     this.onDeploy = onDeploy;
@@ -506,7 +509,7 @@ export class Hub {
     // On a streak? Show what this raid is worth on top (and that dying ends it).
     const streak = m.safe ? 0 : d.stats.extractStreak || 0;
     const fire = streak ? ` · 🔥${streak} (+${Math.min(25, streak * 5)}% chips)` : '';
-    let html = hasGun ? `DEPLOY<small>${m.icon} ${m.name}${fire}</small>` : 'DEPLOY<small>no gun packed!</small>';
+    let html = isRoyale(d) ? `DROP IN<small>⚔️ Royale · ${m.icon} ${m.name}</small>` : hasGun ? `DEPLOY<small>${m.icon} ${m.name}${fire}</small>` : 'DEPLOY<small>no gun packed!</small>';
     if (party && !this.net.isHost) html = this.net.room.inRaid ? 'JOIN RAID<small>drop in next to your squad</small>' : 'WAITING…<small>the party leader deploys everyone</small>';
     else if (party) html = `DEPLOY SQUAD<small>${m.icon} ${m.name} · ${this.net.partySize} players</small>`;
     $('deploy').innerHTML = html;
@@ -590,7 +593,8 @@ export class Hub {
     const partyMember = this.net && this.net.inParty && !this.net.isHost;
     const tiles = order.map((id) => {
       const m = MAPS[id];
-      const facts = m.safe ? ['🛡️ No machines', '🥊 1v1s', '🎲 Casino games'] : [`⏱️ ${Math.round((m.raidTime || 1080) / 60)} min`, `📏 ${m.size}`, `👑 at ${clock((m.raidTime || 1080) - BOSS_TIME)}`];
+      const royale = (d.playMode || 'royale') === 'royale';
+      const facts = m.safe ? ['🛡️ No machines', '🥊 1v1s', '🎲 Casino games'] : royale ? ['👥 24 players', '⏱️ ~10 min', `📏 ${m.size}`] : [`⏱️ ${Math.round((m.raidTime || 1080) / 60)} min`, `📏 ${m.size}`, `👑 at ${clock((m.raidTime || 1080) - BOSS_TIME)}`];
       return `<button class="maptile m-${id} ${d.selectedMap === id ? 'on' : ''}" data-act="pickmap" data-m="${id}" ${partyMember && d.selectedMap !== id ? 'disabled' : ''}>
         <span class="mticon">${m.icon}</span><span class="tag d-${m.danger.toLowerCase()}">${m.danger}</span>${id === featuredMap() ? '<span class="tag featured" title="Today only: 25% more chips when you get out, and 25% more XP">⭐ FEATURED +25%</span>' : ''}
         <b>${m.name}</b><small>${m.blurb}</small>
@@ -598,6 +602,7 @@ export class Hub {
         <span class="mtgo">${partyMember ? 'Gear up ▶' : 'Choose ▶'}</span></button>`;
     }).join('');
     return `${this.renderContracts()}${this.renderParty()}
+      <div class="modepick">${[['royale', '⚔️ ROYALE', '24 drop in, one walks out. Your stash is safe.'], ['extract', '🎒 EXTRACTION', 'Bring your gear, loot, get out alive.']].map(([k, n, t]) => `<button class="modebtn ${(d.playMode || 'royale') === k ? 'on' : ''}" data-act="playmode" data-v="${k}" ${partyMember ? 'disabled' : ''}><b>${n}</b><small>${t}</small></button>`).join('')}</div>
       <section class="mappick"><h3>🗺️ Where to? <small>${partyMember ? 'Your party leader picks the map. Gear up for it.' : 'Pick a map, then pack your gear.'}</small></h3>
       <div class="mapgrid">${tiles}</div></section>`;
   }
@@ -612,6 +617,7 @@ export class Hub {
     const sel = MAPS[selId];
     const facts = sel.safe ? ['🛡️ No machines, no raiders', '🥊 1v1s in The Pit'] : [`⏱️ ${Math.round((sel.raidTime || 1080) / 60)} min raid`, `📏 ${sel.size} map`, `👑 ${bossTheme(selId).name} when the clock hits ${clock((sel.raidTime || 1080) - BOSS_TIME)}`];
     const packed = lo.weapons.filter(Boolean).length + lo.items.length;
+    if (isRoyale(d)) return this.renderRoyaleGear(selId, sel);
     const pocket = (() => {
       const n = pocketSlots(d.bag || 0);
       if (!n) return '<p class="hint pocketnote">🔒 Buy any backpack in the Shop to get a <b>Safe Pocket</b>: what you put in it during a raid comes home even if you die.</p>';
@@ -639,6 +645,26 @@ export class Hub {
           ${sel.safe ? '' : this.renderSideBet()}
         </section>
       </div>`;
+  }
+
+  renderRoyaleGear(selId, sel) {
+    const s = this.data.stats;
+    return `<div class="gearhead m-${selId}">
+        <button class="btn ghost gearback" data-act="backmaps">◀ Maps</button>
+        <span class="gearicon">${sel.icon}</span>
+        <div class="geartxt"><span class="tag d-royale">ROYALE</span><b>${sel.name}</b><small>👥 24 fighters · ⏱️ ~10 min · the House Edge closes in</small></div>
+      </div>
+      <section class="royalecard">
+        <h3>⚔️ How Royale works</h3>
+        <ul>
+          <li>🪂 Jump out of the blimp and <b>steer your chute</b> (WASD) to where you want to land.</li>
+          <li>🔫 Everyone starts with a Pea Shooter and a bandage. Crack crates, spin gun wheels, take what you can.</li>
+          <li>⭕ Stay inside the circle. Outside, the <b>House Edge</b> eats your health, faster every round.</li>
+          <li>👑 The ${bossTheme(selId).name} still shows up in the casino at 4:00, sitting on the best loot in the place.</li>
+          <li>💰 Chips and XP by placement and kills. <b>Nothing you bring or find is at risk</b>: your stash stays home.</li>
+        </ul>
+        <div class="royalestats"><span>🏆 Wins <b>${fmt(s.royaleWins || 0)}</b></span><span>🎯 Best <b>${s.royaleBest ? `#${s.royaleBest}` : '-'}</b></span><span>💀 Kills <b>${fmt(s.royaleKills || 0)}</b></span><span>🎮 Games <b>${fmt(s.royaleGames || 0)}</b></span></div>
+      </section>`;
   }
 
   renderSideBet() {
@@ -1862,6 +1888,7 @@ export class Hub {
         this.loStage = 'gear';
         break;
       case 'backmaps': this.loStage = 'maps'; break;
+      case 'playmode': save.update((x) => { x.playMode = b.dataset.v; }); break;
       case 'freelocked': this.toast('That\'s free gear. Put the whole free loadout back to pack your own.'); return;
       case 'unfreekit':
         save.update((x) => {
@@ -2390,7 +2417,7 @@ export class Hub {
       this.toast('Only the party leader can deploy. Pack your loadout and hang tight!');
       return;
     }
-    if (!lo.weapons.some(Boolean) && !this.warnedNoGun) {
+    if (!isRoyale(d) && !lo.weapons.some(Boolean) && !this.warnedNoGun) {
       this.warnedNoGun = true;
       this.toast('No gun packed! Click DEPLOY again to go in with just your fists.');
       return;
@@ -2411,6 +2438,20 @@ export class Hub {
   launch(party = null) {
     const d = this.data;
     const lo = d.loadout;
+    // Royale: everyone gets the same starter kit, and the stash (and your packed loadout) stay home.
+    const royale = party ? !!party.royale : isRoyale(d);
+    if (royale) {
+      this.loStage = 'maps';
+      this.onDeploy({
+        party,
+        mapId: party ? party.mapId : d.selectedMap,
+        name: (d.look.name || '').trim() || 'High Roller',
+        look: wornLook(d.look),
+        loadout: { weapons: [makeGun('pistol', 0), null], items: [makeItem('bandage', 1)], pocket: 0 },
+        opts: { royale: true },
+      });
+      return;
+    }
     // Back in after a reload: you already have your gear from before.
     const restoring = party && party.join && party.join.restore;
     // Whatever you bring leaves the stash for good unless you extract with it.

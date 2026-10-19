@@ -1682,3 +1682,16 @@ body.scoped #crosshair, body.scoped #cdRing { display: none !important; }
 .sidebet > small { font-size: 12px; font-weight: 700; opacity: 0.8; }
 .sidebet .minecount { flex-wrap: wrap; gap: 5px; }
 .sidebet .sbline { margin: 0; font-weight: 800; color: #5ee27a; font-size: 13px; }
+.zoneout { color: #ff5d5d; font-weight: 900; animation: jpGlow 0.6s ease-in-out infinite alternate; }
+.modepick { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 4px 0 10px; }
+.modebtn { display: grid; gap: 2px; padding: 10px 14px; border-radius: 14px; border: 3px solid var(--ink); background: #1f1137; color: var(--cream); cursor: pointer; text-align: left; font: inherit; }
+.modebtn b { font: 400 22px var(--display); letter-spacing: 1px; }
+.modebtn small { font-size: 12px; font-weight: 800; opacity: 0.75; }
+.modebtn.on { background: linear-gradient(135deg, #ff3fa4, #7b2cbf); box-shadow: 0 0 18px rgba(255, 63, 164, 0.45); }
+.modebtn[data-v="extract"].on { background: linear-gradient(135deg, #2a9d8f, #1d3557); box-shadow: 0 0 18px rgba(46, 230, 214, 0.35); }
+.tag.d-royale { background: #ff3fa4; color: #fff; }
+.royalecard { margin-top: 12px; padding: 16px 18px; border-radius: 16px; background: rgba(27, 15, 43, 0.85); border: 3px solid #ff3fa4; }
+.royalecard h3 { margin: 0 0 8px; font: 400 26px var(--display); color: #ff7eb6; }
+.royalecard ul { margin: 0 0 12px; padding-left: 4px; list-style: none; display: grid; gap: 7px; font-weight: 700; }
+.royalestats { display: flex; flex-wrap: wrap; gap: 10px; }
+.royalestats span { padding: 6px 12px; border-radius: 10px; background: rgba(255, 255, 255, 0.07); font-weight: 800; font-size: 14px; }

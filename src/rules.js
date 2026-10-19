@@ -14,7 +14,7 @@ export const RULES = {
 export const live = { gravity: 1, jump: 1 };
 
 // Half the time nothing; otherwise one of the rules, evenly.
-export function rollRule(seed = null) {
+export function rollRule(seed = null, skip = []) {
   let r = Math.random();
   if (seed !== null) {
     // A quick hash of the seed, so the rule doesn't line up with the map's own rolls.
@@ -23,7 +23,7 @@ export function rollRule(seed = null) {
     h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35) >>> 0;
     r = ((h ^ (h >>> 16)) >>> 0) / 4294967296;
   }
-  const ids = Object.keys(RULES);
+  const ids = Object.keys(RULES).filter((id) => !skip.includes(id));
   if (r < 0.5) return null;
   return ids[Math.min(ids.length - 1, Math.floor(((r - 0.5) / 0.5) * ids.length))];
 }
