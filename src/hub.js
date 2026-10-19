@@ -20,6 +20,7 @@ import {
 } from './looks.js';
 import { LookPreview } from './preview.js';
 import { LobbyStage } from './lobby.js';
+import { casinoData, casinoLayout, updateCasino, accrueAway, appealOf, incomeRate, CASINO_ITEMS, CASINO_COLS, CASINO_ROWS, AWAY_SHARE, AWAY_HOURS } from './mycasino.js';
 import { BUILD } from './version.js';
 import { Shoe, RANKS, SUITS, cardValue, handValue, isNatural } from './cards.js';
 import { MOB_MIN, MOB_MAX, mobDebt, borrow, repay } from './mob.js';
@@ -185,6 +186,11 @@ function reelOdds(tier) {
 
 // The "what's new" card, shown once after an update.
 const WHATS_NEW = {
+  91: [
+    ['🏰', 'NEW: Your Casino', 'Pick MY CASINO on the Loadout screen. Buy slot machines, roulette, blackjack, crash, a cocktail bar and decor with chips, and place them on your casino floor at the Manager\'s desk. Customers come in, gamble, and lose (mostly) to you. Collect your vault at the Cashier. It even earns a little while you\'re away.'],
+    ['😈', 'Rig it on your friends', 'Make a party in MY CASINO mode and your friends come to your place. Rig any table: when a friend is about to win there, the win vanishes and they find out who did it. Everything they lose goes in your vault.'],
+    ['🏝️', 'Royale fixes', 'Jackpot Island isn\'t half underwater any more. The circle is a big glowing wall you can see from the bus, and the timer says when it moves. 40 players a match now, and the bots run smoother.'],
+  ],
   90: [
     ['🏝️', 'New Royale map: Jackpot Island', 'Royale now has its own map, way bigger than any raid map: snowy ridges, a neon downtown, a gator swamp, vineyards, a rail yard, a beach boardwalk and the Grand Jackpot Casino in the middle, all on one island.'],
     ['🎈', 'Ride the party bus in', 'Everyone rides the High Roller party bus across the island. Press SPACE to jump off wherever you want, then steer your chute down. Bots bail out all along the route.'],
@@ -292,16 +298,18 @@ const FREE_LOCKED = 'The free loadout is locked in. Raid with it as is.';
 const hasFreeKit = (lo) => lo.weapons.some((g) => g && g.free) || lo.items.some((it) => it.free);
 
 // What you're queued for: Royale (always on Jackpot Island), extraction (pick a map) or the Lounge.
-const playOf = (d) => (['royale', 'extract', 'lounge'].includes(d.playMode) ? d.playMode : 'royale');
+const PLAYS = ['royale', 'extract', 'lounge', 'casino'];
+const playOf = (d) => (PLAYS.includes(d.playMode) ? d.playMode : 'royale');
+const isCasino = (d) => playOf(d) === 'casino';
 const isRoyale = (d) => playOf(d) === 'royale';
 const ROYALE_MAP = 'island';
 const RAID_ORDER = ['vegas', 'bayou', 'boardwalk', 'frost', 'tequila', 'bunker'];
 // The map that goes with a mode (extraction remembers the last raid map you picked).
-const mapFor = (play, d) => (play === 'royale' ? ROYALE_MAP : play === 'lounge' ? 'lounge' : RAID_ORDER.includes(d.lastRaidMap) ? d.lastRaidMap : 'vegas');
+const mapFor = (play, d) => (play === 'royale' ? ROYALE_MAP : play === 'lounge' ? 'lounge' : play === 'casino' ? 'mycasino' : RAID_ORDER.includes(d.lastRaidMap) ? d.lastRaidMap : 'vegas');
 
 // Older profiles: sitting in the Lounge means Lounge mode; the map always matches the mode.
 export function fixPlayMode(x) {
-  if (!['royale', 'extract', 'lounge'].includes(x.playMode)) x.playMode = x.selectedMap === 'lounge' ? 'lounge' : 'royale';
+  if (!PLAYS.includes(x.playMode)) x.playMode = x.selectedMap === 'lounge' ? 'lounge' : 'royale';
   if (x.playMode === 'extract' && !RAID_ORDER.includes(x.selectedMap)) x.selectedMap = mapFor('extract', x);
   else if (x.playMode !== 'extract') x.selectedMap = mapFor(x.playMode, x);
 }
@@ -541,8 +549,9 @@ export class Hub {
     // On a streak? Show what this raid is worth on top (and that dying ends it).
     const streak = m.safe ? 0 : d.stats.extractStreak || 0;
     const fire = streak ? ` · 🔥${streak} (+${Math.min(25, streak * 5)}% chips)` : '';
-    let html = isRoyale(d) ? `PLAY<small>⚔️ Royale · ${m.icon} ${m.name}</small>` : hasGun ? `DEPLOY<small>${m.icon} ${m.name}${fire}</small>` : 'DEPLOY<small>no gun packed!</small>';
+    let html = isCasino(d) ? `ENTER<small>🏰 ${escapeHtml(casinoData().name)}</small>` : isRoyale(d) ? `PLAY<small>⚔️ Royale · ${m.icon} ${m.name}</small>` : hasGun ? `DEPLOY<small>${m.icon} ${m.name}${fire}</small>` : 'DEPLOY<small>no gun packed!</small>';
     if (party && !this.net.isHost) html = this.net.room.inRaid ? 'JOIN RAID<small>drop in next to your squad</small>' : 'WAITING…<small>the party leader deploys everyone</small>';
+    else if (party && isCasino(d)) html = `ENTER<small>🏰 bring ${this.net.partySize - 1} friend${this.net.partySize > 2 ? 's' : ''} in</small>`;
     else if (party) html = isRoyale(d) ? `PLAY<small>⚔️ Royale · squad of ${this.net.partySize}</small>` : `DEPLOY SQUAD<small>${m.icon} ${m.name} · ${this.net.partySize} players</small>`;
     $('deploy').innerHTML = html;
     const lp = $('lobbyPlay');
@@ -581,7 +590,7 @@ export class Hub {
       ? `<div class="pmodes">${Object.entries(MODES).map(([k, [label]]) => `<button class="subtab ${mode === k ? 'on' : ''}" data-act="pmode" data-m="${k}">${label}</button>`).join('')}</div>`
       : `<span class="pffa">${MODES[mode][0]}</span>`;
     return `<section class="party in"><div class="phead"><b>👥 Party <span class="pcode" data-act="pcopy" title="Click to copy">${r.code}</span></b>
-        <small>${net.isHost ? (isRoyale(this.data) ? 'You\'re the leader: hit PLAY to take the whole squad in.' : 'You\'re the leader: pick the map and hit DEPLOY SQUAD to drop everyone in together.') : `Waiting for ${escapeHtml((r.members.find((m) => m.id === r.host) || {}).name || 'the leader')} to ${isRoyale(this.data) ? 'hit PLAY.' : 'deploy. Pack your loadout!'}`}${r.inRaid ? ' · Raid in progress…' : ''}${net.status === 'reconnecting' ? ' · 📶 Reconnecting…' : ''}</small></div>
+        <small>${net.isHost ? (isRoyale(this.data) ? 'You\'re the leader: hit PLAY to take the whole squad in.' : 'You\'re the leader: pick the map and hit DEPLOY SQUAD to drop everyone in together.') : `Waiting for ${escapeHtml((r.members.find((m) => m.id === r.host) || {}).name || 'the leader')} to ${isRoyale(this.data) ? 'hit PLAY.' : isCasino(this.data) ? 'open the doors.' : 'deploy. Pack your loadout!'}`}${r.inRaid ? ' · Raid in progress…' : ''}${net.status === 'reconnecting' ? ' · 📶 Reconnecting…' : ''}</small></div>
       <div class="pmembers ${teams ? 'split' : ''}">${members}</div>
       ${bad.length ? `<p class="pbuild">⚠️ Not everyone is on the same version of the game, so your maps won't match. Everyone open the same link and refresh the page.</p>` : ''}
       <div class="prow">${modeRow}<small class="pmodehint">${MODES[mode][1]}</small></div>
@@ -629,9 +638,11 @@ export class Hub {
       ['royale', '⚔️ ROYALE', '40 drop in, one walks out. Your stash is safe.'],
       ['extract', '🎒 EXTRACTION', 'Bring your gear, loot, get out alive.'],
       ['lounge', '🍸 THE LOUNGE', 'Hang out, gamble, 1v1 in the Pit.'],
+      ['casino', '🏰 MY CASINO', 'Build it, run it, rig it on your friends.'],
     ];
     const pick = `<div class="modepick">${modes.map(([k, n, t]) => `<button class="modebtn ${play === k ? 'on' : ''}" data-act="playmode" data-v="${k}" ${partyMember ? 'disabled' : ''}><b>${n}</b><small>${t}</small></button>`).join('')}</div>`;
     if (play === 'royale') return `${pick}${this.renderLobby()}${this.renderContracts()}`;
+    if (play === 'casino') return `${pick}${this.renderMyCasino()}`;
     const order = play === 'lounge' ? ['lounge'] : RAID_ORDER.filter((id) => MAPS[id]);
     const tiles = order.map((id) => {
       const m = MAPS[id];
@@ -668,6 +679,49 @@ export class Hub {
             </ul>
             <div class="royalestats"><span>🏆 Wins <b>${fmt(s.royaleWins || 0)}</b></span><span>🎯 Best <b>${s.royaleBest ? `#${s.royaleBest}` : '-'}</b></span><span>💀 Kills <b>${fmt(s.royaleKills || 0)}</b></span><span>🎮 Games <b>${fmt(s.royaleGames || 0)}</b></span></div>
           </section>
+        </div>
+      </section>`;
+  }
+
+  // Your casino: what it's making, a look at the floor, and the way in.
+  renderMyCasino() {
+    const net = this.net;
+    const visiting = net && net.inParty && !net.isHost;
+    if (!visiting) accrueAway();
+    const c = casinoData();
+    const leader = visiting ? ((net.room.members.find((m) => m.id === net.room.host) || {}).name || 'your party leader') : null;
+    const open = c.rows * CASINO_COLS.length;
+    const plan = [...CASINO_ROWS.keys()].reverse().map((r) => {
+      const cell = (k) => {
+        const i = r * CASINO_COLS.length + k;
+        const s = c.slots[i];
+        const def = s && CASINO_ITEMS[s.id];
+        return `<span class="pcell ${i >= open ? 'locked' : ''}" style="${def ? `--c:${def.color}` : ''}">${i >= open ? '🔒' : def ? def.icon : ''}${s && s.rig ? '<i>😈</i>' : ''}</span>`;
+      };
+      return `<div class="prow2">${[0, 1, 2].map(cell).join('')}<span class="paisle"></span>${[3, 4, 5].map(cell).join('')}</div>`;
+    }).join('');
+    const games = Object.values(c.slots).filter((s) => CASINO_ITEMS[s.id] && CASINO_ITEMS[s.id].edge).length;
+    return `<section class="mycas">
+        <div class="mcmain">
+          <div class="mctitle"><small>${visiting ? 'VISITING' : 'YOUR CASINO'}</small><b>${visiting ? `${escapeHtml(leader)}'s casino` : `🏰 ${escapeHtml(c.name)}`}</b></div>
+          ${visiting ? `<p class="mcnote">${escapeHtml(leader)} is taking the party to their casino. Play the tables for real chips... and watch out: any of them could be rigged. 😈</p>` : `
+          <div class="mcstats">
+            <div><small>💰 In the vault</small><b>🪙 ${fmt(c.vault)}</b><button class="btn" data-act="cascollect" ${c.vault > 0 ? '' : 'disabled'}>Collect</button></div>
+            <div><small>📈 Makes about</small><b>🪙 ${fmt(incomeRate(c))}/hr</b><em>${Math.round(AWAY_SHARE * 100)}% of that while you're away (up to ${AWAY_HOURS}h)</em></div>
+            <div><small>⭐ Appeal</small><b>${appealOf(c)}</b><em>${games} game${games === 1 ? '' : 's'} · decor brings more customers</em></div>
+            <div><small>🏦 Made so far</small><b>🪙 ${fmt(c.earned)}</b><em>${fmt(c.visits)} customer bets${c.rigWins ? ` · 😈 ${c.rigWins} rigged wins` : ''}</em></div>
+          </div>`}
+          <button class="btn lobbyplay mcenter" id="lobbyPlay" data-act="lobbyplay">ENTER</button>
+        </div>
+        <div class="mcside">
+          ${this.renderParty()}
+          ${visiting ? '' : `<div class="mcplan"><div class="pwall">BACK WALL</div>${plan}<div class="pdoor">🚪</div></div>`}
+          <section class="royalecard"><h3>🏰 How it works</h3><ul>
+            <li>🔨 Walk up to the <b>Manager's desk</b> to buy games and decor with chips and place them on the floor.</li>
+            <li>🧑‍🤝‍🧑 Customers wander in and play. The house edge fills your <b>vault</b>; collect it at the <b>Cashier</b>.</li>
+            <li>⭐ Decor raises <b>appeal</b>, and more appeal brings more customers.</li>
+            <li>😈 Make a party and invite friends, then <b>rig a table</b>. When they're about to win, the win vanishes and they find out who did it. What they lose goes in your vault.</li>
+          </ul></section>
         </div>
       </section>`;
   }
@@ -1964,6 +2018,11 @@ export class Hub {
       case 'backmaps': this.loStage = 'maps'; break;
       case 'playmode': if (b.dataset.v !== playOf(d)) this.setPlay(b.dataset.v); break;
       case 'lobbyplay': this.deploy(); return;
+      case 'cascollect': {
+        const v = casinoData().vault;
+        if (v > 0) { updateCasino((c, x) => { x.stash.chips += c.vault; c.vault = 0; }); sfx.cashout(); this.toast(`💰 Collected 🪙 ${fmt(v)} from your casino's vault!`); }
+        break;
+      }
       case 'freelocked': this.toast('That\'s free gear. Put the whole free loadout back to pack your own.'); return;
       case 'unfreekit':
         save.update((x) => {
@@ -2492,7 +2551,7 @@ export class Hub {
       this.toast('Only the party leader can deploy. Pack your loadout and hang tight!');
       return;
     }
-    if (!isRoyale(d) && !lo.weapons.some(Boolean) && !this.warnedNoGun) {
+    if (!isRoyale(d) && !isCasino(d) && !lo.weapons.some(Boolean) && !this.warnedNoGun) {
       this.warnedNoGun = true;
       this.toast('No gun packed! Click DEPLOY again to go in with just your fists.');
       return;
@@ -2514,6 +2573,19 @@ export class Hub {
     const d = this.data;
     const lo = d.loadout;
     // Royale: everyone gets the same starter kit, and the stash (and your packed loadout) stay home.
+    // Your casino (or the party leader's): walk in as you are, no gear needed.
+    if (party ? !!party.casino : isCasino(d)) {
+      this.loStage = 'maps';
+      this.onDeploy({
+        party,
+        mapId: 'mycasino',
+        name: (d.look.name || '').trim() || 'High Roller',
+        look: wornLook(d.look),
+        loadout: { weapons: [null, null], items: [], pocket: 0 },
+        opts: { casino: casinoLayout(), casinoOwner: { name: (d.look.name || '').trim() || 'High Roller', me: true } },
+      });
+      return;
+    }
     const royale = party ? !!party.royale : isRoyale(d);
     if (royale) {
       this.loStage = 'maps';

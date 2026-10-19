@@ -465,7 +465,11 @@ export class Session {
       }
       case 'tg':
         // A friend played a Lounge table: show it here and pass it on.
-        if (raid.duel) raid.duel.tables.relay(d.e, from);
+        if (raid.tables) raid.tables.relay(d.e, from);
+        break;
+      case 'cvault':
+        // A friend lost chips in our casino: they go in the vault.
+        if (raid.myCasino) raid.myCasino.friendLost(Math.max(0, Math.min(1e7, Number(d.n) || 0)), !!d.rig, pup ? pup.name : 'A friend');
         break;
       case 'gm': {
         // A friend paid at a dice table or coin flip: we roll it.
@@ -802,7 +806,8 @@ export class Session {
         if (w) w.start(e.slice, e.gun, { prize: e.prize, chips: e.chips, owner: e.owner, name: e.name });
         break;
       }
-      case 'tgs': if (raid.duel) raid.duel.tables.apply({ ...e.e, mine: false }); break;
+      case 'tgs': if (raid.tables) raid.tables.apply({ ...e.e, mine: false }); break;
+      case 'cas': if (raid.myCasino) raid.myCasino.applyLayout(e.layout); break;
       case 'vo': raid.openVault({ name: e.by || 'Someone' }, true); break;
       case 'th': {
         const owner = this.byId.get(e.ow) || { name: '?', alive: true, team: 'raider' };

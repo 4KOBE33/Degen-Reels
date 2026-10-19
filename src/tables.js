@@ -616,8 +616,16 @@ const Slots = {
       const { bet, res, free } = t.mine;
       t.mine = null;
       if (res.free) { t.free += res.free; t.freeBet = bet; }
-      const payout = t.T.hub.payLucky(bet, res, free);
-      t.T.afterSettle(free ? 0 : bet, payout);
+      const wager = free ? 0 : bet;
+      // A rigged machine in a friend's casino: the win just... doesn't happen.
+      const won = res.win > 0 || res.gun || res.gems >= 3 || res.free;
+      let payout;
+      if (won && t.T.denyWin && t.T.denyWin(t, res.win)) {
+        payout = 0;
+        t.T.hub.settleBet('🎰', wager, 0);
+      } else payout = t.T.hub.payLucky(bet, res, free);
+      if (t.T.onResult) t.T.onResult(t, wager, payout);
+      t.T.afterSettle(wager, payout);
     }
   },
 };
@@ -1566,7 +1574,8 @@ export class LoungeTables {
   makeTable(d, index) {
     const raid = this.raid;
     const len = Math.hypot(d.x, d.z) || 1;
-    const front = new THREE.Vector3(-d.x / len, 0, -d.z / len);
+    // Facing the middle of the room, unless the table says which way it faces.
+    const front = d.front ? new THREE.Vector3(d.front[0], 0, d.front[1]) : new THREE.Vector3(-d.x / len, 0, -d.z / len);
     // Square the cabinets up with the room.
     if (CABINET_GAMES.has(d.game)) {
       if (Math.abs(front.x) > Math.abs(front.z)) front.set(Math.sign(front.x), 0, 0); else front.set(0, 0, Math.sign(front.z));
@@ -1708,6 +1717,10 @@ export class LoungeTables {
 
   spend(n) { return this.hub.spend(n); }
   settle(icon, wager, payout, stat) {
+    // Your Casino: the owner may have rigged this one, and what friends lose goes in the owner's vault.
+    const t = this.cur;
+    if (payout > wager && this.denyWin && this.denyWin(t, payout)) payout = 0;
+    if (this.onResult) this.onResult(t, wager, payout);
     if (payout) this.hub.earn(payout);
     this.hub.settleBet(icon, wager, payout, stat);
     this.afterSettle(wager, payout);
@@ -1731,6 +1744,7 @@ export class LoungeTables {
   act(t, a, arg) {
     if (a === 'bet') { this.bet = Number(arg); this.render(); return; }
     if (t.game === 'armory') { this.armoryAct(a, arg); return; }
+    this.cur = t;
     const e = GAMES[t.game].act(t, a, arg, this);
     if (e) this.share(t, e);
     this.render();
@@ -1759,6 +1773,7 @@ export class LoungeTables {
   apply(e) {
     const t = this.tables[e.t];
     if (!t) return;
+    this.cur = t;
     t.userAt = performance.now();
     if (GAMES[t.game].multi) {
       if (e.a[0] === 'q') { if (!this.raid.isClient) GAMES[t.game].host(t, e); return; }
@@ -1790,6 +1805,7 @@ export class LoungeTables {
     const now = performance.now();
     for (const t of this.tables) {
       t.stale = !!t.owner && now - t.userAt > STALE * 1000;
+      this.cur = t;
       GAMES[t.game].update(t, dt);
     }
     if (this.armory) this.armory.blink += dt;

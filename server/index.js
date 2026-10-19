@@ -185,7 +185,7 @@ wss.on('connection', (ws) => {
         break;
       case 'play':
         // What the leader is queued for: royale, extraction or the Lounge (so the party sees it).
-        if (room && room.host === ws.id && !room.inRaid && ['royale', 'extract', 'lounge'].includes(msg.play)) {
+        if (room && room.host === ws.id && !room.inRaid && ['royale', 'extract', 'lounge', 'casino'].includes(msg.play)) {
           room.play = msg.play;
           broadcast(room, roster(room));
         }

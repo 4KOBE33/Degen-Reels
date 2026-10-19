@@ -40,6 +40,7 @@ import { recordRaid, progress } from './progress.js';
 import { featuredMap, FEATURED_BONUS } from './contracts.js';
 import { randomLook } from './looks.js';
 import { Duel } from './duel.js';
+import { MyCasino } from './mycasino.js';
 import { Booth } from './booths.js';
 import { Kidnap, mobDebt } from './mob.js';
 
@@ -299,6 +300,7 @@ export class Raid {
   // Free GPU memory when switching to a different map.
   dispose() {
     if (this.duel) { this.duel.dispose(); this.duel = null; }
+    if (this.myCasino) { this.myCasino.dispose(); this.myCasino = null; }
     this.scene.traverse((o) => {
       if (o.geometry) o.geometry.dispose();
       const m = o.material;
@@ -411,6 +413,8 @@ export class Raid {
     if (this.recorder) this.recorder.reset();
     if (this.duel) this.duel.dispose();
     this.duel = null;
+    if (this.myCasino) this.myCasino.dispose();
+    this.myCasino = null;
 
     // The Training Floor: a guided run, short ride, nothing at stake.
     this.tutorialMode = !!opts.tutorial;
@@ -461,6 +465,8 @@ export class Raid {
       this.duel = new Duel(this);
       if (!opts.client) this.duel.spawnChampion();
     }
+    // Your Casino (yours, or your party leader's when you're visiting).
+    if (this.map.mycasino) this.myCasino = new MyCasino(this, opts.casino || null, opts.casinoOwner || { name: p.name, me: !opts.client });
 
     this.raidTime = this.royaleMode ? ROYALE_TIME : this.map.raidTime || RAID_TIME;
     this.timeLeft = this.raidTime;
@@ -1131,7 +1137,7 @@ export class Raid {
     this.active = false;
     if (this.kidnap && this.kidnap.phase !== 'wait') this.kidnap.cleanup();
     // Sitting at a Lounge table when it ended (the leader left, say): get up.
-    if (this.duel && this.duel.tables.seat) this.duel.tables.leave();
+    if (this.tables && this.tables.seat) this.tables.leave();
     this.result = { ...result, run: this.run, time: this.raidTime - this.timeLeft, newFinds: [] };
     // A side bet on yourself, placed before you dropped in: settle it.
     const sb = save.get().sideBet;
@@ -1157,9 +1163,13 @@ export class Raid {
 
   // ---------- interaction ----------
 
+  // The casino games on this map (the Lounge's, or your casino's), if there are any.
+  get tables() { return (this.duel && this.duel.tables) || (this.myCasino && this.myCasino.tables) || null; }
+
   get interactables() {
     const list = [...this.slots, ...this.gunWheels, ...(this.booths || []), ...this.pickups, this.vaultLock];
     if (this.duel) list.push(...this.duel.interactables());
+    if (this.myCasino) list.push(...this.myCasino.interactables());
     for (const k of this.containers) if (!k.opened) list.push(k);
     for (const c of this.combatants) if (c.downed && c.alive && c.reviveSpot) list.push(c.reviveSpot);
     return list;
@@ -2228,6 +2238,7 @@ export class Raid {
     if (this.active && this.recorder) this.recorder.record(dt);
     if (this.net) this.net.update(dt);
     if (this.duel) this.duel.update(dt);
+    if (this.myCasino) this.myCasino.update(dt);
 
     // The host keeps the world running for friends even after they're done themselves.
     const world = this.active || (this.isHost && this.net.worldAlive());

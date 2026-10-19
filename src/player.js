@@ -50,7 +50,7 @@ export class PlayerController {
         // Only grab the mouse while you're actually playing (never on the death or results screens).
         if (e.target === canvas && this.raid.active && this.c && this.c.alive) {
           // Seated at a Lounge table: the mouse belongs to the table panel until you get up.
-          if (this.raid.duel && this.raid.duel.tables.seat) return;
+          if (this.raid.tables && this.raid.tables.seat) return;
           this.lock();
           return;
         }

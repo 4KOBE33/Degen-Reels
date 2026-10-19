@@ -1717,3 +1717,64 @@ body.scoped #crosshair, body.scoped #cdRing { display: none !important; }
   .btn.lobbyplay { font-size: 32px; }
 }
 @media (max-width: 640px) { .modepick { grid-template-columns: 1fr; } .modebtn small { display: none; } }
+/* ---------- Your Casino: the hub page ---------- */
+.modepick { grid-template-columns: repeat(4, 1fr); }
+@media (max-width: 900px) { .modepick { grid-template-columns: 1fr 1fr; } }
+.mycas { display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(280px, 1fr); align-items: start; gap: 14px; margin: 10px 0 14px; }
+.mcmain { position: relative; display: grid; gap: 14px; padding: 18px 18px 96px; border-radius: 22px; border: 4px solid var(--ink); background: radial-gradient(ellipse at 50% 100%, #7a1f5c 0%, #2a1748 60%, #140a24 100%); box-shadow: 0 6px 0 rgba(0, 0, 0, 0.35); min-height: 340px; }
+.mctitle small { display: block; font: 800 12px var(--body); letter-spacing: 2px; opacity: 0.75; }
+.mctitle b { font: 400 40px/1.05 var(--display); color: var(--gold); letter-spacing: 1px; }
+.mcnote { margin: 0; font: 700 16px/1.4 var(--body); }
+.mcstats { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.mcstats > div { display: grid; gap: 2px; align-content: start; padding: 10px 12px; border-radius: 14px; background: rgba(20, 10, 34, 0.6); border: 2px solid rgba(255, 210, 63, 0.25); }
+.mcstats small { font: 800 12px var(--body); opacity: 0.8; }
+.mcstats b { font: 400 26px var(--display); color: var(--gold); letter-spacing: 0.5px; }
+.mcstats em { font: 700 12px var(--body); font-style: normal; opacity: 0.7; }
+.mcstats .btn { justify-self: start; margin-top: 4px; padding: 4px 14px; }
+.mcside { display: grid; gap: 12px; align-content: start; min-width: 0; }
+.mcside .party { margin: 0; }
+.mcplan { display: grid; gap: 4px; padding: 10px; border-radius: 16px; background: #1f1137; border: 3px solid var(--ink); }
+.mcplan .pwall, .mcplan .pdoor { text-align: center; font: 800 11px var(--body); letter-spacing: 2px; opacity: 0.6; }
+.prow2 { display: grid; grid-template-columns: repeat(3, 1fr) 18px repeat(3, 1fr); gap: 4px; }
+.pcell { position: relative; display: grid; place-items: center; aspect-ratio: 1.6; border-radius: 8px; background: rgba(255, 255, 255, 0.06); border: 2px solid var(--c, rgba(255, 255, 255, 0.12)); font-size: 18px; }
+.pcell.locked { opacity: 0.35; font-size: 12px; }
+.pcell i { position: absolute; right: 2px; top: 0; font-size: 11px; font-style: normal; }
+.paisle { background: repeating-linear-gradient(180deg, #b5172f 0 6px, transparent 6px 10px); border-radius: 4px; opacity: 0.6; }
+@media (max-width: 900px) { .mycas { grid-template-columns: 1fr; } .mcstats { grid-template-columns: 1fr; } }
+/* ---------- Your Casino: the build panel ---------- */
+.buildpanel { position: fixed; inset: 5vh 50% auto auto; transform: translateX(50%); width: min(980px, calc(100vw - 32px)); max-height: 90vh; overflow: auto; z-index: 30; padding: 16px; border-radius: 20px; background: rgba(27, 15, 43, 0.96); border: 4px solid var(--gold); color: var(--cream); box-shadow: 0 16px 50px rgba(0, 0, 0, 0.55); }
+.buildpanel[hidden] { display: none; }
+.bphead { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+.bphead small { display: block; font: 800 11px var(--body); letter-spacing: 2px; opacity: 0.7; }
+.bphead input { font: 400 28px var(--display); color: var(--gold); background: transparent; border: none; border-bottom: 2px dashed rgba(255, 210, 63, 0.4); width: min(420px, 60vw); letter-spacing: 1px; }
+.bpstats { display: flex; flex-wrap: wrap; gap: 8px; margin: 10px 0; }
+.bpstats span { padding: 6px 10px; border-radius: 10px; background: rgba(255, 255, 255, 0.06); font: 700 13px var(--body); display: inline-flex; align-items: center; gap: 6px; }
+.bpstats b { color: var(--gold); }
+.btn.tiny { padding: 2px 10px; font-size: 12px; }
+.bpbody { display: grid; grid-template-columns: minmax(260px, 1fr) minmax(0, 1.3fr); gap: 14px; }
+.bplan { display: grid; gap: 6px; padding: 10px; border-radius: 14px; background: #140a24; align-content: start; }
+.bwall, .bdoor { text-align: center; font: 800 11px var(--body); letter-spacing: 2px; opacity: 0.6; }
+.brow { display: grid; grid-template-columns: repeat(3, 1fr) 22px repeat(3, 1fr); gap: 6px; }
+.baisle { background: repeating-linear-gradient(180deg, #b5172f 0 6px, transparent 6px 10px); border-radius: 4px; opacity: 0.6; }
+.bcell { position: relative; aspect-ratio: 1.3; border-radius: 10px; border: 3px solid var(--c, rgba(255, 255, 255, 0.18)); background: rgba(255, 255, 255, 0.05); color: var(--cream); font-size: 24px; cursor: pointer; }
+.bcell span { opacity: 0.4; font: 900 22px var(--body); }
+.bcell:hover { background: rgba(255, 255, 255, 0.12); }
+.bcell.on { box-shadow: 0 0 0 3px var(--gold); background: rgba(255, 210, 63, 0.15); }
+.bcell.locked { opacity: 0.45; font-size: 16px; }
+.bcell.rig { border-color: #ff2a2a; }
+.bcell i { position: absolute; right: 2px; top: 0; font-size: 13px; font-style: normal; }
+.bdetail h4 { margin: 4px 0 6px; font: 400 22px var(--display); color: var(--gold); letter-spacing: 0.5px; }
+.bdetail p { margin: 0 0 8px; font: 700 14px/1.4 var(--body); }
+.bdetail .btn { margin: 0 6px 6px 0; }
+.bhint { opacity: 0.7; }
+.brig { padding: 8px 10px; border-radius: 10px; background: rgba(255, 42, 42, 0.12); }
+.btn.rigbtn { background: #ff2a2a; color: #fff; }
+.bshop { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px; margin-bottom: 8px; }
+.bitem { display: grid; grid-template-columns: auto 1fr; column-gap: 8px; align-items: center; text-align: left; padding: 8px 10px; border-radius: 12px; border: 3px solid var(--c); background: rgba(255, 255, 255, 0.05); color: var(--cream); cursor: pointer; font: inherit; }
+.bitem span { grid-row: span 3; font-size: 28px; }
+.bitem b { font: 800 14px var(--body); }
+.bitem small { font: 700 11px var(--body); opacity: 0.75; }
+.bitem em { font: 900 13px var(--body); font-style: normal; color: var(--gold); }
+.bitem[disabled] { opacity: 0.4; cursor: default; }
+.bitem:hover:not([disabled]) { background: rgba(255, 255, 255, 0.12); }
+@media (max-width: 760px) { .bpbody { grid-template-columns: 1fr; } }

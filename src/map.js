@@ -181,6 +181,14 @@ export const MAPS = {
     mapGround: '#3a1d2c', hemi: [0xffe6f0, 0x3a2a4a, 2.4], sun: [0xffe0f0, 0.5], mountains: null, glow: 0xffd23f, tough: 1,
     raidTime: 7200, raiders: 0, hostile: 0, safe: true, noBoss: true,
   },
+  mycasino: {
+    name: 'Your Casino', icon: '🏰', size: 'Yours', danger: 'Safe', half: 48, wilds: 'Your Casino', indoor: true, casinoOnly: true,
+    blurb: 'Your own casino: buy games and decor, let customers lose their chips to you, and invite friends in (then rig the tables on them).',
+    sky: [0x0b0612, 0x120a1c, 0x1b0f2b], fog: 0x1b0f2b,
+    ground: { base: '#3a1d4a', a: 'rgba(0,0,0,0.2)', b: 'rgba(255,210,63,0.12)' },
+    mapGround: '#2a1638', hemi: [0xffeef8, 0x3a2a4a, 2.5], sun: [0xffe0f0, 0.5], mountains: null, glow: 0xffd23f, tough: 1,
+    raidTime: 7200, raiders: 0, hostile: 0, safe: true, noBoss: true,
+  },
   training: {
     name: 'Training Floor', icon: '🎓', size: 'Tiny', danger: 'Safe', half: 52, wilds: 'Training Floor', tutorial: true,
     blurb: 'A practice run through the basics: moving, looting, shooting, healing and getting out.',
@@ -2276,6 +2284,7 @@ export function buildMap(scene, mapId = 'vegas') {
     tutorial: !!def.tutorial,
     noBoss: !!def.noBoss,
     lounge: layout.lounge || null,
+    mycasino: layout.mycasino || null,
     hostile: def.hostile ?? null,
     statics,
     solids,
@@ -5233,4 +5242,89 @@ function jackpotIsland(k) {
   return { ...cas, extracts, spawns };
 }
 
-const BUILDERS = { training: trainingFloor, vegas: lostVegas, boardwalk: neonBoardwalk, island: jackpotIsland, frost: frostbitePeaks, bayou: bayouRoyale, tequila: wineCountry, bunker: theBunker, lounge: theLounge };
+// Your Casino: an empty hall for you to fill. Four rows of spots for games and decor (mycasino.js
+// puts them in), a wide aisle down the middle, the door at the south end, the cashier's cage
+// (your vault) and the manager's desk (where you build) either side of it.
+function yourCasino(k) {
+  const { H, THREE, statics, zones, minimap, part, toon, neonSign, flat, box, carpetTexture } = k;
+  const CEIL = 11;
+  const wallMat = toon(0x3a1650);
+  for (const [x, z, w, d] of [[0, -H, H * 2, 1.5], [0, H, H * 2, 1.5], [-H, 0, 1.5, H * 2], [H, 0, 1.5, H * 2]]) {
+    const wall = part(new THREE.BoxGeometry(w, CEIL, d), wallMat, { ink: 0 });
+    wall.position.set(x, CEIL / 2, z);
+    statics.add(wall);
+    box(x, z, w, d, CEIL);
+  }
+  // Gold trim and neon strips along the walls.
+  for (const [x, z, w, d] of [[0, -H + 0.8, H * 2 - 2, 0.2], [-H + 0.8, 0, 0.2, H * 2 - 2], [H - 0.8, 0, 0.2, H * 2 - 2]]) {
+    const strip = new THREE.Mesh(new THREE.BoxGeometry(w, 0.25, d), new THREE.MeshBasicMaterial({ color: 0xff3fa4 }));
+    strip.position.set(x, 3.2, z);
+    const strip2 = new THREE.Mesh(new THREE.BoxGeometry(w, 0.25, d), new THREE.MeshBasicMaterial({ color: 0xffd23f }));
+    strip2.position.set(x, 8.6, z);
+    statics.add(strip, strip2);
+  }
+  const carpet = new THREE.Mesh(new THREE.PlaneGeometry(H * 2, H * 2), toon(0xffffff, { map: carpetTexture() }));
+  carpet.rotation.x = -Math.PI / 2;
+  carpet.position.y = 0.03;
+  carpet.receiveShadow = true;
+  statics.add(carpet);
+  const ceiling = new THREE.Mesh(new THREE.PlaneGeometry(H * 2, H * 2), new THREE.MeshBasicMaterial({ color: 0x140a1e, side: THREE.DoubleSide }));
+  ceiling.rotation.x = Math.PI / 2;
+  ceiling.position.y = CEIL;
+  statics.add(ceiling);
+  // The red carpet: from the door straight up the middle aisle.
+  flat(0, 0, 8, H * 2 - 4, toon(0xb5172f), 0.04);
+  flat(0, 0, 0.5, H * 2 - 4, toon(0xffd23f), 0.045);
+  minimap.push({ x: 0, z: 0, w: 8, d: H * 2, color: '#b5172f' });
+  // The door.
+  const door = part(new THREE.BoxGeometry(7, 4.6, 0.4), 0xd4a63a, { ink: 0.04 });
+  door.position.set(0, 2.3, H - 0.9);
+  const exitSign = neonSign('EXIT', '#5ee27a', 6);
+  exitSign.position.set(0, 6, H - 1.2);
+  exitSign.rotation.y = Math.PI;
+  statics.add(door, exitSign);
+  flat(0, H - 3.5, 8, 5, toon(0x5ee27a), 0.05);
+  minimap.push({ x: 0, z: H - 3, w: 8, d: 4, color: '#5ee27a', label: 'Exit' });
+  // The cashier's cage (your vault) and the manager's desk (where you build).
+  const cage = { x: -30, z: 34 };
+  const desk = { x: 30, z: 34 };
+  const counter = part(new THREE.BoxGeometry(10, 1.3, 2), 0x6b3a1e);
+  counter.position.set(cage.x, 0.65, cage.z - 2);
+  const bars = part(new THREE.BoxGeometry(10, 3, 0.2), 0xd4a63a, { ink: 0.02 });
+  bars.position.set(cage.x, 2.8, cage.z - 2.6);
+  const back = part(new THREE.BoxGeometry(10, 5, 4), 0x2b1640);
+  back.position.set(cage.x, 2.5, cage.z - 5);
+  statics.add(counter, bars, back);
+  box(cage.x, cage.z - 3.5, 10, 5, 5);
+  const cs = neonSign('CASHIER', '#ffd23f', 9);
+  cs.position.set(cage.x, 6.4, cage.z - 2.6);
+  cs.rotation.y = Math.PI;
+  statics.add(cs);
+  flat(cage.x, cage.z + 1, 6, 4, toon(0xffd23f), 0.05);
+  minimap.push({ x: cage.x, z: cage.z - 3, w: 10, d: 5, color: '#ffd23f', label: 'Cashier' });
+  const table = part(new THREE.BoxGeometry(6, 1.1, 2.4), 0x4a2a1a);
+  table.position.set(desk.x, 0.55, desk.z - 2);
+  const blueprint = new THREE.Mesh(new THREE.PlaneGeometry(4.6, 1.8), new THREE.MeshBasicMaterial({ color: 0x2e6fd6 }));
+  blueprint.rotation.x = -Math.PI / 2;
+  blueprint.position.set(desk.x, 1.12, desk.z - 2);
+  statics.add(table, blueprint);
+  box(desk.x, desk.z - 2, 6, 2.4, 1.1);
+  const ds = neonSign('MANAGER', '#2ee6d6', 9);
+  ds.position.set(desk.x, 5.4, desk.z - 3.5);
+  ds.rotation.y = Math.PI;
+  statics.add(ds);
+  flat(desk.x, desk.z + 1, 6, 4, toon(0x2ee6d6), 0.05);
+  minimap.push({ x: desk.x, z: desk.z - 2, w: 6, d: 3, color: '#2ee6d6', label: 'Build' });
+  zones.push({ name: 'Your Casino', x: 0, z: 0, w: H * 2, d: H * 2, tier: 1 });
+  const lights = [[0, 0, 0xff3fa4], [-24, -24, 0xffd23f], [24, -24, 0x2ee6d6], [-24, 10, 0xc77dff], [24, 10, 0xffd23f], [0, 34, 0x5ee27a]];
+  return {
+    casino: { x: 0, z: 0, w: 0, d: 0, doors: [] },
+    vault: { x: 0, z: -5000, doorZ: -5000 },
+    extracts: [],
+    lights,
+    spawns: [[0, 40], [-4, 40], [4, 40], [-8, 38], [8, 38], [0, 36]],
+    mycasino: { cage, desk, exit: { x: 0, z: H - 3.5 }, door: { x: 0, z: H - 4 } },
+  };
+}
+
+const BUILDERS = { mycasino: yourCasino, training: trainingFloor, vegas: lostVegas, boardwalk: neonBoardwalk, island: jackpotIsland, frost: frostbitePeaks, bayou: bayouRoyale, tequila: wineCountry, bunker: theBunker, lounge: theLounge };

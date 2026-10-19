@@ -1,0 +1,691 @@
+// Your Casino: an empty hall you fill with games and decor bought with chips. Customers (little
+// NPC beans) wander in, play your games and lose (mostly) to the house, and that money piles up in
+// your vault at the cashier's cage. Friends in your party can visit and play for real, and you can
+// rig any table on them: a rigged table quietly eats their wins, and tells them who did it.
+//
+// The games themselves are the Lounge's (tables.js), placed on a grid. The owner is whoever's
+// casino it is: you solo, or the party leader (the host) when friends come along.
+import * as THREE from 'three';
+import { save } from './save.js';
+import { createCharacter } from './character.js';
+import { randomLook } from './looks.js';
+import { part, toon, canvasTexture } from './toon.js';
+import { keyName } from './keys.js';
+import { sfx } from './audio.js';
+import { LoungeTables, CABINET_GAMES } from './tables.js';
+
+const $ = (id) => document.getElementById(id);
+const fmt = (n) => Math.round(n).toLocaleString('en-US');
+const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+
+// The floor: six spots a row (three each side of the middle aisle), four rows. The row nearest the
+// door is open from the start; the rest you buy as the place grows.
+export const CASINO_COLS = [-36, -24, -12, 12, 24, 36];
+export const CASINO_ROWS = [2, -10, -22, -34];
+export const ROW_COST = [0, 12000, 40000, 120000];
+export const SLOT_COUNT = CASINO_COLS.length * CASINO_ROWS.length;
+export const slotXZ = (i) => [CASINO_COLS[i % CASINO_COLS.length], CASINO_ROWS[Math.floor(i / CASINO_COLS.length)]];
+const DOOR = new THREE.Vector3(0, 0, 44);
+
+// What you can buy. Games earn their edge (on average) every time a customer plays; decor just
+// makes the place nicer, which brings more customers in.
+export const CASINO_ITEMS = {
+  slots: { name: 'Lucky Slots', icon: '🎰', cost: 1500, game: 'slots', edge: 18, appeal: 3, color: '#ff3fa4', blurb: 'Cheap, cheerful, always busy.' },
+  plinko: { name: 'Plinko Wall', icon: '🔴', cost: 3500, game: 'plinko', edge: 30, appeal: 5, color: '#ff9f1c', blurb: 'Customers love watching the ball bounce.' },
+  roulette: { name: 'Roulette Table', icon: '🎡', cost: 6000, game: 'roulette', edge: 45, appeal: 6, color: '#ff5d5d', blurb: 'A classic. The green zero pays your bills.' },
+  mines: { name: 'Mines Table', icon: '💎', cost: 7500, game: 'mines', edge: 52, appeal: 6, color: '#c77dff', blurb: 'One more tile... one more tile...' },
+  blackjack: { name: 'Blackjack Table', icon: '🃏', cost: 9000, game: 'blackjack', edge: 60, appeal: 8, color: '#5ee27a', blurb: 'High rollers sit here. Big edge, big crowds.' },
+  crash: { name: 'Crash Rocket', icon: '🚀', cost: 12000, game: 'crash', edge: 75, appeal: 10, color: '#2ee6d6', blurb: 'Nobody ever cashes out in time.' },
+  bar: { name: 'Cocktail Bar', icon: '🍸', cost: 5000, edge: 25, appeal: 12, color: '#ffd23f', bar: true, blurb: 'Customers grab a drink. You keep the tab.' },
+  plant: { name: 'Potted Palm', icon: '🌴', cost: 400, appeal: 6, color: '#5ee27a', decor: true, blurb: 'A little green. +6 appeal.' },
+  couch: { name: 'Velvet Couch', icon: '🛋️', cost: 900, appeal: 10, color: '#c77dff', decor: true, blurb: 'Somewhere to sit and regret. +10 appeal.' },
+  arch: { name: 'Neon Arch', icon: '🌈', cost: 2200, appeal: 18, color: '#ff3fa4', decor: true, blurb: 'Glows. Customers love it. +18 appeal.' },
+  fountain: { name: 'Champagne Fountain', icon: '⛲', cost: 3000, appeal: 25, color: '#2ee6d6', decor: true, blurb: 'Bubbly on tap. +25 appeal.' },
+  statue: { name: 'Golden Bean Statue', icon: '🗿', cost: 10000, appeal: 45, color: '#ffd23f', decor: true, blurb: 'A solid gold you. +45 appeal.' },
+};
+const GAME_IDS = ['slots', 'plinko', 'roulette', 'mines', 'blackjack', 'crash', 'bar'];
+const DECOR_IDS = ['plant', 'couch', 'arch', 'fountain', 'statue'];
+
+// Your casino in the save, with anything missing filled in. New casinos come with a free slot
+// machine and a palm, so there's something to watch from the first minute.
+export function casinoData(d = save.get()) {
+  const c = d.casino || {};
+  return {
+    name: c.name || `${((d.look && d.look.name) || '').trim() || 'High Roller'}'s Casino`,
+    slots: c.slots || { 2: { id: 'slots' }, 3: { id: 'slots' }, 0: { id: 'plant' } },
+    rows: c.rows || 1,
+    vault: c.vault || 0,
+    lastSeen: c.lastSeen || 0,
+    earned: c.earned || 0,
+    visits: c.visits || 0,
+    rigWins: c.rigWins || 0,
+  };
+}
+export function updateCasino(fn) { save.update((x) => { const c = casinoData(x); fn(c, x); x.casino = c; }); }
+
+export function appealOf(c) {
+  let a = 10;
+  for (const s of Object.values(c.slots)) a += (CASINO_ITEMS[s.id] && CASINO_ITEMS[s.id].appeal) || 0;
+  return a;
+}
+// Roughly what the place makes in an hour with you there, and while you're away (a fifth of it,
+// for up to six hours).
+export function incomeRate(c) {
+  const earners = Object.values(c.slots).map((s) => CASINO_ITEMS[s.id]).filter((it) => it && it.edge);
+  if (!earners.length) return 0;
+  const busy = Math.min(1, 0.35 + appealOf(c) / 220);
+  return Math.round(earners.reduce((n, it) => n + it.edge, 0) * 150 * busy);
+}
+export const AWAY_SHARE = 0.2;
+export const AWAY_HOURS = 6;
+// Add what came in while you were away to the vault. Returns how much that was.
+export function accrueAway(now = Date.now()) {
+  let got = 0;
+  updateCasino((c) => {
+    if (c.lastSeen) {
+      const hrs = Math.min(AWAY_HOURS, Math.max(0, (now - c.lastSeen) / 3600000));
+      got = Math.floor(incomeRate(c) * AWAY_SHARE * hrs);
+      c.vault += got;
+      c.earned += got;
+    }
+    c.lastSeen = now;
+  });
+  return got;
+}
+
+// What goes over the wire (and to the raid) to build the place.
+export function casinoLayout(d = save.get()) {
+  const c = casinoData(d);
+  return { name: c.name, slots: c.slots, rows: c.rows };
+}
+
+// ---------- decor meshes ----------
+
+function buildDecor(id, g) {
+  const add = (m, x, y, z) => { m.position.set(x, y, z); g.add(m); return m; };
+  if (id === 'plant') {
+    add(part(new THREE.CylinderGeometry(0.7, 0.55, 1.1, 12), 0xb5652d), 0, 0.55, 0);
+    for (let i = 0; i < 6; i++) {
+      const leaf = part(new THREE.ConeGeometry(0.35, 2.4, 6), 0x2f9e44);
+      leaf.position.set(0, 2, 0);
+      leaf.rotation.set(0.9, (i / 6) * Math.PI * 2, 0, 'YXZ');
+      g.add(leaf);
+    }
+    add(part(new THREE.CylinderGeometry(0.12, 0.16, 1.4, 8), 0x8d6e63), 0, 1.6, 0);
+  } else if (id === 'couch') {
+    add(part(new THREE.BoxGeometry(4, 0.8, 1.6), 0x7b2cbf), 0, 0.6, 0);
+    add(part(new THREE.BoxGeometry(4, 1.2, 0.4), 0x7b2cbf), 0, 1.3, -0.65);
+    for (const s of [-1, 1]) add(part(new THREE.BoxGeometry(0.4, 1, 1.6), 0x5a189a), s * 2, 0.9, 0);
+  } else if (id === 'arch') {
+    const arch = new THREE.Mesh(new THREE.TorusGeometry(3, 0.25, 10, 40, Math.PI), new THREE.MeshBasicMaterial({ color: 0xff3fa4 }));
+    arch.position.y = 0.2;
+    g.add(arch);
+    const inner = new THREE.Mesh(new THREE.TorusGeometry(2.4, 0.18, 10, 40, Math.PI), new THREE.MeshBasicMaterial({ color: 0x2ee6d6 }));
+    inner.position.y = 0.2;
+    g.add(inner);
+    const in2 = new THREE.Mesh(new THREE.TorusGeometry(1.8, 0.14, 10, 40, Math.PI), new THREE.MeshBasicMaterial({ color: 0xffd23f }));
+    in2.position.y = 0.2;
+    g.add(in2);
+  } else if (id === 'fountain') {
+    add(part(new THREE.CylinderGeometry(2.4, 2.6, 0.8, 24), 0xe5e7eb), 0, 0.4, 0);
+    const water = new THREE.Mesh(new THREE.CylinderGeometry(2.1, 2.1, 0.1, 24), new THREE.MeshBasicMaterial({ color: 0xffe9a8 }));
+    add(water, 0, 0.82, 0);
+    add(part(new THREE.CylinderGeometry(0.25, 0.35, 2.2, 10), 0xd4a63a), 0, 1.6, 0);
+    add(part(new THREE.CylinderGeometry(1.1, 0.4, 0.35, 16), 0xd4a63a), 0, 2.6, 0);
+    const fizz = new THREE.Mesh(new THREE.SphereGeometry(0.5, 10, 8), new THREE.MeshBasicMaterial({ color: 0xfff4c2 }));
+    add(fizz, 0, 3.1, 0);
+    g.userData.spin = fizz;
+  } else if (id === 'statue') {
+    add(part(new THREE.BoxGeometry(2.4, 1, 2.4), 0x3a1650), 0, 0.5, 0);
+    const bean = part(new THREE.CapsuleGeometry(0.8, 1.6, 6, 14), 0xffc83d);
+    add(bean, 0, 2.6, 0);
+    const hat = part(new THREE.CylinderGeometry(0.55, 0.55, 0.9, 14), 0xffc83d);
+    add(hat, 0, 4.25, 0);
+    add(part(new THREE.CylinderGeometry(0.9, 0.9, 0.08, 16), 0xffc83d), 0, 3.82, 0);
+  } else if (id === 'bar') {
+    add(part(new THREE.BoxGeometry(5, 1.2, 1.4), 0x6b3a1e), 0, 0.6, 0);
+    add(part(new THREE.BoxGeometry(5.2, 0.12, 1.6), 0xd4a63a), 0, 1.25, 0);
+    add(part(new THREE.BoxGeometry(5, 2.6, 0.5), 0x2b1640), 0, 1.3, -1.6);
+    for (let i = 0; i < 6; i++) {
+      const b = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.12, 0.6, 8), new THREE.MeshBasicMaterial({ color: [0x5ee27a, 0xffd23f, 0xff3fa4, 0x2ee6d6][i % 4] }));
+      add(b, -2 + i * 0.8, 2.15, -1.45);
+    }
+    for (const sx of [-1.6, 0, 1.6]) add(part(new THREE.CylinderGeometry(0.35, 0.3, 0.9, 10), 0xc81d4a), sx, 0.45, 1.3);
+  }
+}
+
+// A round felt table under the games that aren't cabinets.
+function buildTableBase(g) {
+  const leg = part(new THREE.CylinderGeometry(0.8, 1.1, 0.9, 14), 0x2b2140);
+  leg.position.y = 0.45;
+  const rim = part(new THREE.CylinderGeometry(2.6, 2.6, 0.22, 28), 0x6b3a1e);
+  rim.position.y = 1;
+  const top = part(new THREE.CylinderGeometry(2.4, 2.4, 0.06, 28), toon(0x1f8a4c), { ink: 0 });
+  top.position.y = 1.12;
+  g.add(leg, rim, top);
+}
+
+// A floating sign: text on a canvas, facing the door.
+function signSprite(w, h, scale) {
+  const tex = canvasTexture(w, h, () => {});
+  const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }));
+  s.scale.set(scale, (scale * h) / w, 1);
+  s.renderOrder = 6;
+  s.userData.draw = (fn) => { const { ctx } = tex.userData; ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.clearRect(0, 0, w, h); fn(ctx, w, h); tex.needsUpdate = true; };
+  return s;
+}
+
+// ---------- the casino, live ----------
+
+export class MyCasino {
+  constructor(raid, layout, owner) {
+    this.raid = raid;
+    this.L = raid.map.mycasino;
+    this.owner = owner; // { name, me }
+    this.layout = layout || casinoLayout();
+    this.items = new Map(); // slot -> { id, group, colliders }
+    this.customers = [];
+    this.spawnT = 2;
+    this.signT = 0;
+    this.grumpy = 0; // seconds of bad word-of-mouth after a customer caught a rigged table
+    this.sel = null; // the spot picked in the build panel
+    this.markers = new THREE.Group();
+    raid.scene.add(this.markers);
+    this.buildSigns();
+    this.rebuild();
+    this.spots = [
+      {
+        spot: new THREE.Vector3(this.L.exit.x, 0, this.L.exit.z), range: 4, searchTime: 0.6, searchLabel: 'Heading out…',
+        prompt: () => `<b>Hold ${keyName('use')}</b> Leave the casino`, open: (by) => { if (by.isPlayer) raid.extract('Cash Out'); },
+      },
+      {
+        spot: new THREE.Vector3(this.L.cage.x, 0, this.L.cage.z), range: 4, searchTime: 0.4, searchLabel: 'Counting it up…',
+        prompt: () => (this.owner.me ? `<b>Hold ${keyName('use')}</b> 🪙 Collect the vault (${fmt(casinoData().vault)})` : `💰 ${esc(this.owner.name)}'s vault. Every chip you lose here ends up in it.`),
+        open: (by) => { if (by.isPlayer && this.owner.me) this.collect(); },
+      },
+      {
+        spot: new THREE.Vector3(this.L.desk.x, 0, this.L.desk.z), range: 4, searchTime: 0.3, searchLabel: 'Unrolling the blueprints…',
+        prompt: () => (this.owner.me ? `<b>Hold ${keyName('use')}</b> 🔨 Build, rig and manage your casino` : `🔨 ${esc(this.owner.name)}'s desk. Only the owner builds here.`),
+        open: (by) => { if (by.isPlayer && this.owner.me) this.openPanel(); },
+      },
+    ];
+    // Hooks into the games: rigged tables and the owner's cut of what friends lose.
+    this.hookTables();
+    if (this.owner.me && !raid.isClient) {
+      const got = accrueAway();
+      if (got > 0) raid.hud.toast(`🏰 While you were out, your casino made 🪙 ${fmt(got)}. It's in the vault at the cashier.`, 'big');
+    }
+  }
+
+  get tables() { return this.T; }
+
+  buildSigns() {
+    const scene = this.raid.scene;
+    this.nameSign = signSprite(1024, 200, 30);
+    this.nameSign.position.set(0, 8.4, -46);
+    scene.add(this.nameSign);
+    this.vaultSign = signSprite(512, 160, 7);
+    this.vaultSign.position.set(this.L.cage.x, 8.4, this.L.cage.z - 3);
+    scene.add(this.vaultSign);
+    this.drawSigns();
+  }
+
+  drawSigns() {
+    const name = this.layout.name;
+    this.nameSign.userData.draw((c, w, h) => {
+      c.textAlign = 'center';
+      c.textBaseline = 'middle';
+      const text = name.toUpperCase().slice(0, 26);
+      let size = 120;
+      c.font = `${size}px 'Luckiest Guy', 'Arial Black', sans-serif`;
+      while (size > 40 && c.measureText(text).width > w - 60) { size -= 6; c.font = `${size}px 'Luckiest Guy', 'Arial Black', sans-serif`; }
+      c.lineWidth = 16;
+      c.strokeStyle = '#1b0f2b';
+      c.fillStyle = '#ffd23f';
+      c.shadowColor = '#ff3fa4';
+      c.shadowBlur = 30;
+      c.strokeText(text, w / 2, h / 2);
+      c.fillText(text, w / 2, h / 2);
+    });
+    const v = this.owner.me ? casinoData().vault : null;
+    this.vaultSign.userData.draw((c, w, h) => {
+      c.fillStyle = 'rgba(20,10,34,0.86)';
+      c.fillRect(8, 8, w - 16, h - 16);
+      c.strokeStyle = '#ffd23f';
+      c.lineWidth = 8;
+      c.strokeRect(8, 8, w - 16, h - 16);
+      c.textAlign = 'center';
+      c.textBaseline = 'middle';
+      c.fillStyle = '#ffd23f';
+      c.font = "54px 'Luckiest Guy', 'Arial Black', sans-serif";
+      c.fillText(v === null ? '💰 THE VAULT' : `🪙 ${fmt(v)}`, w / 2, h / 2 + 4);
+    });
+  }
+
+  // ---------- building the floor ----------
+
+  rebuild() {
+    const raid = this.raid;
+    if (this.T && this.T.seat) { this.T.leave(); raid.setOverlay(null); }
+    if (this.T) this.T.dispose();
+    for (const it of this.items.values()) this.removeItem(it);
+    this.items.clear();
+    const defs = [];
+    for (const [k, s] of Object.entries(this.layout.slots)) {
+      const i = Number(k);
+      const def = CASINO_ITEMS[s.id];
+      if (!def || i >= this.layout.rows * CASINO_COLS.length) continue;
+      const [x, z] = slotXZ(i);
+      const g = new THREE.Group();
+      g.position.set(x, 0, z);
+      // Every spot sits on a round rug in its own colour (red-tinged if it's rigged, owner's eyes only).
+      const col = new THREE.Color(s.rig && this.owner.me ? '#ff2a2a' : def.color);
+      const rug = new THREE.Mesh(new THREE.CircleGeometry(4.6, 36), new THREE.MeshBasicMaterial({ color: col.clone().multiplyScalar(0.22) }));
+      rug.rotation.x = -Math.PI / 2;
+      rug.position.y = 0.05;
+      const edge = new THREE.Mesh(new THREE.RingGeometry(4.6, 4.9, 40), new THREE.MeshBasicMaterial({ color: col }));
+      edge.rotation.x = -Math.PI / 2;
+      edge.position.y = 0.055;
+      g.add(rug, edge);
+      const colliders = [];
+      if (def.game) {
+        if (!CABINET_GAMES.has(def.game)) {
+          buildTableBase(g);
+          colliders.push(raid.map.addCollider({ type: 'circle', x, z, r: 2.6, top: 1.15 }));
+        }
+        defs.push({ x, z, game: def.game, color: def.color, front: [0, 1], slot: i });
+      } else {
+        buildDecor(s.id, g);
+        if (s.id === 'bar') colliders.push(raid.map.addCollider({ type: 'box', minX: x - 2.6, maxX: x + 2.6, minZ: z - 2, maxZ: z + 0.8, top: 1.3 }));
+        else if (s.id === 'fountain') colliders.push(raid.map.addCollider({ type: 'circle', x, z, r: 2.6, top: 0.9 }));
+        else if (s.id === 'statue') colliders.push(raid.map.addCollider({ type: 'box', minX: x - 1.2, maxX: x + 1.2, minZ: z - 1.2, maxZ: z + 1.2, top: 4.5 }));
+        else if (s.id === 'couch') colliders.push(raid.map.addCollider({ type: 'box', minX: x - 2.2, maxX: x + 2.2, minZ: z - 0.9, maxZ: z + 0.8, top: 1 }));
+        else if (s.id === 'plant') colliders.push(raid.map.addCollider({ type: 'circle', x, z, r: 0.8, top: 1.2 }));
+      }
+      raid.scene.add(g);
+      this.items.set(i, { id: s.id, rig: !!s.rig, group: g, colliders, x, z });
+    }
+    this.T = new LoungeTables(raid, defs, null);
+    this.T.tables.forEach((t) => { t.slot = t.def.slot; });
+    this.hookTables();
+    this.drawMarkers();
+    // Customers at a game that's gone: send them home.
+    for (const cu of this.customers) if (cu.slot !== null && !this.items.has(cu.slot)) this.leave(cu);
+  }
+
+  removeItem(it) {
+    this.raid.scene.remove(it.group);
+    for (const c of it.colliders) this.raid.map.removeCollider(c);
+  }
+
+  // Empty spots glow faintly on the floor (for the owner), so you can see where things go.
+  drawMarkers() {
+    this.markers.clear();
+    if (!this.owner.me) return;
+    const open = this.layout.rows * CASINO_COLS.length;
+    for (let i = 0; i < SLOT_COUNT; i++) {
+      if (this.items.has(i)) continue;
+      const [x, z] = slotXZ(i);
+      const locked = i >= open;
+      const ring = new THREE.Mesh(new THREE.RingGeometry(3.6, 3.8, 4, 1), new THREE.MeshBasicMaterial({ color: locked ? 0x6b5b7b : 0x2ee6d6, transparent: true, opacity: locked ? 0.25 : 0.55 }));
+      ring.rotation.x = -Math.PI / 2;
+      ring.rotation.z = Math.PI / 4;
+      ring.position.set(x, 0.06, z);
+      this.markers.add(ring);
+    }
+  }
+
+  // ---------- rigging, and the owner's cut ----------
+
+  hookTables() {
+    const T = this.T;
+    if (!T) return;
+    // Someone who isn't the owner is about to win at a rigged table: 70% of the time, they don't.
+    T.denyWin = (t) => {
+      if (this.owner.me || !t) return false;
+      const s = this.layout.slots[t.slot];
+      if (!s || !s.rig || Math.random() > 0.7) return false;
+      this.rigReveal(t);
+      return true;
+    };
+    // A friend's losses (or the stake of a win the rig ate) go in the owner's vault.
+    T.onResult = (t, wager, payout) => {
+      if (this.owner.me) return;
+      const lost = wager - payout;
+      if (lost > 0 && this.raid.isClient) this.raid.net.send({ k: 'cvault', n: Math.round(lost), rig: payout === 0 && t && this.layout.slots[t.slot] && this.layout.slots[t.slot].rig ? 1 : 0 });
+    };
+  }
+
+  rigReveal(t) {
+    const raid = this.raid;
+    raid.fx.number(t.pos.clone().setY(4.6), '😈 RIGGED!', '#ff2a2a', 2.2);
+    raid.fx.confetti(t.pos.clone().setY(3));
+    sfx.deny();
+    raid.hud.toast(`😈 You'd have won... but ${esc(this.owner.name)} RIGGED this table. The House always wins.`, 'big');
+  }
+
+  // Host: a friend lost chips in our casino.
+  friendLost(n, rigged, who) {
+    if (!this.owner.me) return;
+    updateCasino((c) => { c.vault += n; c.earned += n; if (rigged) c.rigWins += 1; });
+    this.drawSigns();
+    if (rigged) this.raid.feed(`😈 Your rigged table just ate ${who}'s win (+🪙 ${fmt(n)})`);
+  }
+
+  // ---------- money ----------
+
+  collect() {
+    const v = casinoData().vault;
+    if (v <= 0) { this.raid.hud.toast('The vault is empty. Give the customers a minute.'); return; }
+    updateCasino((c, x) => { x.stash.chips += c.vault; c.vault = 0; });
+    sfx.cashout();
+    this.raid.fx.confetti(new THREE.Vector3(this.L.cage.x, 2.5, this.L.cage.z));
+    this.raid.hud.toast(`💰 Collected 🪙 ${fmt(v)} from the vault!`, 'big');
+    this.drawSigns();
+    if (this.panelOpen()) this.renderPanel();
+  }
+
+  earn(n, at, big = false) {
+    if (!this.owner.me || this.raid.isClient) return;
+    updateCasino((c) => { c.vault = Math.max(0, c.vault + n); c.earned += n; c.visits += 1; });
+    const p = this.raid.player;
+    if (p && p.pos.distanceTo(at) < 40) this.raid.fx.number(at.clone().setY(4), n >= 0 ? `+🪙${fmt(n)}` : `-🪙${fmt(-n)}`, n >= 0 ? '#5ee27a' : '#ff5d5d', big ? 1.6 : 1);
+    this.signT = 0;
+  }
+
+  // ---------- customers ----------
+
+  maxCustomers() {
+    let n = 2;
+    for (const it of this.items.values()) if (CASINO_ITEMS[it.id].edge) n += 1;
+    return Math.min(24, n + Math.floor(appealOf(this.layout) / 40));
+  }
+
+  spawnCustomer() {
+    const char = createCharacter(randomLook());
+    char.showTag(false);
+    const pos = DOOR.clone().add(new THREE.Vector3((Math.random() - 0.5) * 4, 0, 0));
+    char.root.position.copy(pos);
+    this.raid.scene.add(char.root);
+    const cu = { char, pos, path: [], state: 'walk', slot: null, t: 0, yaw: Math.PI, hop: 0, after: null };
+    this.customers.push(cu);
+    this.pickTarget(cu);
+  }
+
+  // Somewhere to go: a free game first, else the bar, else something nice to look at.
+  pickTarget(cu) {
+    const busy = new Set(this.customers.filter((o) => o !== cu && o.slot !== null).map((o) => o.slot));
+    const seated = this.T && this.T.seat ? this.T.seat.slot : null;
+    const taken = (t) => busy.has(t.slot) || t.slot === seated || (t.owner && !t.stale);
+    const games = this.T ? this.T.tables.filter((t) => !taken(t)) : [];
+    const other = [...this.items.entries()].filter(([i, it]) => !busy.has(i) && !CASINO_ITEMS[it.id].game);
+    let goal = null;
+    if (games.length && Math.random() < 0.8) {
+      const t = games[Math.floor(Math.random() * games.length)];
+      cu.slot = t.slot;
+      cu.kind = 'game';
+      goal = t.seatPos.clone();
+    } else if (other.length) {
+      const [i, it] = other[Math.floor(Math.random() * other.length)];
+      cu.slot = i;
+      cu.kind = CASINO_ITEMS[it.id].bar ? 'bar' : 'look';
+      goal = new THREE.Vector3(it.x + (Math.random() - 0.5) * 3, 0, it.z + (it.id === 'bar' ? 2.4 : 3.6));
+    } else {
+      cu.slot = null;
+      cu.kind = 'look';
+      goal = new THREE.Vector3((Math.random() - 0.5) * 10, 0, 20 + Math.random() * 10);
+    }
+    // Up the red carpet, along the row's aisle, then over to the spot.
+    const az = goal.z + 2.2;
+    cu.path = [new THREE.Vector3((Math.random() - 0.5) * 3, 0, az), new THREE.Vector3(goal.x, 0, az), goal];
+    cu.state = 'walk';
+  }
+
+  leave(cu) {
+    cu.slot = null;
+    cu.state = 'leave';
+    const az = cu.pos.z + 2.2;
+    cu.path = [new THREE.Vector3(cu.pos.x, 0, az), new THREE.Vector3((Math.random() - 0.5) * 3, 0, az), DOOR.clone()];
+  }
+
+  // A customer finished a go on something: the house (mostly) wins.
+  settle(cu) {
+    const it = this.items.get(cu.slot);
+    if (!it) return;
+    const def = CASINO_ITEMS[it.id];
+    const at = new THREE.Vector3(it.x, 0, it.z);
+    if (!def.edge) return;
+    const rig = this.layout.slots[cu.slot] && this.layout.slots[cu.slot].rig;
+    // Every so often a customer hits it big (that's what keeps them coming back).
+    if (!rig && Math.random() < 0.08) {
+      this.earn(-Math.round(def.edge * (2 + Math.random() * 2)), at, true);
+      cu.hop = 1;
+      this.raid.fx.confetti(at.clone().setY(3), 18);
+      return;
+    }
+    let n = Math.round(def.edge * (0.3 + Math.random() * 1.4) * (rig ? 1.8 : 1));
+    if (rig && Math.random() < 0.15) {
+      // Caught it. Word gets round.
+      if (this.owner.me && this.grumpy <= 0) this.raid.hud.toast('😠 A customer figured out your table is rigged! Fewer people will show up for a bit.');
+      this.grumpy = 60;
+      this.raid.fx.number(at.clone().setY(5), '😠 RIGGED?!', '#ff5d5d', 1.4);
+      n = Math.round(n * 0.5);
+    }
+    this.earn(n, at);
+  }
+
+  updateCustomers(dt) {
+    // New faces come in through the door (more of them the nicer the place is).
+    this.spawnT -= dt;
+    if (this.spawnT <= 0) {
+      const appeal = appealOf(this.layout) * (this.grumpy > 0 ? 0.4 : 1);
+      this.spawnT = 9 / (1 + appeal / 70) * (0.6 + Math.random() * 0.8);
+      if (this.customers.length < this.maxCustomers()) this.spawnCustomer();
+    }
+    this.grumpy = Math.max(0, this.grumpy - dt);
+    const seated = this.T && this.T.seat ? this.T.seat.slot : null;
+    for (let i = this.customers.length - 1; i >= 0; i--) {
+      const cu = this.customers[i];
+      let speed = 0;
+      if (cu.state === 'walk' || cu.state === 'leave') {
+        const wp = cu.path[0];
+        if (!wp) {
+          if (cu.state === 'leave') {
+            this.raid.scene.remove(cu.char.root);
+            this.customers.splice(i, 1);
+            continue;
+          }
+          cu.state = 'use';
+          cu.t = cu.kind === 'game' ? 8 + Math.random() * 10 : cu.kind === 'bar' ? 6 + Math.random() * 6 : 3 + Math.random() * 4;
+          if (cu.slot !== null) {
+            const it = this.items.get(cu.slot);
+            if (it) cu.yaw = Math.atan2(it.x - cu.pos.x, it.z - cu.pos.z);
+          }
+        } else {
+          const dx = wp.x - cu.pos.x;
+          const dz = wp.z - cu.pos.z;
+          const d = Math.hypot(dx, dz);
+          if (d < 0.3) cu.path.shift();
+          else {
+            speed = 4;
+            const step = Math.min(d, speed * dt);
+            cu.pos.x += (dx / d) * step;
+            cu.pos.z += (dz / d) * step;
+            cu.yaw = Math.atan2(dx, dz);
+          }
+        }
+      } else if (cu.state === 'use') {
+        cu.t -= dt;
+        // You sat down at their game: they let you have it.
+        if (cu.slot !== null && cu.slot === seated) { this.leave(cu); continue; }
+        if (cu.t <= 0) {
+          if (cu.kind !== 'look') this.settle(cu);
+          // Another go somewhere else, or home.
+          if (Math.random() < 0.45) this.pickTarget(cu); else this.leave(cu);
+        }
+      }
+      cu.hop = Math.max(0, cu.hop - dt * 1.6);
+      const hopY = Math.sin(cu.hop * Math.PI * 2) * 0.6 * (cu.hop > 0 ? 1 : 0);
+      cu.char.root.position.set(cu.pos.x, Math.max(0, hopY), cu.pos.z);
+      cu.char.root.rotation.y = cu.yaw;
+      cu.char.animate(dt, { speed, forward: speed / 6, side: 0, onGround: hopY <= 0.01, pitch: 0, dead: false, showTag: false });
+    }
+  }
+
+  // ---------- each frame ----------
+
+  interactables() { return [...this.spots, ...(this.T ? this.T.interactables() : [])]; }
+
+  update(dt) {
+    if (this.T) this.T.update(dt);
+    this.updateCustomers(dt);
+    for (const it of this.items.values()) if (it.group.userData.spin) it.group.userData.spin.position.y = 3.1 + Math.sin(performance.now() / 300) * 0.15;
+    this.signT -= dt;
+    if (this.signT <= 0) { this.signT = 1; this.drawSigns(); }
+  }
+
+  dispose() {
+    if (this.T) this.T.dispose();
+    for (const it of this.items.values()) this.removeItem(it);
+    for (const cu of this.customers) this.raid.scene.remove(cu.char.root);
+    this.customers = [];
+    this.raid.scene.remove(this.markers, this.nameSign, this.vaultSign);
+    if (this.owner.me && !this.raid.isClient) updateCasino((c) => { c.lastSeen = Date.now(); });
+    const el = $('buildPanel');
+    if (el) el.hidden = true;
+  }
+
+  // ---------- the build panel ----------
+
+  panelOpen() { const el = $('buildPanel'); return el && !el.hidden; }
+
+  openPanel() {
+    let el = $('buildPanel');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'buildPanel';
+      el.className = 'buildpanel';
+      document.body.appendChild(el);
+      el.addEventListener('click', (e) => this.onClick(e));
+      el.addEventListener('change', (e) => { if (e.target.id === 'casName') this.rename(e.target.value); });
+    }
+    this.raid.setOverlay('build');
+    el.hidden = false;
+    this.renderPanel();
+  }
+
+  renderPanel() {
+    const el = $('buildPanel');
+    if (!el) return;
+    const c = casinoData();
+    const chips = save.get().stash.chips;
+    const open = c.rows * CASINO_COLS.length;
+    const cell = (i) => {
+      const s = c.slots[i];
+      const locked = i >= open;
+      const def = s && CASINO_ITEMS[s.id];
+      return `<button class="bcell ${this.sel === i ? 'on' : ''} ${locked ? 'locked' : ''} ${s && s.rig ? 'rig' : ''}" data-act="cell" data-i="${i}" style="${def ? `--c:${def.color}` : ''}">${locked ? '🔒' : def ? `${def.icon}${s.rig ? '<i>😈</i>' : ''}` : '<span>+</span>'}</button>`;
+    };
+    // Rows from the back wall (top) to the door (bottom), the aisle down the middle.
+    const rows = [...CASINO_ROWS.keys()].reverse().map((r) => {
+      const ids = CASINO_COLS.map((_, k) => r * CASINO_COLS.length + k);
+      return `<div class="brow">${ids.slice(0, 3).map(cell).join('')}<div class="baisle"></div>${ids.slice(3).map(cell).join('')}</div>`;
+    }).join('');
+    let detail = '<p class="bhint">Pick a spot on the floor plan to build there.</p>';
+    if (this.sel !== null) {
+      const s = c.slots[this.sel];
+      if (this.sel >= open) {
+        const next = c.rows;
+        const nextCost = ROW_COST[next];
+        const row = Math.floor(this.sel / CASINO_COLS.length);
+        detail = row === next
+          ? `<h4>🔒 Expand the floor</h4><p>Open up another row of six spots.</p><button class="btn" data-act="expand" ${chips < nextCost ? 'disabled' : ''}>Expand for 🪙 ${fmt(nextCost)}</button>`
+          : '<h4>🔒 Not yet</h4><p>Open the rows nearer the door first.</p>';
+      } else if (s) {
+        const def = CASINO_ITEMS[s.id];
+        detail = `<h4>${def.icon} ${def.name}</h4><p>${def.blurb}</p>
+          ${def.game ? `<p class="brig">${s.rig ? '😈 <b>RIGGED.</b> Customers lose more (+80%), but some notice. Friends who sit here lose most of their wins, and find out who did it.' : '😇 Playing it straight.'}</p>
+          <button class="btn ${s.rig ? 'ghost' : 'rigbtn'}" data-act="rig">${s.rig ? '😇 Un-rig it' : '😈 Rig this table'}</button>` : ''}
+          <button class="btn ghost" data-act="sell">Sell for 🪙 ${fmt(Math.floor(def.cost / 2))}</button>`;
+      } else {
+        const shop = (ids) => ids.map((id) => {
+          const def = CASINO_ITEMS[id];
+          return `<button class="bitem" data-act="buy" data-id="${id}" ${chips < def.cost ? 'disabled' : ''} style="--c:${def.color}"><span>${def.icon}</span><b>${def.name}</b><small>${def.edge ? `~🪙${def.edge} a customer · ` : ''}+${def.appeal} appeal</small><em>🪙 ${fmt(def.cost)}</em></button>`;
+        }).join('');
+        detail = `<h4>Games</h4><div class="bshop">${shop(GAME_IDS)}</div><h4>Decor</h4><div class="bshop">${shop(DECOR_IDS)}</div>`;
+      }
+    }
+    el.innerHTML = `<div class="bphead"><div><small>YOUR CASINO</small><input id="casName" maxlength="24" value="${esc(c.name)}"></div><button class="btn ghost" data-act="close">✕ Close</button></div>
+      <div class="bpstats">
+        <span>💰 Vault <b>🪙 ${fmt(c.vault)}</b> <button class="btn tiny" data-act="collect" ${c.vault > 0 ? '' : 'disabled'}>Collect</button></span>
+        <span>⭐ Appeal <b>${appealOf(c)}</b></span>
+        <span>🧑‍🤝‍🧑 Customers <b>${this.customers.length}</b></span>
+        <span>📈 ~🪙 <b>${fmt(incomeRate(c))}</b>/hr</span>
+        <span>🏦 Made <b>🪙 ${fmt(c.earned)}</b></span>
+        <span>🪙 You have <b>${fmt(chips)}</b></span>
+      </div>
+      <div class="bpbody"><div class="bplan"><div class="bwall">🎰 BACK WALL</div>${rows}<div class="bdoor">🚪 DOOR</div></div><div class="bdetail">${detail}</div></div>`;
+  }
+
+  onClick(e) {
+    const b = e.target.closest('[data-act]');
+    if (!b) return;
+    const act = b.dataset.act;
+    const i = this.sel;
+    if (act === 'close') { this.raid.setOverlay(null); return; }
+    if (act === 'cell') this.sel = Number(b.dataset.i);
+    else if (act === 'collect') { this.collect(); return; }
+    else if (act === 'expand') {
+      const cost = ROW_COST[casinoData().rows];
+      if (!this.raid.casino.spend(cost)) return;
+      updateCasino((c) => { c.rows += 1; });
+      sfx.cashout();
+      this.raid.hud.toast('🏗️ The floor just got bigger!');
+      this.changed();
+    } else if (act === 'buy') {
+      const def = CASINO_ITEMS[b.dataset.id];
+      if (!def || i === null || !this.raid.casino.spend(def.cost)) return;
+      updateCasino((c) => { c.slots[i] = { id: b.dataset.id }; });
+      sfx.win();
+      this.changed();
+      const it = this.items.get(i);
+      if (it) this.raid.fx.confetti(new THREE.Vector3(it.x, 2, it.z));
+    } else if (act === 'sell') {
+      const s = casinoData().slots[i];
+      if (!s) return;
+      const back = Math.floor(CASINO_ITEMS[s.id].cost / 2);
+      updateCasino((c, x) => { delete c.slots[i]; x.stash.chips += back; });
+      this.changed();
+    } else if (act === 'rig') {
+      updateCasino((c) => { if (c.slots[i]) c.slots[i].rig = !c.slots[i].rig; });
+      const on = casinoData().slots[i] && casinoData().slots[i].rig;
+      if (on) sfx.deny(); else sfx.win();
+      this.changed();
+    }
+    this.renderPanel();
+  }
+
+  rename(v) {
+    const name = String(v || '').trim().slice(0, 24);
+    if (!name) return;
+    updateCasino((c) => { c.name = name; });
+    this.changed();
+  }
+
+  // The layout changed: rebuild here, and tell any friends visiting.
+  changed() {
+    this.layout = casinoLayout();
+    this.rebuild();
+    this.drawSigns();
+    if (this.raid.isHost) this.raid.net.rel({ k: 'cas', layout: this.layout });
+    this.renderPanel();
+  }
+
+  // A friend's game: the owner changed something.
+  applyLayout(layout) {
+    if (!layout) return;
+    this.layout = layout;
+    this.rebuild();
+    this.drawSigns();
+  }
+}

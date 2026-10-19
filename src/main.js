@@ -5,6 +5,7 @@ import { net } from './net.js';
 import { Session } from './multi.js';
 import { Hud } from './hud.js';
 import { Hub, fixPlayMode } from './hub.js';
+import { casinoLayout } from './mycasino.js';
 import { PlayerController } from './player.js';
 import { initAudio, setVolume } from './audio.js';
 import { save } from './save.js';
@@ -124,7 +125,7 @@ function setOverlay(name) {
   // Seated at a Lounge table: the bag and map wait until you get up (Esc or the Leave button).
   if (overlay === 'seat' && name && name !== 'seat') return;
   // Getting up from a Lounge table.
-  if (overlay === 'seat' && name !== 'seat' && raid.duel) raid.duel.tables.leave();
+  if (overlay === 'seat' && name !== 'seat' && raid.tables) raid.tables.leave();
   const wasPoker = overlay === 'poker';
   overlay = name;
   if (name) tutorial.note(name);
@@ -135,6 +136,7 @@ function setOverlay(name) {
   $('bigmap').hidden = name !== 'map';
   $('duelPanel').hidden = name !== 'duel';
   $('betPanel').hidden = name !== 'bet';
+  if ($('buildPanel')) $('buildPanel').hidden = name !== 'build';
   if (name === 'map') hud.drawBigMap(raid);
   if (name && document.pointerLockElement) document.exitPointerLock();
   if (!name && raid.active) controller.lock();
@@ -161,7 +163,7 @@ window.addEventListener('keydown', (e) => { if (e.code === 'Space' || e.code ===
 window.addEventListener('mousedown', () => raid.skipKillcam());
 window.addEventListener('keydown', (e) => {
   if (e.key === 'Escape' && overlay === 'seat') {
-    if (raid.duel && !raid.duel.tables.canLeave()) return;
+    if (raid.tables && !raid.tables.canLeave()) return;
     setOverlay(null);
     return;
   }
@@ -173,6 +175,7 @@ window.addEventListener('keydown', (e) => {
     $('bigmap').hidden = true;
     $('duelPanel').hidden = true;
     $('betPanel').hidden = true;
+    if ($('buildPanel')) $('buildPanel').hidden = true;
     if (document.body.classList.contains('tablemode')) { hub.closeTable(); return; }
     if (raid.active) $('paused').hidden = false;
   }
@@ -404,12 +407,15 @@ const hub = new Hub({
     if (bad.length) { hub.toast(buildFix(bad)); return; }
     const play = save.get().playMode || 'royale';
     const royale = play === 'royale';
-    const mapId = royale ? 'island' : save.get().selectedMap;
+    const casino = play === 'casino';
+    const mapId = royale ? 'island' : casino ? 'mycasino' : save.get().selectedMap;
     const seed = Math.floor(Math.random() * 2 ** 31);
     const exits = [0, 1, 2, 3].sort(() => Math.random() - 0.5).slice(0, 2);
     const spawns = raid.mapId === mapId ? raid.map.spawns : null;
     const spawn = spawns ? spawns[Math.floor(Math.random() * spawns.length)] : null;
-    net.start({ mapId, seed, exits, spawn, build: BUILD, royale });
+    // Your casino: everyone gets the layout, and who owns it.
+    const extra = casino ? { casino: casinoLayout(), ownerName: (save.get().look.name || '').trim() || 'High Roller' } : {};
+    net.start({ mapId, seed, exits, spawn, build: BUILD, royale, ...extra });
   },
   onSettings() { applySettings(); voice.apply(); },
   onJoinRaid() { askToJoin(true); },
@@ -436,7 +442,7 @@ const hub = new Hub({
       const slot = Math.max(0, mates.findIndex((m) => m.id === net.id));
       const spawn = myTeam ? blue : red;
       const join = info.join || null;
-      raid.deploy({ ...opts, opts: { royale: !!info.royale, client: !session.host, exits: info.exits, spawn, slot, party: info.members.length, at: join && join.pos, restore: join && join.restore } });
+      raid.deploy({ ...opts, opts: { royale: !!info.royale, casino: info.casino || null, casinoOwner: info.casino ? { name: info.ownerName || 'The Owner', me: session.host } : undefined, client: !session.host, exits: info.exits, spawn, slot, party: info.members.length, at: join && join.pos, restore: join && join.restore } });
       if (join) { session.applyJoin(join); clearBackup(); if (join.restore) clearSafety(); }
       if (session.host) session.addFriends(new THREE.Vector3(spawn[0], 0, spawn[1]));
       else session.register(raid.player, `p${net.id}`);
@@ -694,7 +700,7 @@ function step(now, draw = true) {
   last = now;
   const inRaid = raid.active;
   // Sitting at a Lounge table: the mouse is free for the panel, but the world keeps going.
-  const seated = inRaid && overlay === 'seat' && raid.duel && raid.duel.tables.seat;
+  const seated = inRaid && overlay === 'seat' && raid.tables && raid.tables.seat;
   const paused = inRaid && !seated && (!controller.locked || !!overlay);
 
   // Party raids never pause: the world is shared, so the pause menu only stops your controls.
@@ -705,7 +711,7 @@ function step(now, draw = true) {
     syncPauseSliders();
     setTimeout(() => { if (document.pointerLockElement) document.exitPointerLock(); }, 900);
     // Ended while sitting at a Lounge table (the leader left, say): get up properly.
-    if (raid.duel && raid.duel.tables.seat) raid.duel.tables.leave();
+    if (raid.tables && raid.tables.seat) raid.tables.leave();
     overlay = null;
     $('bag').hidden = true;
     $('bigmap').hidden = true;
@@ -743,12 +749,12 @@ function step(now, draw = true) {
     raid.killcamView(dt, camera);
     if (raid.player) raid.player.char.firstPerson(false);
   } else if (seated && $('hub').hidden) {
-    raid.duel.tables.camera(camera, dt);
+    raid.tables.camera(camera, dt);
     // Out of the way of your own view (everyone else still sees you sitting there).
     raid.player.char.root.visible = false;
     hud.update(dt, raid);
   } else if (raid.player && $('hub').hidden) {
-    if (raid.duel) raid.duel.tables.camCur = null;
+    if (raid.tables) raid.tables.camCur = null;
     controller.updateCamera(dt);
     hud.update(dt, raid);
   } else {
