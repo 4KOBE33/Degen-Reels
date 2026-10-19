@@ -16,7 +16,7 @@ import { itemInfo, isGun, makeGun, fullAmmo, addToList } from './items.js';
 import { levelInfo } from './progress.js';
 import { Shoe, handValue, isNatural } from './cards.js';
 import {
-  BETS, BET_LEVEL, betLock, chipLabel, RED, WHEEL, REEL_SYMBOLS, REEL_HITS, PLINKO, PLINKO_ROWS, bucketColor, MINE_COUNTS, minesMult, slotSpin, JACKPOT_SEED,
+  BETS, BET_LEVEL, betLock, chipLabel, RED, WHEEL, REEL_SYMBOLS, REEL_HITS, PLINKO, PLINKO_ROWS, bucketColor, MINE_COUNTS, minesMult, slotSpin, JACKPOT_SEED, jackpotShare,
 } from './hub.js';
 
 const $ = (id) => document.getElementById(id);
@@ -554,7 +554,9 @@ const Slots = {
     else T.hub.feedJackpot(bet);
     const res = slotSpin(bet);
     t.mine = { bet, res, free };
-    return { a: 'pull', g: res.grid, w: res.win, x: res.gun, fs: res.free, gm: res.gems };
+    // What a jackpot would pay, so everyone's banner shows the real number.
+    const jp = res.gems >= 3 ? jackpotShare(T.hub.data.jackpot || JACKPOT_SEED, bet) : 0;
+    return { a: 'pull', g: res.grid, w: res.win + jp, x: res.gun, fs: res.free, gm: res.gems, jp };
   },
   apply(t, e) {
     if (e.a !== 'pull') return;
@@ -605,7 +607,7 @@ const Slots = {
     const e = p.e;
     const jackpot = e.gm >= 3;
     const info = e.x && itemInfo(e.x);
-    const what = [jackpot ? '💎💎💎 JACKPOT!' : '', info ? info.name : '', e.w ? `🪙 ${fmt(e.w)}` : '', e.fs ? `⭐ ${e.fs} free spins` : ''].filter(Boolean).join(' + ') || 'No win';
+    const what = [jackpot ? `💎💎💎 JACKPOT 🪙 ${fmt(e.jp || 0)}` : '', info ? info.name : '', e.w ? `🪙 ${fmt(e.w)} total` : '', e.fs ? `⭐ ${e.fs} free spins` : ''].filter(Boolean).join(' + ') || 'No win';
     t.show(`${p.who} · Lucky Slots`, what, info ? info.css : '#ffd23f');
     if (e.w || info || e.fs || jackpot) t.T.pop(t, jackpot ? 'JACKPOT!' : info ? info.name : e.fs ? `⭐ ${e.fs} FREE` : `+${fmt(e.w)}`, info ? info.css : '#ffd23f', jackpot || !!info);
     if (jackpot || info || e.fs) t.flash = 3;

@@ -169,15 +169,13 @@ export class RaiderBrain {
 
   // Waiting on a ride: fight from inside the circle instead of strafing out of it and missing the
   // pickup (then calling it again, and again).
-  holdExit() {
+  holdExit(dt) {
     const { c } = this;
     if (this.goalKind !== 'exit' || !this.goal || this.age <= this.leaveAt) return;
-    const dx = this.goal.x - c.pos.x;
-    const dz = this.goal.z - c.pos.z;
-    const d = Math.hypot(dx, dz);
+    const d = Math.hypot(this.goal.x - c.pos.x, this.goal.z - c.pos.z);
     if (d > EXTRACT_RADIUS + 6 || d < EXTRACT_RADIUS * 0.5) return;
-    c.move.set(dx / d, dz / d);
-    c.sprint = false;
+    // The usual pathing (round counters and walls), still shooting on the way.
+    this.steer(this.goal, dt, false);
   }
 
   // Nothing left to shoot with: both guns empty and no Ammo Boxes to reload from.
@@ -301,7 +299,7 @@ export class RaiderBrain {
     const t = this.target;
     // Only fight what it's seen: a target picked through a wall it's never laid eyes on would have
     // it backing and strafing straight into that wall. Keep doing its thing until it shows up.
-    if (t && t.alive && (this.los || this.lastSeen)) { this.fight(t, dt); this.holdExit(); }
+    if (t && t.alive && (this.los || this.lastSeen)) { this.fight(t, dt); this.holdExit(dt); }
     else if (this.rescue) this.doRescue(dt);
     else if (this.loot && raid.pickups.includes(this.loot)) {
       if (this.steer(this.loot.spot, dt) < 1.4) {

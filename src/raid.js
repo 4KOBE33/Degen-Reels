@@ -328,7 +328,9 @@ export class Raid {
 
   spawnRaider() {
     const taken = new Set(this.combatants.map((c) => c.name));
-    const name = pick(RAIDER_NAMES.filter((n) => !taken.has(n))) || `${pick(RAIDER_NAMES)} Jr.`;
+    let name = pick(RAIDER_NAMES.filter((n) => !taken.has(n)));
+    // Out of names: somebody's kid shows up instead (Jr., then III, IV...).
+    for (let k = 2; !name; k++) name = RAIDER_NAMES.map((n) => `${n} ${k === 2 ? 'Jr.' : ['', '', '', 'III', 'IV', 'V', 'VI'][k] || k}`).find((n) => !taken.has(n));
     const c = new Combatant(this, { name, look: randomLook() });
     const [sx, sz] = pick(this.map.spawns);
     const [x, z] = this.openSpot(sx + (Math.random() - 0.5) * 10, sz + (Math.random() - 0.5) * 10);
@@ -1646,8 +1648,9 @@ export class Raid {
     if (attacker && attacker.team === 'machine' && target.brain && !target.human) amount *= 0.3;
     // The boss's backup hits softer on easier maps.
     if (attacker && attacker.addDmg) amount *= attacker.addDmg;
-    // Glass Cannon: everything hits harder. (Once: a hit a friend already scaled arrives fromNet.)
-    if (this.rule && this.rule.dmg && !fromNet) amount *= this.rule.dmg;
+    // Glass Cannon: everything hits harder. Only once: a friend's own game already scaled the hits
+    // it sends us (their stand-in here is a puppet), and anything arriving fromNet is final.
+    if (this.rule && this.rule.dmg && !fromNet && !(attacker && attacker.puppet)) amount *= this.rule.dmg;
     amount = Math.round(amount);
     if (amount <= 0) return;
     // Mid-roll: it whiffs.

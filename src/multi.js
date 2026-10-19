@@ -181,6 +181,7 @@ export class Session {
       el: r2(raid.elapsed),
       opened: raid.containers.map((k, i) => (k.opened ? i : -1)).filter((i) => i >= 0),
       vault: raid.vaultOpen,
+      happy: raid.happyHour() ? r1(raid.happyEnd) : null,
       pickups: raid.pickups.filter((pk) => pk.netId).map((pk) => ({ id: pk.netId, p: arr(pk.pos), item: pk.item })),
     });
   }
@@ -192,6 +193,7 @@ export class Session {
     raid.elapsed = j.el;
     for (const i of j.opened || []) if (raid.containers[i]) raid.containers[i].showOpened();
     if (j.vault) raid.openVault({ name: 'Someone' }, true);
+    if (j.happy !== null && j.happy !== undefined) raid.startHappyHour(j.happy);
     for (const p of j.pickups || []) this.applyEvent({ k: 'pn', id: p.id, p: p.p, item: p.item });
   }
 
@@ -511,7 +513,9 @@ export class Session {
     let perSec = 0;
     for (const g of guns) {
       const w = WEAPONS[g] || WEAPONS.fists;
-      maxDmg = Math.max(maxDmg, w.damage * Math.max(rar.damage, ...RARITIES.map((r) => r.damage)) * 3 + 1);
+      // (House Rules can scale a legit hit: Headhunter doubles weak-spot hits, Glass Cannon adds half.)
+      const rule = this.raid.rule || {};
+      maxDmg = Math.max(maxDmg, w.damage * Math.max(rar.damage, ...RARITIES.map((r) => r.damage)) * 3 * (rule.crit || 1) * (rule.dmg || 1) + 1);
       range = Math.max(range, w.range || 2);
       perSec = Math.max(perSec, (w.pellets || 1) / Math.max(0.05, w.rate));
     }

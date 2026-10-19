@@ -135,7 +135,7 @@ const SLOT_SYMS = Object.keys(SLOT_W);
 export const JACKPOT_SEED = 10000;
 const JACKPOT_CUT = 0.015;
 const JACKPOT_FULL = 1000;
-const jackpotShare = (pot, bet) => Math.round(pot * Math.min(1, bet / JACKPOT_FULL));
+export const jackpotShare = (pot, bet) => Math.round(pot * Math.min(1, bet / JACKPOT_FULL));
 const slotSymbol = () => {
   let x = Math.random() * Object.values(SLOT_W).reduce((a, b) => a + b, 0);
   for (const k of SLOT_SYMS) { x -= SLOT_W[k]; if (x < 0) return k; }
@@ -2001,9 +2001,11 @@ export class Hub {
   // Returns what it was all worth.
   payLucky(bet, res, freeSpin = false) {
     if (res.gems >= 3) {
-      res.jackpot = jackpotShare(this.data.jackpot || JACKPOT_SEED, bet);
+      const pot = this.data.jackpot || JACKPOT_SEED;
+      res.jackpot = jackpotShare(pot, bet);
       res.win += res.jackpot;
-      save.update((x) => { x.jackpot = JACKPOT_SEED; x.stats.jackpots = (x.stats.jackpots || 0) + 1; });
+      // A full-pot win resets it; a smaller bet's slice leaves the rest in there.
+      save.update((x) => { x.jackpot = Math.max(JACKPOT_SEED, pot - res.jackpot); x.stats.jackpots = (x.stats.jackpots || 0) + 1; });
       this.toast(`💎💎💎 JACKPOT! 🪙 ${fmt(res.jackpot)}!`);
     }
     if (res.win) this.earn(res.win);
