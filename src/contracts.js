@@ -45,6 +45,13 @@ function seeded(str) {
   };
 }
 
+// The Featured Map: one raid map a day (the same for everyone) pays 25% more chips and XP.
+export const FEATURED_BONUS = 0.25;
+export function featuredMap(day = today()) {
+  const rnd = seeded(`featured-${day}`);
+  return RAID_MAPS[Math.floor(rnd() * RAID_MAPS.length)];
+}
+
 function statOf(d, c) {
   if (c.kind === 'map') return (d.stats.extractsByMap || {})[c.map] || 0;
   return d.stats[KINDS[c.kind].stat] || 0;

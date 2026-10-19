@@ -22,7 +22,7 @@ import { LookPreview } from './preview.js';
 import { BUILD } from './version.js';
 import { Shoe, RANKS, SUITS, cardValue, handValue, isNatural } from './cards.js';
 import { MOB_MIN, MOB_MAX, mobDebt, borrow, repay } from './mob.js';
-import { contracts, contractView, claim as claimContract, reroll as rerollContract, resetsIn, readyCount, today } from './contracts.js';
+import { contracts, contractView, claim as claimContract, reroll as rerollContract, resetsIn, readyCount, today, featuredMap } from './contracts.js';
 
 const $ = (id) => document.getElementById(id);
 const LOADOUT_SLOTS = 8;
@@ -587,7 +587,7 @@ export class Hub {
       const m = MAPS[id];
       const facts = m.safe ? ['🛡️ No machines', '🥊 1v1s', '🎲 Casino games'] : [`⏱️ ${Math.round((m.raidTime || 1080) / 60)} min`, `📏 ${m.size}`, `👑 at ${clock((m.raidTime || 1080) - BOSS_TIME)}`];
       return `<button class="maptile m-${id} ${d.selectedMap === id ? 'on' : ''}" data-act="pickmap" data-m="${id}" ${partyMember && d.selectedMap !== id ? 'disabled' : ''}>
-        <span class="mticon">${m.icon}</span><span class="tag d-${m.danger.toLowerCase()}">${m.danger}</span>
+        <span class="mticon">${m.icon}</span><span class="tag d-${m.danger.toLowerCase()}">${m.danger}</span>${id === featuredMap() ? '<span class="tag featured" title="Today only: 25% more chips when you get out, and 25% more XP">⭐ FEATURED +25%</span>' : ''}
         <b>${m.name}</b><small>${m.blurb}</small>
         <span class="mtfacts">${facts.map((x) => `<i>${x}</i>`).join('')}</span>
         <span class="mtgo">${partyMember ? 'Gear up ▶' : 'Choose ▶'}</span></button>`;

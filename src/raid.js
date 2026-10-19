@@ -35,6 +35,7 @@ import { save } from './save.js';
 import { sfx } from './audio.js';
 import { keyName } from './keys.js';
 import { recordRaid } from './progress.js';
+import { featuredMap, FEATURED_BONUS } from './contracts.js';
 import { randomLook } from './looks.js';
 import { Duel } from './duel.js';
 import { Booth } from './booths.js';
@@ -483,6 +484,7 @@ export class Raid {
     this.happyAt = !this.map.safe && !opts.tutorial && !opts.client && Math.random() < 0.7 ? this.raidTime * (0.15 + Math.random() * 0.2) : -1;
     this.run = {
       kills: 0, machines: 0, raiders: 0, gators: 0, boss: false, crits: 0, throws: 0, containers: 0, slotPulls: 0, diceSixes: 0, bestStun: 0, started: performance.now(),
+      rule: this.rule ? `${this.rule.icon} ${this.rule.name}` : null, peakHeat: 0,
     };
     this.active = true;
     this.frozen = false;
@@ -553,6 +555,7 @@ export class Raid {
   }
   showHeat(stars, up) {
     if (this.player) this.player.heatStars = stars;
+    if (this.run) this.run.peakHeat = Math.max(this.run.peakHeat || 0, stars);
     if (up && stars > 0) {
       this.hud.toast(`🚨 HEAT ${'★'.repeat(stars)}${'☆'.repeat(5 - stars)} · The House is sending people. +${stars * 15}% machine chips.`, stars >= 3 ? 'big' : undefined);
       sfx.alert(this.player ? this.player.pos : this.focus, this.listener);
@@ -951,8 +954,10 @@ export class Raid {
     const counts = !this.map.safe && !this.tutorialMode;
     const streak = counts ? (save.get().stats.extractStreak || 0) : 0;
     const streakBonus = counts ? Math.round(p.chips * Math.min(0.25, streak * 0.05)) : 0;
+    const featured = counts && featuredMap() === this.mapId;
+    const featuredBonus = featured ? Math.round(p.chips * FEATURED_BONUS) : 0;
     save.update((d) => {
-      d.stash.chips += p.chips + streakBonus;
+      d.stash.chips += p.chips + streakBonus + featuredBonus;
       if (counts) {
         d.stats.extractStreak = streak + 1;
         d.stats.bestExtractStreak = Math.max(d.stats.bestExtractStreak || 0, streak + 1);
@@ -966,7 +971,7 @@ export class Raid {
         addToStash(d.stash.items, it);
       }
     });
-    this.finish({ success: true, where, items, chips: p.chips, value, riders, streak: counts ? streak + 1 : 0, streakBonus });
+    this.finish({ success: true, where, items, chips: p.chips, value, riders, streak: counts ? streak + 1 : 0, streakBonus, featured, featuredBonus });
     // The player escapes: pull them out of the world.
     p.alive = false;
     p.char.root.visible = false;
@@ -986,8 +991,9 @@ export class Raid {
     if (kept.length) save.update((d) => { for (const it of kept) addToStash(d.stash.items, it); });
     p.pocket = (p.pocket || []).map(() => null);
     const lostStreak = !this.map.safe && !this.tutorialMode ? save.get().stats.extractStreak || 0 : 0;
+    const featured = !this.map.safe && !this.tutorialMode && featuredMap() === this.mapId;
     if (lostStreak) save.update((d) => { d.stats.extractStreak = 0; });
-    this.finish({ success: false, reason, by, items, chips: p.chips, value, kept: kept.map((it) => itemInfo(it).name), lostStreak });
+    this.finish({ success: false, reason, by, items, chips: p.chips, value, kept: kept.map((it) => itemInfo(it).name), lostStreak, featured });
   }
 
   // ---------- kill cam ----------

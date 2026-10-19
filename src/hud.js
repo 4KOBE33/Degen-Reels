@@ -866,6 +866,7 @@ export class Hud {
     } else if (r.success) {
       title = '🚁 EXTRACTED!';
       line = `You got out through the ${escapeHtml(r.where)} with <b>🪙 ${r.value}</b> worth of stuff.${r.riders && r.riders.length ? ` Rode out with ${r.riders.map(escapeHtml).join(', ')}.` : ''}`;
+      if (r.featured) line += `<br><b class="streakline">⭐ Featured map: +25% chips${r.featuredBonus ? ` (+🪙 ${r.featuredBonus.toLocaleString('en-US')})` : ''} and +25% XP</b>`;
       if (r.streak >= 2) line += `<br><b class="streakline">🔥 ${r.streak} raids in a row! +${Math.min(25, (r.streak - 1) * 5)}% chips${r.streakBonus ? ` (+🪙 ${r.streakBonus.toLocaleString('en-US')})` : ''}</b>`;
       else if (r.streak === 1) line += '<br><b class="streakline">🔥 Streak started: get out of your next raid too for +5% chips.</b>';
     } else if (r.reason === 'time') {
@@ -883,7 +884,7 @@ export class Hud {
       if (r.lostStreak >= 2) line += `<br><b class="streakline lost">💔 Your ${r.lostStreak}-raid streak is over.</b>`;
     }
     $('resultsTitle').textContent = title;
-    $('resultsLine').innerHTML = `${line}${insuredNote}<br><small>Machines destroyed: ${r.run.machines} · Raiders busted: ${r.run.raiders}${(r.run.bestStreak || 0) >= 2 ? ` · 🔥 Best streak: ${r.run.bestStreak}` : ''}${r.run.bounty ? ' · 💰 Bounty claimed!' : ''}${r.run.boss ? ` · 👑 Took down ${this.raid && this.raid.bossName ? this.raid.bossName : 'the boss'}!` : ''}</small>`;
+    $('resultsLine').innerHTML = `${line}${insuredNote}<br><small>Machines destroyed: ${r.run.machines} · Raiders busted: ${r.run.raiders}${(r.run.bestStreak || 0) >= 2 ? ` · ⚡ Best kill streak: ${r.run.bestStreak}` : ''}${r.run.bounty ? ' · 💰 Bounty claimed!' : ''}${r.run.peakHeat ? ` · 🚨 Heat ${'★'.repeat(r.run.peakHeat)}` : ''}${r.run.rule ? ` · House Rules: ${escapeHtml(r.run.rule)}` : ''}${r.run.boss ? ` · 👑 Took down ${this.raid && this.raid.bossName ? this.raid.bossName : 'the boss'}!` : ''}</small>`;
     $('resultsItems').innerHTML = r.items.length || r.chips
       ? `${r.chips ? `<span class="chip">🪙 ${r.chips} chips</span>` : ''}${r.items.map((it) => `<span class="chip ${r.success ? '' : 'lost'}" style="color:${itemInfo(it).css}">${iconHtml(it)} ${escapeHtml(itemTitle(it).slice(itemInfo(it).icon.length + 1))}</span>`).join('')}`
       : '<span class="chip">Nothing</span>';

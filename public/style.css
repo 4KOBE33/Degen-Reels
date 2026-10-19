@@ -1676,3 +1676,4 @@ body.scoped #crosshair, body.scoped #cdRing { display: none !important; }
 .hero.m-boardwalk, .mapcard.m-boardwalk.on { background: linear-gradient(135deg, #1d3557, #e76f51); }
 .maptile.m-boardwalk { background: linear-gradient(150deg, #2a9d8f, #1d3557 55%, #e76f51); }
 .gearhead.m-boardwalk { background: linear-gradient(120deg, #1d3557, #e76f51); }
+.tag.featured { background: #ffd23f; color: var(--ink); margin-left: 6px; animation: jpGlow 1.4s ease-in-out infinite alternate; }

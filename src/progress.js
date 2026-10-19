@@ -201,7 +201,7 @@ export function raidXp(result) {
 
 export function recordRaid(result, mapId) {
   const run = result.run;
-  const xp = raidXp(result);
+  const xp = Math.round(raidXp(result) * (result.featured ? 1.25 : 1));
   const out = progress((d) => {
     const s = d.stats;
     s.machines += run.machines;
