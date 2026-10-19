@@ -815,7 +815,7 @@ export class Hub {
       <h3>The Back Room</h3>
       <div class="stat-tiles">
         ${tile('🪙', 'Chips wagered', fmt(s.wagered))}${tile('🤑', 'Chips won', fmt(s.gambleWon))}${tile('📊', 'Net', `${s.gambleWon - s.wagered >= 0 ? '+' : ''}${fmt(s.gambleWon - s.wagered)}`)}${tile('💸', 'Biggest win', `🪙 ${fmt(s.biggestWin)}`)}
-        ${tile('🎰', 'Reels pulled', fmt(s.reelsPulled))}${tile('🂡', 'Blackjacks', fmt(s.blackjacks))}${tile('🚀', 'Best Crash', `${s.crashBest.toFixed(2)}x`)}${tile('🟢', 'Green wins', fmt(s.rouletteGreens))}${tile('💎', 'Most Mines gems', fmt(s.minesBest))}${tile('🔴', 'Best Plinko hit', `${s.plinkoBest || 0}x`)}
+        ${tile('🎰', 'Slot spins', fmt(s.reelsPulled))}${tile('💎', 'Jackpots hit', fmt(s.jackpots || 0))}${tile('🂠', 'Best Hi-Lo streak', fmt(s.hiloBest || 0))}${tile('🂡', 'Blackjacks', fmt(s.blackjacks))}${tile('🚀', 'Best Crash', `${s.crashBest.toFixed(2)}x`)}${tile('🟢', 'Green wins', fmt(s.rouletteGreens))}${tile('💎', 'Most Mines gems', fmt(s.minesBest))}${tile('🔴', 'Best Plinko hit', `${s.plinkoBest || 0}x`)}
       </div></div>`;
   }
 
