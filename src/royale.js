@@ -4,8 +4,13 @@
 // The circle is worked out from the raid's seed and the raid clock alone, so every player in a
 // party sees the same circle without anything extra on the wire.
 import * as THREE from 'three';
+import { buildPartyBus } from './lobby.js';
 
 export const ROYALE_SIZE = 24;
+// How long the party bus takes to cross the island, and how high it flies.
+export const BUS_TIME = 45;
+const BUS_Y = 110;
+const BUS_SCALE = 1.6;
 // [wait, shrink] seconds, the radius it closes to (fraction of the map's half-width), and the damage
 // a second you take outside it.
 const PHASES = [
@@ -98,37 +103,34 @@ export class Royale {
     scene.add(wall, ring);
     this.wall = wall;
     this.ring = ring;
-    // The blimp everyone jumps out of.
-    const blimp = new THREE.Group();
-    const body = new THREE.Mesh(new THREE.SphereGeometry(6, 20, 14), new THREE.MeshBasicMaterial({ color: 0xffd23f }));
-    body.scale.set(3, 1, 1);
-    const band = new THREE.Mesh(new THREE.CylinderGeometry(6.05, 6.05, 3, 20, 1, true), new THREE.MeshBasicMaterial({ color: 0xe63946, side: THREE.DoubleSide }));
-    band.rotation.z = Math.PI / 2;
-    const gondola = new THREE.Mesh(new THREE.BoxGeometry(6, 2, 2.4), new THREE.MeshBasicMaterial({ color: 0x1b0f2b }));
-    gondola.position.y = -6.6;
-    blimp.add(body, band, gondola);
-    blimp.position.set(this.dropLine.from.x, 110, this.dropLine.from.z);
-    blimp.rotation.y = -this.dropLine.a;
-    scene.add(blimp);
-    this.blimp = blimp;
+    // The High Roller party bus everyone rides in on.
+    const bus = buildPartyBus();
+    bus.scale.setScalar(BUS_SCALE);
+    bus.rotation.y = -this.dropLine.a;
+    scene.add(bus);
+    this.bus = bus;
+    this.busAt(0);
   }
 
-  // Everyone in the air: you and your friends start above the drop line and steer down; bots are
-  // scattered along it and each glides to a spot of its own.
-  dropIn(c, i, n) {
+  // Where along the drop line the bus is (0 to 1) at raid time t.
+  busK(t = this.raid.raidTime - this.raid.timeLeft) { return t / BUS_TIME; }
+
+  busAt(k) {
     const L = this.dropLine;
-    const k = c.isPlayer || c.human ? 0.35 + Math.random() * 0.1 : (i + 0.5) / n;
-    const x = L.from.x + (L.to.x - L.from.x) * k + (Math.random() - 0.5) * 30;
-    const z = L.from.z + (L.to.z - L.from.z) * k + (Math.random() - 0.5) * 30;
-    c.pos.set(x, 85 + Math.random() * 10, z);
+    this.bus.position.set(L.from.x + (L.to.x - L.from.x) * k, BUS_Y, L.from.z + (L.to.z - L.from.z) * k);
+    this.bus.visible = k < 1.25;
+  }
+
+  // Everyone starts on the bus. You and your friends ride on the roof and jump when you like;
+  // bots each pick a spot along the way to bail out.
+  dropIn(c, i, n) {
     c.vel.set(0, 0, 0);
-    c.gliding = true;
+    c.gliding = false;
     c.onGround = false;
-    if (!c.isPlayer && !c.human) {
-      // Bots pick a landing spot somewhere in the first circle.
-      const half = this.raid.map.half;
-      c.glideTo = new THREE.Vector3((Math.random() * 2 - 1) * half * 0.75, 0, (Math.random() * 2 - 1) * half * 0.75);
-    }
+    c.riding = true;
+    c.leaveBus = false;
+    c.seat = c.isPlayer || c.human ? (i % 5) - 2 : 0;
+    if (!c.isPlayer && !c.human) c.jumpAt = 0.06 + Math.pow(Math.random(), 0.9) * 0.86;
     if (!c.chute) {
       const chute = new THREE.Mesh(new THREE.SphereGeometry(1.6, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshBasicMaterial({ color: [0xff3fa4, 0xffd23f, 0x2ee6d6, 0xc77dff][i % 4], side: THREE.DoubleSide }));
       chute.position.y = 4.2;
@@ -136,11 +138,45 @@ export class Royale {
       c.char.root.add(chute);
       c.chute = chute;
     }
-    c.chute.visible = true;
+    c.chute.visible = false;
+    this.seatOn(c);
+  }
+
+  // Players stand on the roof (so you can see the island go by); bots ride inside.
+  seatOn(c) {
+    const b = this.bus.position;
+    const L = this.dropLine;
+    const dx = (L.to.x - L.from.x) / (L.from.distanceTo(L.to) || 1);
+    const dz = (L.to.z - L.from.z) / (L.from.distanceTo(L.to) || 1);
+    const roof = c.isPlayer || c.human;
+    c.pos.set(b.x + dx * c.seat * 2.6, b.y + (roof ? 2.1 * BUS_SCALE : -1), b.z + dz * c.seat * 2.6);
+    c.vel.set(0, 0, 0);
+  }
+
+  // Out the door: chute open, and bots head for a spot near where they jumped.
+  jumpOut(c) {
+    c.riding = false;
+    c.leaveBus = false;
+    c.gliding = true;
+    c.onGround = false;
+    const b = this.bus.position;
+    c.pos.set(c.pos.x, b.y - 4, c.pos.z);
+    c.vel.set(0, 0, 0);
+    if (c.chute) c.chute.visible = true;
+    if (!c.isPlayer && !c.human) {
+      const half = this.raid.map.half * 0.78;
+      const a = Math.random() * Math.PI * 2;
+      const d = 30 + Math.random() * 190;
+      c.glideTo = new THREE.Vector3(Math.max(-half, Math.min(half, c.pos.x + Math.cos(a) * d)), 0, Math.max(-half, Math.min(half, c.pos.z + Math.sin(a) * d)));
+    }
+    if (c.isPlayer && this.raid.hud) this.raid.hud.toast('🪂 Chute open! Steer with WASD.');
   }
 
   // Fighters still in it (you, friends, bots); downed counts as still in it.
-  left() { return this.raid.combatants.filter((c) => c.alive && (c.isPlayer || c.human || c.brain)).length; }
+  left() {
+    if (this.raid.isClient && this.raid.royaleLeft) return this.raid.royaleLeft;
+    return this.raid.combatants.filter((c) => c.alive && (c.isPlayer || c.human || c.brain)).length;
+  }
 
   update(dt) {
     const raid = this.raid;
@@ -154,12 +190,17 @@ export class Royale {
     this.ring.position.x = s.next.x;
     this.ring.position.z = s.next.z;
     this.ring.visible = s.next.r < s.r - 1;
-    // The blimp crosses the map and leaves.
+    // The bus crosses the island; riders go with it until they jump (or get thrown off at the end).
     const t = raid.raidTime - raid.timeLeft;
-    const L = this.dropLine;
-    const bk = Math.min(1.3, t / 40);
-    this.blimp.position.set(L.from.x + (L.to.x - L.from.x) * bk, 110, L.from.z + (L.to.z - L.from.z) * bk);
-    this.blimp.visible = bk < 1.3;
+    const bk = this.busK(t);
+    this.busAt(Math.min(1.3, bk));
+    for (const c of raid.combatants) {
+      if (!c.riding) continue;
+      if (!c.alive) { c.riding = false; continue; }
+      const go = bk >= 0.97 || (c.isPlayer ? c.leaveBus && bk > 0.02 : bk >= c.jumpAt);
+      if (go) this.jumpOut(c);
+      else this.seatOn(c);
+    }
     // Chutes away once people land.
     for (const c of raid.combatants) if (c.chute && !c.gliding) c.chute.visible = false;
     // The House Edge hurts: you in every game, bots (and anything else) only where they're run.
@@ -167,7 +208,7 @@ export class Royale {
     if (this.hurtT <= 0) {
       this.hurtT = 1;
       for (const c of raid.combatants) {
-        if (!c.alive || c.gliding) continue;
+        if (!c.alive || c.gliding || c.riding) continue;
         if (!c.isPlayer && (raid.isClient || c.human)) continue;
         if (!this.outside(c.pos, s)) continue;
         raid.damage(c, s.dmg, null, c.center(new THREE.Vector3()), false, true);
@@ -185,6 +226,6 @@ export class Royale {
   }
 
   dispose() {
-    for (const o of [this.wall, this.ring, this.blimp]) if (o) this.raid.scene.remove(o);
+    for (const o of [this.wall, this.ring, this.bus]) if (o) this.raid.scene.remove(o);
   }
 }

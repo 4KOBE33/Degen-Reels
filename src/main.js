@@ -4,11 +4,10 @@ import { Raid } from './raid.js';
 import { net } from './net.js';
 import { Session } from './multi.js';
 import { Hud } from './hud.js';
-import { Hub } from './hub.js';
+import { Hub, fixPlayMode } from './hub.js';
 import { PlayerController } from './player.js';
 import { initAudio, setVolume } from './audio.js';
 import { save } from './save.js';
-import { MAPS } from './map.js';
 import { keyName, renderBinds, wireBinds } from './keys.js';
 import { ITEMS, QUALITY } from './config.js';
 import { BUILD } from './version.js';
@@ -41,6 +40,7 @@ $('app').appendChild(renderer.domElement);
 
 const camera = new THREE.PerspectiveCamera(72, 1, 0.1, 900);
 const hud = new Hud();
+save.update(fixPlayMode);
 let raid = new Raid(hud, save.get().selectedMap || 'vegas');
 const controller = new PlayerController(raid, camera, renderer.domElement);
 // Handy for poking at the game from the browser console (locally only).
@@ -402,12 +402,13 @@ const hub = new Hub({
   onPartyStart() {
     const bad = wrongBuild();
     if (bad.length) { hub.toast(buildFix(bad)); return; }
-    const mapId = save.get().selectedMap;
+    const play = save.get().playMode || 'royale';
+    const royale = play === 'royale';
+    const mapId = royale ? 'island' : save.get().selectedMap;
     const seed = Math.floor(Math.random() * 2 ** 31);
     const exits = [0, 1, 2, 3].sort(() => Math.random() - 0.5).slice(0, 2);
     const spawns = raid.mapId === mapId ? raid.map.spawns : null;
     const spawn = spawns ? spawns[Math.floor(Math.random() * spawns.length)] : null;
-    const royale = (save.get().playMode || 'royale') === 'royale' && MAPS[mapId] && !MAPS[mapId].safe;
     net.start({ mapId, seed, exits, spawn, build: BUILD, royale });
   },
   onSettings() { applySettings(); voice.apply(); },

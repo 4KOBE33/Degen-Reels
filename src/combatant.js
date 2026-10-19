@@ -310,39 +310,46 @@ export class Combatant {
       if (this.isPlayer) sfx.jump();
     }
 
-    // Royale drop: floating down under a chute. You steer; bots glide to a spot of their own.
-    if (this.gliding) {
-      if (this.glideTo) {
-        const dx = this.glideTo.x - this.pos.x;
-        const dz = this.glideTo.z - this.pos.z;
-        const d = Math.hypot(dx, dz) || 1;
-        const sp = Math.min(16, d);
-        this.vel.x = (dx / d) * sp;
-        this.vel.z = (dz / d) * sp;
-      } else {
-        this.vel.x = this.move.x * 18;
-        this.vel.z = this.move.y * 18;
+    // Royale: riding the party bus in. It carries you (the Royale moves you); jump to get off.
+    if (this.riding) {
+      if (this.wantJump) this.leaveBus = true;
+      this.vel.set(0, 0, 0);
+      this.onGround = true;
+    } else {
+      // Royale drop: floating down under a chute. You steer; bots glide to a spot of their own.
+      if (this.gliding) {
+        if (this.glideTo) {
+          const dx = this.glideTo.x - this.pos.x;
+          const dz = this.glideTo.z - this.pos.z;
+          const d = Math.hypot(dx, dz) || 1;
+          const sp = Math.min(16, d);
+          this.vel.x = (dx / d) * sp;
+          this.vel.z = (dz / d) * sp;
+        } else {
+          this.vel.x = this.move.x * 18;
+          this.vel.z = this.move.y * 18;
+        }
+        this.vel.y = -7;
+      } else this.vel.y -= PLAYER.gravity * live.gravity * dt;
+      this.pos.addScaledVector(this.vel, dt);
+      const wasOnGround = this.onGround;
+      const r = resolve(this.pos, this.vel, PLAYER.radius, this.raid.map);
+      // Walking down stairs or a slope: stay on it instead of hopping off every step.
+      if (!r.onGround && wasOnGround && this.vel.y <= 0) {
+        const g = this.raid.map.groundAt(this.pos.x, this.pos.z, this.pos.y);
+        if (this.pos.y - g < 0.45) { this.pos.y = g; this.vel.y = 0; r.onGround = true; }
       }
-      this.vel.y = -7;
-    } else this.vel.y -= PLAYER.gravity * live.gravity * dt;
-    this.pos.addScaledVector(this.vel, dt);
-    const wasOnGround = this.onGround;
-    const r = resolve(this.pos, this.vel, PLAYER.radius, this.raid.map);
-    // Walking down stairs or a slope: stay on it instead of hopping off every step.
-    if (!r.onGround && wasOnGround && this.vel.y <= 0) {
-      const g = this.raid.map.groundAt(this.pos.x, this.pos.z, this.pos.y);
-      if (this.pos.y - g < 0.45) { this.pos.y = g; this.vel.y = 0; r.onGround = true; }
+      this.onGround = r.onGround;
+      if (this.gliding && r.onGround) { this.gliding = false; this.glideTo = null; this.vel.set(0, 0, 0); }
+      // Waiting for the bell in The Pit: stay on your mark (you can still look around).
+      if (this.pin) {
+        this.pos.x = this.pin.x;
+        this.pos.z = this.pin.z;
+        this.vel.x = 0;
+        this.vel.z = 0;
+      }
+      if (r.landed > 5) this.char.land(r.landed);
     }
-    this.onGround = r.onGround;
-    if (this.gliding && r.onGround) { this.gliding = false; this.glideTo = null; this.vel.set(0, 0, 0); }
-    // Waiting for the bell in The Pit: stay on your mark (you can still look around).
-    if (this.pin) {
-      this.pos.x = this.pin.x;
-      this.pos.z = this.pin.z;
-      this.vel.x = 0;
-      this.vel.z = 0;
-    }
-    if (r.landed > 5) this.char.land(r.landed);
     this.cooldown -= dt;
     this.throwCooldown = Math.max(0, (this.throwCooldown || 0) - dt);
 

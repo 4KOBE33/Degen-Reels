@@ -57,6 +57,7 @@ function roster(room) {
     host: room.host,
     mode: room.mode,
     ffa: room.mode === 'ffa',
+    play: room.play || 'royale',
     inRaid: room.inRaid,
     members: [...room.members].map(([id, m]) => ({ id, name: m.name, look: m.look, team: m.team || 0, away: !open(m.ws) })),
   };
@@ -179,6 +180,13 @@ wss.on('connection', (ws) => {
           room.mode = msg.mode;
           // Starting team play: split the party evenly.
           if (msg.mode === 'teams') [...room.members.values()].forEach((m, i) => { m.team = i % 2; });
+          broadcast(room, roster(room));
+        }
+        break;
+      case 'play':
+        // What the leader is queued for: royale, extraction or the Lounge (so the party sees it).
+        if (room && room.host === ws.id && !room.inRaid && ['royale', 'extract', 'lounge'].includes(msg.play)) {
+          room.play = msg.play;
           broadcast(room, roster(room));
         }
         break;

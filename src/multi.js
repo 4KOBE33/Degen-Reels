@@ -332,6 +332,7 @@ export class Session {
         rel: reliable,
         ex: raid.extracts.map((e) => (e.active ? [e.call ? r2(e.call.t) : -1, r2(e.cooldown || 0), e.call ? e.call.by.name : ''] : null)),
         storm: raid.hazards.storm > 0 ? 1 : 0,
+        rl: raid.royale ? raid.royale.left() : undefined,
         bl: raid.bossLock && raid.bossLock.on ? 1 : 0,
         dl: raid.duel ? raid.duel.view : null,
       });
@@ -643,6 +644,7 @@ export class Session {
     if (raid.active) {
       raid.timeLeft = s.time;
       raid.elapsed = s.el;
+      if (s.rl !== undefined) raid.royaleLeft = s.rl;
     }
     const seen = new Set();
     const at = localTime('host', s.t);

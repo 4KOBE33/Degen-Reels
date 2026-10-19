@@ -4,6 +4,7 @@ import { WEAPONS, PLAYER, EXTRACT_TIME, ITEMS } from './config.js';
 import { itemInfo, itemTitle, isGun, fullAmmo, isBelt, isConsumable } from './items.js';
 import { iconHtml } from './icons.js';
 import { keyName } from './keys.js';
+import { BUS_TIME } from './royale.js';
 import { save } from './save.js';
 import { levelInfo, TIER_NAMES, lookName } from './progress.js';
 import { sfx } from './audio.js';
@@ -244,7 +245,9 @@ export class Hud {
       if (ry) {
         const out = Math.hypot(p.pos.x - ry.x, p.pos.z - ry.z) - ry.r;
         const toNext = Math.hypot(p.pos.x - ry.next.x, p.pos.z - ry.next.z) - ry.next.r;
-        this.set('exits', `${out > 0 ? `<div class="zoneout">☠️ OUTSIDE THE CIRCLE · ${Math.round(out)}m back in ${bearing(p, ry.x, ry.z)} · −${ry.dmg}/s</div>` : toNext > 0 ? `<div>⚪ Next circle ${Math.round(toNext)}m ${bearing(p, ry.next.x, ry.next.z)}</div>` : '<div>✅ Inside the next circle</div>'}<div>💀 ${raid.royaleKills || raid.run.raiders || 0} kills</div>`);
+        const bus = p.riding ? Math.max(0, Math.ceil((0.97 - raid.royale.busK()) * BUS_TIME)) : null;
+        if (bus !== null) this.set('exits', `<div class="busjump">🎈 Press <kbd>${keyName('jump')}</kbd> to jump off the bus · last stop in ${bus}s</div>`);
+        else this.set('exits', `${out > 0 ? `<div class="zoneout">☠️ OUTSIDE THE CIRCLE · ${Math.round(out)}m back in ${bearing(p, ry.x, ry.z)} · −${ry.dmg}/s</div>` : toNext > 0 ? `<div>⚪ Next circle ${Math.round(toNext)}m ${bearing(p, ry.next.x, ry.next.z)}</div>` : '<div>✅ Inside the next circle</div>'}<div>💀 ${raid.royaleKills || raid.run.raiders || 0} kills</div>`);
       } else this.set('exits', raid.extracts.filter((e) => e.active).map((e) => `<div>🟢 ${e.name} · ${Math.round(Math.hypot(e.x - p.pos.x, e.z - p.pos.z))}m ${bearing(p, e.x, e.z)}</div>`).join(''));
       const now = performance.now();
       this.feedItems = this.feedItems.filter((f) => now - f.t < 7000);

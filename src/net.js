@@ -204,6 +204,7 @@ export class Net {
   leave() { this.raw({ t: 'leave' }); this.room = null; storeSeat(null); this.emit('room', null); }
   profile(name, look) { if (this.inParty) this.raw({ t: 'profile', name, look }); }
   setMode(mode) { this.raw({ t: 'mode', mode }); }
+  setPlay(play) { this.raw({ t: 'play', play }); }
   setTeam(team) { this.raw({ t: 'team', team }); }
   start(info) { this.raw({ t: 'start', ...info }); }
   end() { this.raw({ t: 'end' }); }

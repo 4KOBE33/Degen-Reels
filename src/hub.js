@@ -19,6 +19,7 @@ import {
   LOOKS, LOOK_PARTS, unlockText, wornLook,
 } from './looks.js';
 import { LookPreview } from './preview.js';
+import { LobbyStage } from './lobby.js';
 import { BUILD } from './version.js';
 import { Shoe, RANKS, SUITS, cardValue, handValue, isNatural } from './cards.js';
 import { MOB_MIN, MOB_MAX, mobDebt, borrow, repay } from './mob.js';
@@ -184,6 +185,12 @@ function reelOdds(tier) {
 
 // The "what's new" card, shown once after an update.
 const WHATS_NEW = {
+  90: [
+    ['🏝️', 'New Royale map: Jackpot Island', 'Royale now has its own map, way bigger than any raid map: snowy ridges, a neon downtown, a gator swamp, vineyards, a rail yard, a beach boardwalk and the Grand Jackpot Casino in the middle, all on one island.'],
+    ['🎈', 'Ride the party bus in', 'Everyone rides the High Roller party bus across the island. Press SPACE to jump off wherever you want, then steer your chute down. Bots bail out all along the route.'],
+    ['🕺', 'Royale lobby', 'Your character stands on stage, and when friends join your party they show up right next to you. The leader hits PLAY and the whole squad goes in.'],
+    ['🍸', 'Three modes', 'Pick ROYALE, EXTRACTION or THE LOUNGE at the top of the Loadout screen. In a party, everyone follows the leader\'s pick.'],
+  ],
   89: [
     ['⚔️', 'ROYALE (new main mode)', '24 drop in from the blimp, one walks out. Steer your chute, start with a Pea Shooter, stay inside the closing House Edge. Prizes by placement and kills, and your stash is never at risk. Switch modes at the top of the map screen.'],
     ['🎒', 'Extraction is still here', 'Flip to EXTRACTION on the map screen to raid like before.'],
@@ -284,8 +291,20 @@ const groupOf = (tab) => Object.keys(TAB_GROUPS).find((g) => TAB_GROUPS[g].some(
 const FREE_LOCKED = 'The free loadout is locked in. Raid with it as is.';
 const hasFreeKit = (lo) => lo.weapons.some((g) => g && g.free) || lo.items.some((it) => it.free);
 
-// Royale or extraction (the Lounge is always just the Lounge).
-const isRoyale = (d) => (d.playMode || 'royale') === 'royale' && MAPS[d.selectedMap] && !MAPS[d.selectedMap].safe;
+// What you're queued for: Royale (always on Jackpot Island), extraction (pick a map) or the Lounge.
+const playOf = (d) => (['royale', 'extract', 'lounge'].includes(d.playMode) ? d.playMode : 'royale');
+const isRoyale = (d) => playOf(d) === 'royale';
+const ROYALE_MAP = 'island';
+const RAID_ORDER = ['vegas', 'bayou', 'boardwalk', 'frost', 'tequila', 'bunker'];
+// The map that goes with a mode (extraction remembers the last raid map you picked).
+const mapFor = (play, d) => (play === 'royale' ? ROYALE_MAP : play === 'lounge' ? 'lounge' : RAID_ORDER.includes(d.lastRaidMap) ? d.lastRaidMap : 'vegas');
+
+// Older profiles: sitting in the Lounge means Lounge mode; the map always matches the mode.
+export function fixPlayMode(x) {
+  if (!['royale', 'extract', 'lounge'].includes(x.playMode)) x.playMode = x.selectedMap === 'lounge' ? 'lounge' : 'royale';
+  if (x.playMode === 'extract' && !RAID_ORDER.includes(x.selectedMap)) x.selectedMap = mapFor('extract', x);
+  else if (x.playMode !== 'extract') x.selectedMap = mapFor(x.playMode, x);
+}
 
 export class Hub {
   constructor({ onDeploy, onMapChange, onPartyStart = null, onSettings = null, onJoinRaid = null, net = null }) {
@@ -316,6 +335,7 @@ export class Hub {
     const d = save.get();
     if (!d.loadout) save.update((x) => { x.loadout = { weapons: [null, null], items: [] }; });
     if (!d.selectedMap || !MAPS[d.selectedMap]) save.update((x) => { x.selectedMap = 'vegas'; });
+    save.update(fixPlayMode);
     if (d.look.color === null) save.update((x) => { x.look.color = LOOKS.color[Math.floor(Math.random() * 8)].id; });
     // Older profiles: count what's already in the stash as found, and award anything already earned.
     progress((x) => {
@@ -353,7 +373,7 @@ export class Hub {
     $('hubBody').addEventListener('input', (e) => this.onInput(e));
     if (net) {
       const rerender = () => { if (this.tab === 'loadout' && !$('hub').hidden && !(document.activeElement && document.activeElement.id === 'partyCode')) this.render(); else this.renderDeploy(); };
-      net.on('room', rerender);
+      net.on('room', (r) => { this.syncPlay(r); rerender(); });
       net.on('status', rerender);
       net.on('error', (m) => this.toast(m.text));
     }
@@ -497,7 +517,13 @@ export class Hub {
     const bar = pages.length > 1 ? `<nav class="groupbar">${pages.map(([t, n]) => `<button class="${t === this.tab ? 'on' : ''}" data-act="hubpage" data-t="${t}">${n}</button>`).join('')}</nav>` : '';
     $('hubBody').innerHTML = bar + body;
     $('hubBody').dataset.tab = this.tab;
-    document.body.classList.toggle('mapstage', this.tab === 'loadout' && this.loStage !== 'gear');
+    const lobby = this.tab === 'loadout' && isRoyale(d);
+    document.body.classList.toggle('mapstage', this.tab === 'loadout' && (this.loStage !== 'gear' || lobby));
+    if (lobby && $('lobbySlot')) {
+      if (!this.lobby) this.lobby = new LobbyStage();
+      this.lobby.setMembers(this.lobbyMembers());
+      this.lobby.mount($('lobbySlot'));
+    }
     if (this.tab === 'backroom' && this.game === 'crash') this.drawCrash();
     if (this.tab === 'backroom' && this.game === 'plinko') this.drawPlinko();
     if (this.tab === 'look') {
@@ -515,10 +541,12 @@ export class Hub {
     // On a streak? Show what this raid is worth on top (and that dying ends it).
     const streak = m.safe ? 0 : d.stats.extractStreak || 0;
     const fire = streak ? ` · 🔥${streak} (+${Math.min(25, streak * 5)}% chips)` : '';
-    let html = isRoyale(d) ? `DROP IN<small>⚔️ Royale · ${m.icon} ${m.name}</small>` : hasGun ? `DEPLOY<small>${m.icon} ${m.name}${fire}</small>` : 'DEPLOY<small>no gun packed!</small>';
+    let html = isRoyale(d) ? `PLAY<small>⚔️ Royale · ${m.icon} ${m.name}</small>` : hasGun ? `DEPLOY<small>${m.icon} ${m.name}${fire}</small>` : 'DEPLOY<small>no gun packed!</small>';
     if (party && !this.net.isHost) html = this.net.room.inRaid ? 'JOIN RAID<small>drop in next to your squad</small>' : 'WAITING…<small>the party leader deploys everyone</small>';
-    else if (party) html = `DEPLOY SQUAD<small>${m.icon} ${m.name} · ${this.net.partySize} players</small>`;
+    else if (party) html = isRoyale(d) ? `PLAY<small>⚔️ Royale · squad of ${this.net.partySize}</small>` : `DEPLOY SQUAD<small>${m.icon} ${m.name} · ${this.net.partySize} players</small>`;
     $('deploy').innerHTML = html;
+    const lp = $('lobbyPlay');
+    if (lp) lp.innerHTML = html;
   }
 
   // The party panel: create, join, invite code, who's in.
@@ -553,7 +581,7 @@ export class Hub {
       ? `<div class="pmodes">${Object.entries(MODES).map(([k, [label]]) => `<button class="subtab ${mode === k ? 'on' : ''}" data-act="pmode" data-m="${k}">${label}</button>`).join('')}</div>`
       : `<span class="pffa">${MODES[mode][0]}</span>`;
     return `<section class="party in"><div class="phead"><b>👥 Party <span class="pcode" data-act="pcopy" title="Click to copy">${r.code}</span></b>
-        <small>${net.isHost ? 'You\'re the leader: pick the map and hit DEPLOY SQUAD to drop everyone in together.' : `Waiting for ${escapeHtml((r.members.find((m) => m.id === r.host) || {}).name || 'the leader')} to deploy. Pack your loadout!`}${r.inRaid ? ' · Raid in progress…' : ''}${net.status === 'reconnecting' ? ' · 📶 Reconnecting…' : ''}</small></div>
+        <small>${net.isHost ? (isRoyale(this.data) ? 'You\'re the leader: hit PLAY to take the whole squad in.' : 'You\'re the leader: pick the map and hit DEPLOY SQUAD to drop everyone in together.') : `Waiting for ${escapeHtml((r.members.find((m) => m.id === r.host) || {}).name || 'the leader')} to ${isRoyale(this.data) ? 'hit PLAY.' : 'deploy. Pack your loadout!'}`}${r.inRaid ? ' · Raid in progress…' : ''}${net.status === 'reconnecting' ? ' · 📶 Reconnecting…' : ''}</small></div>
       <div class="pmembers ${teams ? 'split' : ''}">${members}</div>
       ${bad.length ? `<p class="pbuild">⚠️ Not everyone is on the same version of the game, so your maps won't match. Everyone open the same link and refresh the page.</p>` : ''}
       <div class="prow">${modeRow}<small class="pmodehint">${MODES[mode][1]}</small></div>
@@ -589,28 +617,89 @@ export class Hub {
   }
 
   renderLoadout() {
-    return this.loStage === 'gear' ? this.renderGear() : this.renderMapPick();
+    return this.loStage === 'gear' && !isRoyale(this.data) ? this.renderGear() : this.renderMapPick();
   }
 
-  // Step 1: where are we going? Big map tiles (and the tutorial), nothing else to think about.
+  // Step 1: what are we playing? Royale is a lobby with your squad on stage; extraction picks a map.
   renderMapPick() {
     const d = this.data;
-    const order = ['lounge', 'vegas', 'bayou', 'boardwalk', 'frost', 'tequila', 'bunker'].filter((id) => MAPS[id]);
+    const play = playOf(d);
     const partyMember = this.net && this.net.inParty && !this.net.isHost;
+    const modes = [
+      ['royale', '⚔️ ROYALE', '24 drop in, one walks out. Your stash is safe.'],
+      ['extract', '🎒 EXTRACTION', 'Bring your gear, loot, get out alive.'],
+      ['lounge', '🍸 THE LOUNGE', 'Hang out, gamble, 1v1 in the Pit.'],
+    ];
+    const pick = `<div class="modepick">${modes.map(([k, n, t]) => `<button class="modebtn ${play === k ? 'on' : ''}" data-act="playmode" data-v="${k}" ${partyMember ? 'disabled' : ''}><b>${n}</b><small>${t}</small></button>`).join('')}</div>`;
+    if (play === 'royale') return `${pick}${this.renderLobby()}${this.renderContracts()}`;
+    const order = play === 'lounge' ? ['lounge'] : RAID_ORDER.filter((id) => MAPS[id]);
     const tiles = order.map((id) => {
       const m = MAPS[id];
-      const royale = (d.playMode || 'royale') === 'royale';
-      const facts = m.safe ? ['🛡️ No machines', '🥊 1v1s', '🎲 Casino games'] : royale ? ['👥 24 players', '⏱️ ~10 min', `📏 ${m.size}`] : [`⏱️ ${Math.round((m.raidTime || 1080) / 60)} min`, `📏 ${m.size}`, `👑 at ${clock((m.raidTime || 1080) - BOSS_TIME)}`];
+      const facts = m.safe ? ['🛡️ No machines', '🥊 1v1s', '🎲 Casino games'] : [`⏱️ ${Math.round((m.raidTime || 1080) / 60)} min`, `📏 ${m.size}`, `👑 at ${clock((m.raidTime || 1080) - BOSS_TIME)}`];
       return `<button class="maptile m-${id} ${d.selectedMap === id ? 'on' : ''}" data-act="pickmap" data-m="${id}" ${partyMember && d.selectedMap !== id ? 'disabled' : ''}>
         <span class="mticon">${m.icon}</span><span class="tag d-${m.danger.toLowerCase()}">${m.danger}</span>${id === featuredMap() ? '<span class="tag featured" title="Today only: 25% more chips when you get out, and 25% more XP">⭐ FEATURED +25%</span>' : ''}
         <b>${m.name}</b><small>${m.blurb}</small>
         <span class="mtfacts">${facts.map((x) => `<i>${x}</i>`).join('')}</span>
         <span class="mtgo">${partyMember ? 'Gear up ▶' : 'Choose ▶'}</span></button>`;
     }).join('');
-    return `${this.renderContracts()}${this.renderParty()}
-      <div class="modepick">${[['royale', '⚔️ ROYALE', '24 drop in, one walks out. Your stash is safe.'], ['extract', '🎒 EXTRACTION', 'Bring your gear, loot, get out alive.']].map(([k, n, t]) => `<button class="modebtn ${(d.playMode || 'royale') === k ? 'on' : ''}" data-act="playmode" data-v="${k}" ${partyMember ? 'disabled' : ''}><b>${n}</b><small>${t}</small></button>`).join('')}</div>
-      <section class="mappick"><h3>🗺️ Where to? <small>${partyMember ? 'Your party leader picks the map. Gear up for it.' : 'Pick a map, then pack your gear.'}</small></h3>
+    return `${pick}${this.renderContracts()}${this.renderParty()}
+      <section class="mappick"><h3>🗺️ ${play === 'lounge' ? 'The Lounge' : 'Where to?'} <small>${partyMember ? 'Your party leader picks the map. Gear up for it.' : play === 'lounge' ? 'No machines, no raiders: just games, guns and grudges.' : 'Pick a map, then pack your gear.'}</small></h3>
       <div class="mapgrid">${tiles}</div></section>`;
+  }
+
+  // The Royale lobby: your character (and your party's) on stage, the party panel and a big PLAY.
+  renderLobby() {
+    const d = this.data;
+    const s = d.stats;
+    const m = MAPS[ROYALE_MAP];
+    return `<section class="lobby">
+        <div class="lobbystage"><div id="lobbySlot" class="lobbyslot"></div>
+          <div class="lobbymap"><span>${m.icon}</span><b>${m.name}</b><small>👥 24 players · ⏱️ ~10 min · 📏 ${m.size}</small></div>
+          <button class="btn lobbyplay" id="lobbyPlay" data-act="lobbyplay">PLAY</button></div>
+        <div class="lobbyside">
+          ${this.renderParty()}
+          <section class="royalecard">
+            <h3>⚔️ How Royale works</h3>
+            <ul>
+              <li>🎈 Everyone rides the <b>High Roller party bus</b> across Jackpot Island. Hit <b>SPACE</b> to jump out wherever you like.</li>
+              <li>🪂 Steer your chute (WASD) down to a town. Crack crates, spin gun wheels, grab what you can.</li>
+              <li>⭕ Stay inside the circle. Outside, the <b>House Edge</b> eats your health, faster every round.</li>
+              <li>💰 Chips and XP by placement and kills. <b>Your stash stays home</b>: nothing is at risk.</li>
+            </ul>
+            <div class="royalestats"><span>🏆 Wins <b>${fmt(s.royaleWins || 0)}</b></span><span>🎯 Best <b>${s.royaleBest ? `#${s.royaleBest}` : '-'}</b></span><span>💀 Kills <b>${fmt(s.royaleKills || 0)}</b></span><span>🎮 Games <b>${fmt(s.royaleGames || 0)}</b></span></div>
+          </section>
+        </div>
+      </section>`;
+  }
+
+  // Who's on the lobby stage: you, plus everyone in your party.
+  lobbyMembers() {
+    const net = this.net;
+    const me = { id: 'me', name: this.profileName(), look: wornLook(this.data.look), you: true, lead: !!(net && net.inParty && net.isHost) };
+    if (!net || !net.inParty || !net.room) return [me];
+    return [me, ...net.room.members.filter((m) => m.id !== net.id).map((m) => ({ id: m.id, name: m.name, look: m.look || {}, lead: m.id === net.room.host }))];
+  }
+
+  // In a party the leader decides what everyone's playing; the leader tells the server when it changes.
+  syncPlay(r) {
+    const net = this.net;
+    if (!r || !net || !net.inParty) return;
+    const d = this.data;
+    if (net.isHost) {
+      if ((r.play || 'royale') !== playOf(d) && net.setPlay) net.setPlay(playOf(d));
+      return;
+    }
+    const play = r.play || 'royale';
+    if (play !== playOf(d) && !r.inRaid) this.setPlay(play);
+  }
+
+  setPlay(play) {
+    const d = this.data;
+    const id = mapFor(play, d);
+    save.update((x) => { x.playMode = play; x.selectedMap = id; });
+    this.loStage = 'maps';
+    if (this.raid && this.raid.mapId !== id && !(this.raid.active)) this.onMapChange(id);
+    if (this.net && this.net.inParty && this.net.isHost && this.net.setPlay) this.net.setPlay(play);
   }
 
   // Step 2: the whole screen for packing: your stash on one side, what you're bringing on the other.
@@ -623,7 +712,6 @@ export class Hub {
     const sel = MAPS[selId];
     const facts = sel.safe ? ['🛡️ No machines, no raiders', '🥊 1v1s in The Pit'] : [`⏱️ ${Math.round((sel.raidTime || 1080) / 60)} min raid`, `📏 ${sel.size} map`, `👑 ${bossTheme(selId).name} when the clock hits ${clock((sel.raidTime || 1080) - BOSS_TIME)}`];
     const packed = lo.weapons.filter(Boolean).length + lo.items.length;
-    if (isRoyale(d)) return this.renderRoyaleGear(selId, sel);
     const pocket = (() => {
       const n = pocketSlots(d.bag || 0);
       if (!n) return '<p class="hint pocketnote">🔒 Buy any backpack in the Shop to get a <b>Safe Pocket</b>: what you put in it during a raid comes home even if you die.</p>';
@@ -651,26 +739,6 @@ export class Hub {
           ${sel.safe ? '' : this.renderSideBet()}
         </section>
       </div>`;
-  }
-
-  renderRoyaleGear(selId, sel) {
-    const s = this.data.stats;
-    return `<div class="gearhead m-${selId}">
-        <button class="btn ghost gearback" data-act="backmaps">◀ Maps</button>
-        <span class="gearicon">${sel.icon}</span>
-        <div class="geartxt"><span class="tag d-royale">ROYALE</span><b>${sel.name}</b><small>👥 24 fighters · ⏱️ ~10 min · the House Edge closes in</small></div>
-      </div>
-      <section class="royalecard">
-        <h3>⚔️ How Royale works</h3>
-        <ul>
-          <li>🪂 Jump out of the blimp and <b>steer your chute</b> (WASD) to where you want to land.</li>
-          <li>🔫 Everyone starts with a Pea Shooter and a bandage. Crack crates, spin gun wheels, take what you can.</li>
-          <li>⭕ Stay inside the circle. Outside, the <b>House Edge</b> eats your health, faster every round.</li>
-          <li>👑 ${bossTheme(selId).name} still shows up in the casino at 4:00, sitting on the best loot in the place.</li>
-          <li>💰 Chips and XP by placement and kills. <b>Nothing you bring or find is at risk</b>: your stash stays home.</li>
-        </ul>
-        <div class="royalestats"><span>🏆 Wins <b>${fmt(s.royaleWins || 0)}</b></span><span>🎯 Best <b>${s.royaleBest ? `#${s.royaleBest}` : '-'}</b></span><span>💀 Kills <b>${fmt(s.royaleKills || 0)}</b></span><span>🎮 Games <b>${fmt(s.royaleGames || 0)}</b></span></div>
-      </section>`;
   }
 
   renderSideBet() {
@@ -1888,13 +1956,14 @@ export class Hub {
       case 'tutorial': this.startTutorial(); return;
       case 'pickmap':
         if (!(this.net && this.net.inParty && !this.net.isHost) && d.selectedMap !== b.dataset.m) {
-          save.update((x) => { x.selectedMap = b.dataset.m; });
+          save.update((x) => { x.selectedMap = b.dataset.m; if (RAID_ORDER.includes(b.dataset.m)) x.lastRaidMap = b.dataset.m; });
           this.onMapChange(b.dataset.m);
         }
         this.loStage = 'gear';
         break;
       case 'backmaps': this.loStage = 'maps'; break;
-      case 'playmode': save.update((x) => { x.playMode = b.dataset.v; }); break;
+      case 'playmode': if (b.dataset.v !== playOf(d)) this.setPlay(b.dataset.v); break;
+      case 'lobbyplay': this.deploy(); return;
       case 'freelocked': this.toast('That\'s free gear. Put the whole free loadout back to pack your own.'); return;
       case 'unfreekit':
         save.update((x) => {
@@ -2450,7 +2519,7 @@ export class Hub {
       this.loStage = 'maps';
       this.onDeploy({
         party,
-        mapId: party ? party.mapId : d.selectedMap,
+        mapId: party ? party.mapId : ROYALE_MAP,
         name: (d.look.name || '').trim() || 'High Roller',
         look: wornLook(d.look),
         loadout: { weapons: [makeGun('pistol', 0), null], items: [makeItem('bandage', 1)], pocket: 0 },

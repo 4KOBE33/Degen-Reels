@@ -326,7 +326,7 @@ export class RaiderBrain {
       this.unstick(dt);
       return;
     }
-    if (c.gliding) return;
+    if (c.gliding || c.riding) return;
     // Caught outside the circle: run for it (shooting on the way only if it's right there).
     if (raid.royale && raid.royale.outside(c.pos)) {
       const z = this.zoneGoal(c.pos) || new THREE.Vector3(raid.royale.state().x, 0, raid.royale.state().z);

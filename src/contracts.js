@@ -26,7 +26,7 @@ const KINDS = {
   boss: { icon: '👑', stat: 'bossKills', text: () => 'Bust a casino boss', tiers: [[1, 3500, 350], [1, 3500, 350], [1, 3500, 350]], hardOnly: true },
   map: { icon: '🗺️', stat: 'map', text: (n, m) => `Extract from ${MAPS[m] ? MAPS[m].name : m}`, tiers: [[1, 600, 120], [1, 600, 120], [1, 600, 120]] },
 };
-const RAID_MAPS = Object.keys(MAPS).filter((id) => !MAPS[id].safe && !MAPS[id].tutorial);
+const RAID_MAPS = Object.keys(MAPS).filter((id) => !MAPS[id].safe && !MAPS[id].tutorial && !MAPS[id].royaleOnly);
 
 export const today = () => {
   const d = new Date();

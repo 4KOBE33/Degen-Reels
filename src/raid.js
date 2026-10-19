@@ -367,6 +367,7 @@ export class Raid {
   // opts (multiplayer): { client, exits: [i, i], spawn: [x, z], slot } — host and clients agree on these.
   deploy({ name, look, loadout, opts = {} }) {
     if (this.royale) { this.royale.dispose(); this.royale = null; }
+    this.royaleLeft = 0;
     this.royaleMode = !!opts.royale && !this.map.safe;
     // Reset the map.
     for (const p of this.pickups) p.remove();
@@ -532,7 +533,7 @@ export class Raid {
       });
     }
     if (p) this.royale.dropIn(p, 0, 1);
-    this.hud.toast(`🪂 ROYALE · ${ROYALE_SIZE} in, one walks out. Steer your chute, grab a gun, stay inside the circle.`, 'big');
+    this.hud.toast(`🎈 ROYALE · ${ROYALE_SIZE} in, one walks out. Press SPACE to jump off the bus wherever you want to land.`, 'big');
   }
 
   // You won: last one (or one squad) standing.
@@ -1592,7 +1593,7 @@ export class Raid {
   // Fire whatever `c` is holding. `origin`/`dir` is the aim ray (camera for you, head for bots).
   fire(c, origin, dir) {
     const w = WEAPONS[c.weapon];
-    if (!c.alive || c.downed || c.cooldown > 0 || c.using || this.frozen) return false;
+    if (!c.alive || c.downed || c.cooldown > 0 || c.using || this.frozen || c.riding) return false;
     if (!w.melee && Number.isFinite(c.ammo) && c.ammo <= 0) {
       const refusal = c.reload();
       if (c.isPlayer) {
@@ -1837,7 +1838,7 @@ export class Raid {
   }
 
   damage(target, amount, attacker, at, crit = false, fromNet = false) {
-    if (!target.alive || this.frozen) return;
+    if (!target.alive || this.frozen || target.riding) return;
     if (attacker && attacker !== target && attacker.team === 'machine' && target.team === 'machine') return;
     // Harder maps hit harder: anything a machine does to a person, scaled by the map's danger.
     if (attacker && attacker.team === 'machine' && target.team !== 'machine') amount *= (this.map.dmgScale || 1) * (attacker.isBoss && this.map.boss ? this.map.boss.dmg : 1);
