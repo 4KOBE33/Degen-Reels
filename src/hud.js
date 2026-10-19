@@ -818,6 +818,37 @@ export class Hud {
       <div class="kcskip">Click or press Space to skip</div>`;
   }
 
+  // Made it out with chips? One shot at doubling them on a coin flip (or losing the lot).
+  doubleOrNothing(r) {
+    let box = $('resultsDouble');
+    if (!box) {
+      box = document.createElement('div');
+      box.id = 'resultsDouble';
+      $('resultsItems').after(box);
+    }
+    const amount = Math.floor(r.chips || 0);
+    box.hidden = !(r.success && !r.tutorial && amount >= 50);
+    if (box.hidden) { box.innerHTML = ''; return; }
+    box.className = 'dbl';
+    box.innerHTML = `<button class="btn dblbtn"><b>🪙 DOUBLE OR NOTHING</b><small>Flip a coin for your ${amount.toLocaleString('en-US')} chips: heads doubles them, tails takes them all</small></button>`;
+    box.querySelector('button').onclick = () => {
+      if (save.get().stash.chips < amount) { box.innerHTML = '<p class="dblres">You\'ve already spent those chips.</p>'; return; }
+      box.innerHTML = '<div class="coin flipping">🪙</div>';
+      sfx.lever();
+      setTimeout(() => {
+        // A hair under even: the house still keeps its edge.
+        const won = Math.random() < 0.49;
+        save.update((d) => {
+          d.stash.chips = Math.max(0, d.stash.chips + (won ? amount : -amount));
+          d.stats.wagered = (d.stats.wagered || 0) + amount;
+          if (won) { d.stats.gambleWon = (d.stats.gambleWon || 0) + amount; d.stats.biggestWin = Math.max(d.stats.biggestWin || 0, amount); }
+        });
+        if (won) sfx.jackpot(); else sfx.deny();
+        box.innerHTML = `<div class="coin ${won ? 'heads' : 'tails'}">${won ? '👑' : '💀'}</div><p class="dblres ${won ? 'win' : 'loss'}">${won ? `HEADS! Doubled: +🪙 ${amount.toLocaleString('en-US')}` : `TAILS. The house takes 🪙 ${amount.toLocaleString('en-US')}.`}</p>`;
+      }, 1300);
+    };
+  }
+
   raidOver(r) {
     $('downed').hidden = true;
     document.body.classList.remove('isdowned');
@@ -854,6 +885,7 @@ export class Hud {
       ? `${r.chips ? `<span class="chip">🪙 ${r.chips} chips</span>` : ''}${r.items.map((it) => `<span class="chip ${r.success ? '' : 'lost'}" style="color:${itemInfo(it).css}">${iconHtml(it)} ${escapeHtml(itemTitle(it).slice(itemInfo(it).icon.length + 1))}</span>`).join('')}`
       : '<span class="chip">Nothing</span>';
     $('resultsItems').classList.toggle('lost', !r.success);
+    this.doubleOrNothing(r);
     // XP, level, new finds and anything unlocked.
     const pr = r.progress || { xp: 0, achievements: [], looks: [], levelUp: 0 };
     const lv = levelInfo();

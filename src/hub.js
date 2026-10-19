@@ -20,7 +20,7 @@ import {
 } from './looks.js';
 import { LookPreview } from './preview.js';
 import { BUILD } from './version.js';
-import { Shoe, cardValue, handValue, isNatural } from './cards.js';
+import { Shoe, RANKS, SUITS, cardValue, handValue, isNatural } from './cards.js';
 import { MOB_MIN, MOB_MAX, mobDebt, borrow, repay } from './mob.js';
 import { contracts, contractView, claim as claimContract, reroll as rerollContract, resetsIn, readyCount, today } from './contracts.js';
 
@@ -52,6 +52,16 @@ const shoe = new Shoe();
 const drawCard = () => shoe.draw();
 const cardHtml = (c, hidden, i = 0) => (hidden ? `<span class="pcard back" style="--i:${i}"></span>`
   : `<span class="pcard ${c.suit === '♥' || c.suit === '♦' ? 'red' : ''}" style="--i:${i}"><i>${c.rank}</i><em>${c.suit}</em><i class="flip">${c.rank}</i></span>`);
+
+// ---------- Hi-Lo ----------
+// Every card is a fresh draw (an endless deck), aces low. Each call pays its true odds less a 3%
+// edge: "higher or same" on a 7 is right 7 times in 13, so it pays 13 / 7 × 0.97.
+const HILO_RANK = { A: 1, J: 11, Q: 12, K: 13 };
+const hiloRank = (c) => HILO_RANK[c.rank] || Number(c.rank);
+const hiloDraw = () => ({ rank: RANKS[Math.floor(Math.random() * 13)], suit: SUITS[Math.floor(Math.random() * 4)] });
+const hiloChance = (r, dir) => (dir === 'hi' ? (14 - r) / 13 : r / 13);
+const hiloPays = (r, dir) => Math.floor((0.97 / hiloChance(r, dir)) * 100) / 100;
+const HILO_SKIPS = 3;
 
 // ---------- Loot Reels ----------
 export const REEL_SYMBOLS = ['🍒', '🍋', '🔔', '7️⃣', '💎', '🪙', '🎲', '⭐'];
@@ -112,6 +122,12 @@ const SLOT_CHERRY2 = 3.5;
 const SLOT_FREE = { 3: 8, 4: 12, 5: 15 };
 const SLOT_LINES = [[[0, 0], [1, 0], [2, 0]], [[0, 1], [1, 1], [2, 1]], [[0, 2], [1, 2], [2, 2]], [[0, 0], [1, 1], [2, 2]], [[0, 2], [1, 1], [2, 0]]];
 const SLOT_SYMS = Object.keys(SLOT_W);
+// The progressive jackpot: every paid spin feeds the pot, and three 💎 anywhere on the reels
+// takes it. A full share needs a 1K bet; smaller bets win their slice of it.
+export const JACKPOT_SEED = 10000;
+const JACKPOT_CUT = 0.015;
+const JACKPOT_FULL = 1000;
+const jackpotShare = (pot, bet) => Math.round(pot * Math.min(1, bet / JACKPOT_FULL));
 const slotSymbol = () => {
   let x = Math.random() * Object.values(SLOT_W).reduce((a, b) => a + b, 0);
   for (const k of SLOT_SYMS) { x -= SLOT_W[k]; if (x < 0) return k; }
@@ -140,12 +156,13 @@ export function slotSpin(bet) {
   });
   const stars = grid.flat().filter((v) => v === '⭐').length;
   const free = SLOT_FREE[Math.min(5, stars)] || 0;
+  const gems = grid.flat().filter((v) => v === '💎').length;
   let gun = null;
   if (gunRarity >= 0) {
     const pool = [...new Set(GUN_TIERS.flat())].filter((k) => !WEAPONS[k].melee);
     gun = makeGun(pool[Math.floor(Math.random() * pool.length)], gunRarity);
   }
-  return { grid, lines, win, stars, free, gun };
+  return { grid, lines, win, stars, free, gun, gems };
 }
 
 // Rough odds from one pull, for the machine cards.
@@ -163,6 +180,7 @@ const GAMES = [
   ['crash', '🚀', 'Crash', 'Cash out before it blows'],
   ['roulette', '🎡', 'Roulette', 'Pick a color, spin the wheel'],
   ['mines', '💎', 'Mines', 'Find gems, dodge the bombs'],
+  ['hilo', '🂠', 'Hi-Lo', 'Higher or lower? Ride the streak'],
   ['slots', '🎰', 'Lucky Slots', '5 lines, free spins, guns on big hits'],
 ];
 // Auto-drop speeds for Plinko (balls a second).
@@ -1072,7 +1090,7 @@ export class Hub {
     const net = this.session;
     const recent = this.history.slice(-8).reverse().map((h) => `<span class="${h.net > 0 ? 'win' : h.net < 0 ? 'loss' : ''}">${h.icon} ${h.net > 0 ? '+' : ''}${fmt(h.net)}</span>`).join('');
     const stage = {
-      slots: () => this.renderReels(), blackjack: () => this.renderBlackjack(), roulette: () => this.renderRoulette(), crash: () => this.renderCrash(), mines: () => this.renderMines(), plinko: () => this.renderPlinko(),
+      slots: () => this.renderReels(), blackjack: () => this.renderBlackjack(), roulette: () => this.renderRoulette(), crash: () => this.renderCrash(), mines: () => this.renderMines(), hilo: () => this.renderHilo(), plinko: () => this.renderPlinko(),
     }[this.game]();
     return `<div class="backroom">
       <aside class="gamerail">${rail}
@@ -1124,30 +1142,32 @@ export class Hub {
     const strips = r ? r.strips : [0, 1, 2].map(() => this.randomStrip(3));
     const reels = strips.map((strip, k) => `<div class="reel"><div class="strip" id="strip${k}" style="${r && r.animating ? '' : `transform:translateY(${-(strip.length - 3) * ROW}px)`}">${strip.map((sym, j) => {
       const row = j - (strip.length - 3);
-      return `<span class="${row >= 0 && winCells.has(`${k}${row}`) ? 'hit' : ''} ${row >= 0 && sym === '⭐' && r && !running && r.res && r.res.stars >= 3 ? 'star' : ''}">${sym}</span>`;
+      const done = r && !running && r.res;
+      return `<span class="${row >= 0 && winCells.has(`${k}${row}`) ? 'hit' : ''} ${row >= 0 && sym === '⭐' && done && r.res.stars >= 3 ? 'star' : ''} ${row >= 0 && sym === '💎' && done && r.res.gems >= 3 ? 'gem' : ''}">${sym}</span>`;
     }).join('')}</div></div>`).join('');
     // The winning lines, drawn over the reels.
     const lineSvg = r && !running && r.res && r.res.lines.length ? `<svg class="slines" viewBox="0 0 3 3" preserveAspectRatio="none">${r.res.lines.map((l) => `<polyline points="${l.cells.map(([x, y]) => `${x + 0.5},${y + 0.5}`).join(' ')}" />`).join('')}</svg>` : '';
-    let result = `<div class="prize empty">5 lines. 3 in a row pays: 🍒 ${SLOT_PAY['🍒']}x · 🍋 ${SLOT_PAY['🍋']}x · 🔔 ${SLOT_PAY['🔔']}x · 🪙 ${SLOT_PAY['🪙']}x · 7️⃣ ${SLOT_PAY['7️⃣']}x + Epic gun · 💎 ${SLOT_PAY['💎']}x + Legendary gun (of the line bet). ⭐⭐⭐ anywhere: free spins.</div>`;
+    let result = `<div class="prize empty">5 lines. 3 in a row pays: 🍒 ${SLOT_PAY['🍒']}x · 🍋 ${SLOT_PAY['🍋']}x · 🔔 ${SLOT_PAY['🔔']}x · 🪙 ${SLOT_PAY['🪙']}x · 7️⃣ ${SLOT_PAY['7️⃣']}x + Epic gun · 💎 ${SLOT_PAY['💎']}x + Legendary gun (of the line bet). ⭐⭐⭐ anywhere: free spins. 💎💎💎 anywhere: the JACKPOT.</div>`;
     if (r && !running && r.res) {
       const res = r.res;
       const info = res.gun && itemInfo(res.gun);
       const rows = res.lines.map((l) => `<span>${l.two ? '🍒🍒' : `${l.sym}${l.sym}${l.sym}`} ×${l.x} → 🪙 ${fmt(l.win)}</span>`).join('');
       result = res.win || res.free || res.gun
         ? `<div class="prize ${res.gun ? `r${info.rarity}` : ''} slotwin">${res.gun ? `<span class="pi">${iconHtml(res.gun, 'gicon big')}</span>` : ''}<div>
-          <b>${res.win ? `WIN 🪙 ${fmt(res.win)}` : ''}${res.free ? ` ⭐ ${res.free} FREE SPINS!` : ''}</b>
+          ${res.jackpot ? `<b class="jpwin">💎 JACKPOT 🪙 ${fmt(res.jackpot)} 💎</b>` : ''}<b>${res.win ? `WIN 🪙 ${fmt(res.win)}` : ''}${res.free ? ` ⭐ ${res.free} FREE SPINS!` : ''}</b>
           ${res.gun ? `<b style="color:${info.css}">+ ${escapeHtml(info.name)}</b>` : ''}<small class="slinesl">${rows}</small></div></div>`
         : '<div class="prize empty">No win this time.</div>';
     }
     const auto = this.slotAuto || 0;
-    const big = r && !running && r.res && (r.res.win >= r.bet * 10 || r.res.gun || r.res.free);
+    const big = r && !running && r.res && (r.res.win >= r.bet * 10 || r.res.gun || r.res.free || r.res.jackpot);
     return this.split(`<div class="cabinet slots5 ${running ? 'spinning' : ''} ${big ? 'bigwin' : ''}">
         <div class="cabtop">LUCKY SLOTS${free ? ` · ⭐ ${free} FREE` : ''}</div>
+        <div class="jpot" title="Three 💎 anywhere on the reels wins it. Bet 🪙 ${fmt(JACKPOT_FULL)}+ for the whole pot; smaller bets win their share."><small>💎💎💎 JACKPOT</small><b>🪙 ${fmt(this.data.jackpot || JACKPOT_SEED)}</b><small>${this.bet >= JACKPOT_FULL ? 'FULL POT' : `you'd win ${fmt(jackpotShare(this.data.jackpot || JACKPOT_SEED, this.bet))}`}</small></div>
         <div class="reelwin">${reels}${lineSvg}<div class="lanemarks"><i></i><i></i><i></i></div></div>
       </div>`, `${this.betChips(running || free > 0)}
         <button class="btn big spinbtn" data-act="pull" ${running ? 'disabled' : ''}>${running ? 'SPINNING…' : free ? `⭐ FREE SPIN (${free} left)` : `SPIN · 🪙 ${fmt(this.bet)}`}</button>
-        <div class="minecount"><small>AUTO</small>${[10, 25, 50].map((n) => `<button class="subtab ${auto && this.slotAutoN === n ? 'on' : ''}" data-act="slotauto" data-v="${n}">${auto && this.slotAutoN === n ? `■ ${auto}` : `×${n}`}</button>`).join('')}</div>
-        ${result}`);
+        ${result}
+        <div class="minecount"><small>AUTO</small>${[10, 25, 50].map((n) => `<button class="subtab ${auto && this.slotAutoN === n ? 'on' : ''}" data-act="slotauto" data-v="${n}">${auto && this.slotAutoN === n ? `■ ${auto}` : `×${n}`}</button>`).join('')}</div>`);
   }
 
   renderBlackjack() {
@@ -1254,6 +1274,97 @@ export class Hub {
     this.earn(win);
     sfx.win();
     this.settleBet('💎', g.bet, win, (s) => { s.minesBest = Math.max(s.minesBest || 0, g.picks); });
+  }
+
+  renderHilo() {
+    const g = this.hilo;
+    const playing = g && g.running;
+    const card = g ? g.card : null;
+    const r = card ? hiloRank(card) : 7;
+    const hist = g ? g.trail.slice(-7).map((t, i) => `<span class="hlpast ${t.ok === false ? 'bad' : ''}">${cardHtml(t.card, false, i)}${t.dir ? `<i>${t.dir === 'hi' ? '⬆' : t.dir === 'lo' ? '⬇' : '⏭'}</i>` : ''}</span>`).join('') : '';
+    const pick = (dir) => {
+      const ch = hiloChance(r, dir);
+      const pays = hiloPays(r, dir);
+      return `<button class="btn hlbtn ${dir}" data-act="hilo" data-d="${dir}" ${!playing || ch >= 1 ? 'disabled' : ''}>
+        <b>${dir === 'hi' ? '⬆ HIGHER' : '⬇ LOWER'}</b><small>or same · ${Math.round(ch * 100)}%</small><em>${pays.toFixed(2)}x</em></button>`;
+    };
+    const view = `<div class="felt hltable">
+        <div class="felttext">HI-LO · ACES LOW · EVERY CARD A FRESH DECK</div>
+        <div class="hlcard ${g && g.flash ? g.flash : ''}">${card ? cardHtml(card, false, 0) : '<span class="pcard back"></span>'}</div>
+        <div class="hltrail">${hist}</div>
+      </div>`;
+    const mult = g ? g.mult : 1;
+    const ctrl = `${playing ? '' : this.betChips()}
+      <div class="mside">
+        <div class="mstat"><small>MULTIPLIER</small><b>${mult.toFixed(2)}x</b></div>
+        <div class="mstat"><small>STREAK</small><b>${g ? g.streak : 0}</b></div>
+        <div class="mstat"><small>${playing ? 'CASH OUT FOR' : 'BET'}</small><b>🪙 ${fmt(playing ? Math.floor(g.bet * mult) : this.bet)}</b></div>
+      </div>
+      ${playing ? `<div class="row gbtns">${pick('hi')}${pick('lo')}</div>
+        <div class="row gbtns"><button class="btn" data-act="hiloskip" ${g.skips ? '' : 'disabled'}>⏭ Skip card (${g.skips})</button><button class="btn big cashout" data-act="hilocash" ${g.streak ? '' : 'disabled'}>CASH OUT</button></div>`
+    : `<button class="btn big" data-act="hilostart">DEAL · 🪙 ${fmt(this.bet)}</button>`}
+      ${g && g.msg ? `<p class="msg ${g.won ? 'win' : 'loss'}">${g.msg}</p>` : '<p class="hint">Call the next card. Each right call multiplies your bet. Cash out any time.</p>'}`;
+    return this.split(view, ctrl);
+  }
+
+  startHilo() {
+    if (this.hilo && this.hilo.running) return;
+    if (!this.spend(this.bet)) return;
+    const card = hiloDraw();
+    this.hilo = { bet: this.bet, card, trail: [{ card }], mult: 1, streak: 0, skips: HILO_SKIPS, running: true, msg: '' };
+    sfx.lever();
+  }
+
+  callHilo(dir) {
+    const g = this.hilo;
+    if (!g || !g.running) return;
+    const r = hiloRank(g.card);
+    if (hiloChance(r, dir) >= 1) return;
+    const next = hiloDraw();
+    const n = hiloRank(next);
+    const ok = dir === 'hi' ? n >= r : n <= r;
+    g.trail[g.trail.length - 1].dir = dir;
+    g.trail[g.trail.length - 1].ok = ok;
+    g.trail.push({ card: next });
+    g.card = next;
+    g.flash = ok ? 'good' : 'bad';
+    if (!ok) {
+      g.running = false;
+      g.won = false;
+      g.msg = `💥 ${next.rank}${next.suit}: wrong call. Lost 🪙 ${fmt(g.bet)} after a ${g.streak}-card streak.`;
+      sfx.deny();
+      this.settleBet('🂠', g.bet, 0, (s) => { s.hiloBest = Math.max(s.hiloBest || 0, g.streak); });
+      return;
+    }
+    g.mult = Math.round(g.mult * hiloPays(r, dir) * 100) / 100;
+    g.streak++;
+    sfx.pickup();
+    // Capped at 5,000x: past that the house just pays you.
+    if (g.mult >= 5000) this.cashHilo();
+  }
+
+  skipHilo() {
+    const g = this.hilo;
+    if (!g || !g.running || !g.skips) return;
+    g.skips--;
+    g.trail[g.trail.length - 1].dir = 'skip';
+    const next = hiloDraw();
+    g.trail.push({ card: next });
+    g.card = next;
+    g.flash = 'skip';
+    sfx.tick();
+  }
+
+  cashHilo() {
+    const g = this.hilo;
+    if (!g || !g.running || !g.streak) return;
+    g.running = false;
+    const win = Math.floor(g.bet * g.mult);
+    g.won = true;
+    g.msg = `✅ Cashed out at ${g.mult.toFixed(2)}x after ${g.streak} right call${g.streak === 1 ? '' : 's'}: won 🪙 ${fmt(win)}!`;
+    this.earn(win);
+    if (g.mult >= 10) sfx.jackpot(); else sfx.win();
+    this.settleBet('🂠', g.bet, win, (s) => { s.hiloBest = Math.max(s.hiloBest || 0, g.streak); if (win - g.bet > s.biggestWin) s.biggestWin = win - g.bet; });
   }
 
   renderPlinko() {
@@ -1828,6 +1939,10 @@ export class Hub {
       case 'minestart': this.startMines(); break;
       case 'mine': this.pickMine(i); break;
       case 'minecash': this.cashMines(); break;
+      case 'hilostart': this.startHilo(); break;
+      case 'hilo': this.callHilo(b.dataset.d); break;
+      case 'hiloskip': this.skipHilo(); break;
+      case 'hilocash': this.cashHilo(); break;
       case 'plinkorisk': if (!this.plinko.balls.length) this.plinko.risk = b.dataset.r; break;
       case 'plinkodrop': this.dropPlinko(); return;
       case 'sessgraph': this.openGraph(); return;
@@ -1855,6 +1970,7 @@ export class Hub {
     const bet = freeSpin ? this.slotFreeBet : this.bet;
     if (!freeSpin && !this.spend(bet)) { this.slotAuto = 0; return; }
     if (freeSpin) this.slotFree--;
+    else save.update((x) => { x.jackpot = (x.jackpot || JACKPOT_SEED) + Math.max(1, Math.round(bet * JACKPOT_CUT)); });
     const res = slotSpin(bet);
     // Each strip ends [..., top, middle, bottom]: it scrolls so those three fill the window.
     const strips = res.grid.map((col, k) => [...this.randomStrip(22 + k * 6), ...col]);
@@ -1877,6 +1993,13 @@ export class Hub {
       r.running = false;
       r.animating = false;
       if (res.free) { this.slotFree = (this.slotFree || 0) + res.free; this.slotFreeBet = bet; }
+      // Three diamonds: the jackpot.
+      if (res.gems >= 3) {
+        res.jackpot = jackpotShare(this.data.jackpot || JACKPOT_SEED, bet);
+        res.win += res.jackpot;
+        save.update((x) => { x.jackpot = JACKPOT_SEED; x.stats.jackpots = (x.stats.jackpots || 0) + 1; });
+        this.toast(`💎💎💎 JACKPOT! 🪙 ${fmt(res.jackpot)}!`);
+      }
       if (res.win) this.earn(res.win);
       let out = null;
       if (res.gun) {
@@ -1887,7 +2010,7 @@ export class Hub {
       const payout = res.win + (res.gun ? itemInfo(res.gun).value : 0);
       this.settleBet('🎰', freeSpin ? 0 : bet, payout, (st) => { st.reelsPulled++; if (payout - bet > st.biggestWin) st.biggestWin = payout - bet; });
       if (out) this.announce(out);
-      if (res.gun || res.win >= bet * 25) sfx.jackpot(); else if (res.free || res.win > bet) sfx.win(); else if (res.win) sfx.pickup(); else sfx.deny();
+      if (res.jackpot || res.gun || res.win >= bet * 25) sfx.jackpot(); else if (res.free || res.win > bet) sfx.win(); else if (res.win) sfx.pickup(); else sfx.deny();
       if (this.tab === 'backroom' && this.game === 'slots') this.render(); else this.renderHeader();
       // Auto-spin (and free spins under auto) carry on by themselves.
       const here = !$('hub').hidden && this.tab === 'backroom' && this.game === 'slots';

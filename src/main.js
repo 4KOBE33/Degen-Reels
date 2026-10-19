@@ -97,7 +97,9 @@ function autoQuality(dt, rawDt) {
     autoLevel = autoLevel === 'high' ? 'medium' : 'low';
     slowFor = 0;
     applyQuality();
-    hud.toast(`🖥️ Graphics lowered to ${QUALITY[autoLevel].label} to keep things smooth (Settings → Graphics).`);
+    // A quiet line in the feed: a big toast mid-fight just gets in the way.
+    const note = `🖥️ Graphics lowered to ${QUALITY[autoLevel].label} to keep things smooth (Settings → Graphics).`;
+    if (raid.active) raid.feed(note); else hud.toast(note);
   }
 }
 

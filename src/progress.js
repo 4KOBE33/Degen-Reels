@@ -117,7 +117,9 @@ export const ACHIEVEMENTS = [
   { id: 'bigwin', group: 'Gambling', icon: '💸', tier: 2, name: 'High Roller', desc: 'Win 🪙 5,000 on a single bet', prog: (d) => [Math.min(S(d).biggestWin, 5000), 5000] },
   { id: 'mines10', group: 'Gambling', icon: '💎', tier: 2, name: 'Minesweeper', desc: 'Cash out of Mines after finding 10 gems', prog: (d) => [Math.min(S(d).minesBest, 10), 10] },
   { id: 'plinko24', group: 'Gambling', icon: '🔴', tier: 2, name: 'Edge Lord', desc: 'Land a 24x or better in Plinko', prog: (d) => [Math.min(S(d).plinkoBest, 24), 24] },
-  { id: 'reels50', group: 'Gambling', icon: '🎰', tier: 1, name: 'Reel Regular', desc: 'Pull the Loot Reels 50 times', prog: (d) => [S(d).reelsPulled, 50] },
+  { id: 'reels50', group: 'Gambling', icon: '🎰', tier: 1, name: 'Reel Regular', desc: 'Spin Lucky Slots 50 times', prog: (d) => [S(d).reelsPulled, 50] },
+  { id: 'hilo10', group: 'Gambling', icon: '🂠', tier: 2, name: 'Card Sharp', desc: 'Call 10 cards in a row in Hi-Lo', prog: (d) => [Math.min(S(d).hiloBest || 0, 10), 10] },
+  { id: 'jackpot1', group: 'Gambling', icon: '💎', tier: 3, name: 'Diamond Hands', desc: 'Hit the Lucky Slots jackpot', prog: (d) => [Math.min(S(d).jackpots || 0, 1), 1] },
   // Levels
   { id: 'level5', group: 'Levels', icon: '⭐', tier: 0, name: 'Getting Started', desc: 'Reach level 5', prog: (d) => [Math.min(levelInfo(d.xp).level, 5), 5] },
   { id: 'level15', group: 'Levels', icon: '🌟', tier: 1, name: 'Seasoned', desc: 'Reach level 15', prog: (d) => [Math.min(levelInfo(d.xp).level, 15), 15] },
