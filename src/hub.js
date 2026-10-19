@@ -1538,7 +1538,8 @@ export class Hub {
       ${c && c.running
     ? `<button id="crashBtn" class="btn big cashout" data-act="cashout">CASH OUT 🪙${fmt(Math.floor(c.bet * c.mult))}</button>`
     : `<button class="btn big" data-act="launch">LAUNCH 🚀 · 🪙 ${fmt(this.bet)}</button>`}
-      ${c && c.msg ? `<p class="msg ${c.crashed ? 'loss' : 'win'}">${c.msg}</p>` : '<p class="hint">The multiplier climbs until the rocket blows up. Cash out before it does.</p>'}`);
+      <div class="minecount"><small>AUTO CASH-OUT</small>${[0, 1.5, 2, 3, 5, 10].map((x) => `<button class="subtab ${(this.crashAuto || 0) === x ? 'on' : ''}" data-act="crashauto" data-x="${x}" ${c && c.running ? 'disabled' : ''}>${x ? `${x}x` : 'Off'}</button>`).join('')}</div>
+      ${c && c.msg ? `<p class="msg ${c.crashed ? 'loss' : 'win'}">${c.msg}</p>` : '<p class="hint">The multiplier climbs until the rocket blows up. Cash out before it does, or set an auto cash-out.</p>'}`);
   }
 
   // ---------- actions ----------
@@ -1965,6 +1966,7 @@ export class Hub {
       case 'minestart': this.startMines(); break;
       case 'mine': this.pickMine(i); break;
       case 'minecash': this.cashMines(); break;
+      case 'crashauto': this.crashAuto = Number(b.dataset.x) || 0; break;
       case 'hilostart': this.startHilo(); break;
       case 'hilo': this.callHilo(b.dataset.d); break;
       case 'hiloskip': this.skipHilo(); break;
@@ -2201,7 +2203,7 @@ export class Hub {
     const u = Math.random();
     // Most rockets pop early, a few fly for ages. Never crashes the instant it launches.
     const crashAt = Math.min(50, Math.max(1.05, Math.floor((0.95 / (1 - u)) * 100) / 100));
-    const c = { bet: this.bet, mult: 1, running: true, crashed: false, crashAt, start: performance.now(), msg: '', points: [] };
+    const c = { bet: this.bet, mult: 1, running: true, crashed: false, crashAt, start: performance.now(), msg: '', points: [], auto: this.crashAuto || 0 };
     this.crash = c;
     sfx.lever();
     this.render();
@@ -2211,6 +2213,13 @@ export class Hub {
       const t = (performance.now() - c.start) / 1000;
       c.mult = Math.exp(0.22 * t);
       c.points.push([t, c.mult]);
+      // Auto cash-out: if the target comes before the crash point, you're out at exactly the target
+      // (even if the tab was in the background and both went by in one frame).
+      if (c.auto && c.auto <= c.crashAt && c.mult >= c.auto) {
+        c.mult = c.auto;
+        this.cashOutCrash();
+        return;
+      }
       if (c.mult >= c.crashAt) {
         c.mult = c.crashAt;
         c.running = false;
