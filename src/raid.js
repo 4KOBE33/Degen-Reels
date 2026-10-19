@@ -19,6 +19,7 @@ import { Recorder, Replay } from './replay.js';
 import { RaiderBrain } from './bots.js';
 import { rollRule, applyRule } from './rules.js';
 import { bubbleTexture } from './training.js';
+import { Gulls } from './gulls.js';
 
 // Emotes: a speech bubble over your head for a couple of seconds. J cycles through the first few;
 // going down always says the last one.
@@ -83,6 +84,7 @@ export class Raid {
     this.player = null;
     this.active = false;
     this.populate();
+    this.gulls = mapId === 'boardwalk' ? new Gulls(this) : null;
   }
 
   build(mapId) {
@@ -2131,6 +2133,7 @@ export class Raid {
     this.throws.update(dt);
     this.hazards.update(dt);
     this.chips.update(dt);
+    if (this.gulls) this.gulls.update(dt);
     this.map.update(dt);
     this.map.followShadow(this.focus);
     this.fx.update(dt);
