@@ -16,7 +16,7 @@ import { itemInfo, isGun, makeGun, fullAmmo, addToList } from './items.js';
 import { levelInfo } from './progress.js';
 import { Shoe, handValue, isNatural } from './cards.js';
 import {
-  BETS, BET_LEVEL, betLock, chipLabel, RED, WHEEL, REEL_SYMBOLS, REEL_HITS, PLINKO, PLINKO_ROWS, bucketColor, MINE_COUNTS, minesMult, reelPull,
+  BETS, BET_LEVEL, betLock, chipLabel, RED, WHEEL, REEL_SYMBOLS, REEL_HITS, PLINKO, PLINKO_ROWS, bucketColor, MINE_COUNTS, minesMult, slotSpin, JACKPOT_SEED,
 } from './hub.js';
 
 const $ = (id) => document.getElementById(id);
@@ -24,7 +24,7 @@ const fmt = (n) => Math.round(n).toLocaleString('en-US');
 const TOP = 1.15; // felt height on the round tables
 const STALE = 90; // seconds without a word from a seated player before the seat counts as free
 const TITLES = {
-  roulette: '🎡 ROULETTE', slots: '🎰 LOOT REELS', blackjack: '🃏 BLACKJACK', crash: '🚀 CRASH', mines: '💎 MINES', plinko: '🔴 PLINKO', armory: '🔫 ARMORY',
+  roulette: '🎡 ROULETTE', slots: '🎰 LUCKY SLOTS', blackjack: '🃏 BLACKJACK', crash: '🚀 CRASH', mines: '💎 MINES', plinko: '🔴 PLINKO', armory: '🔫 ARMORY',
 };
 // Games built as their own cabinet (no round table under them).
 export const CABINET_GAMES = new Set(['slots', 'plinko']);
@@ -452,9 +452,26 @@ const Roulette = {
   },
 };
 
-// Loot Reels: a full-size slot cabinet with real spinning reels and a lever.
+// Lucky Slots: a full-size cabinet with three real spinning drums and a lever, playing the same
+// game as the Back Room machine (5 lines, free spins, the progressive jackpot). Each drum has its
+// own strip; when a spin comes in, the cells it'll stop on get painted with that spin's symbols.
 const STRIP = REEL_SYMBOLS.length;
 const reelAngle = (k) => ((k + 0.5) * Math.PI * 2) / STRIP;
+const paintCell = (tex, k, sym) => {
+  const { canvas, ctx: c } = tex.userData;
+  const cell = canvas.width / STRIP;
+  c.fillStyle = k % 2 ? '#fff6e0' : '#ffeccc';
+  c.fillRect(k * cell, 0, cell, canvas.height);
+  c.save();
+  c.translate(k * cell + cell / 2, canvas.height / 2);
+  c.rotate(Math.PI / 2);
+  c.font = '92px sans-serif';
+  c.textAlign = 'center';
+  c.textBaseline = 'middle';
+  c.fillText(sym, 0, 6);
+  c.restore();
+  tex.needsUpdate = true;
+};
 const Slots = {
   build(t) {
     const g = t.group;
@@ -474,7 +491,7 @@ const Slots = {
         c.fillStyle = '#ff3fa4';
         c.shadowColor = '#ff3fa4';
         c.shadowBlur = 18;
-        c.fillText('LOOT REELS', w / 2, h / 2 + 6);
+        c.fillText('LUCKY SLOTS', w / 2, h / 2 + 6, w - 30);
       }),
     }));
     title.position.set(0, 3.45, 0.31);
@@ -483,32 +500,20 @@ const Slots = {
     const shelf = part(new THREE.BoxGeometry(2.4, 0.18, 0.5), 0xd4a63a, { ink: 0.02 });
     shelf.position.set(0, 1.15, 0.65);
     g.add(body, trim, crown, title, window_, shelf);
-    const tex = canvasTexture(1024, 256, (c, w, h) => {
-      const cell = w / STRIP;
-      REEL_SYMBOLS.forEach((s, k) => {
-        c.fillStyle = k % 2 ? '#fff6e0' : '#ffeccc';
-        c.fillRect(k * cell, 0, cell, h);
-        c.save();
-        c.translate(k * cell + cell / 2, h / 2);
-        c.rotate(Math.PI / 2);
-        c.font = '92px sans-serif';
-        c.textAlign = 'center';
-        c.textBaseline = 'middle';
-        c.fillText(s, 0, 6);
-        c.restore();
-      });
-    });
     t.reels = [-0.62, 0, 0.62].map((x) => {
+      const tex = canvasTexture(1024, 256, () => {});
+      REEL_SYMBOLS.forEach((sym, k) => paintCell(tex, k, sym));
       const spinner = new THREE.Group();
       spinner.position.set(x, 1.95, 0.32);
       const drum = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.42, 0.52, 32, 1, true), new THREE.MeshBasicMaterial({ map: tex }));
       drum.rotation.z = Math.PI / 2;
       spinner.add(drum);
       g.add(spinner);
-      const r = { spinner, a: reelAngle(Math.floor(Math.random() * STRIP)), run: null };
+      const r = { spinner, tex, a: reelAngle(Math.floor(Math.random() * STRIP)), run: null };
       spinner.rotation.x = r.a;
       return r;
     });
+    // The middle line, plus a marker for each row at both edges.
     const line = new THREE.Mesh(new THREE.PlaneGeometry(2.0, 0.035), new THREE.MeshBasicMaterial({ color: 0xff3fa4 }));
     line.position.set(0, 1.95, 0.76);
     g.add(line);
@@ -531,33 +536,39 @@ const Slots = {
       t.bulbs.push(b);
     }
     t.blink = 0;
-    t.machine = 0;
+    t.free = 0;
   },
   busy(t) { return t.reels.some((r) => r.run); },
   panel(t, T) {
     const busy = t.reels.some((r) => r.run);
-    const machines = HUB_SLOTS.map((m, i) => `<button class="subtab ${t.machine === i ? 'on' : ''}" data-act="machine" data-arg="${i}" ${busy ? 'disabled' : ''}>${m.name} · 🪙 ${fmt(m.cost)}</button>`).join('');
-    return `<div class="tprow">${machines}</div><div class="tprow"><button class="btn big" data-act="pull" ${busy ? 'disabled' : ''}>${busy ? 'SPINNING…' : `PULL · 🪙 ${fmt(HUB_SLOTS[t.machine].cost)}`}</button></div>`;
+    const pot = T.hub.data.jackpot || JACKPOT_SEED;
+    return `${T.chipsHtml(busy || t.free > 0)}<div class="tprow"><button class="btn big" data-act="pull" ${busy ? 'disabled' : ''}>${busy ? 'SPINNING…' : t.free ? `⭐ FREE SPIN (${t.free} left)` : `SPIN · 🪙 ${fmt(T.bet)}`}</button></div>
+      <p class="tpnote">5 lines · ⭐⭐⭐ free spins · 7️⃣ and 💎 lines win guns · 💎💎💎 anywhere: JACKPOT 🪙 ${fmt(pot)}</p>`;
   },
   act(t, a, arg, T) {
-    if (a === 'machine') { t.machine = Number(arg); return null; }
     if (a !== 'pull' || t.reels.some((r) => r.run)) return null;
-    const m = HUB_SLOTS[t.machine];
-    if (!T.spend(m.cost)) return null;
-    const { prize, finals } = reelPull(m);
-    return { a: 'pull', m: t.machine, f: finals, pz: prize };
+    const free = t.free > 0;
+    const bet = free ? t.freeBet : T.bet;
+    if (!free && !T.spend(bet)) return null;
+    if (free) t.free--;
+    else T.hub.feedJackpot(bet);
+    const res = slotSpin(bet);
+    t.mine = { bet, res, free };
+    return { a: 'pull', g: res.grid, w: res.win, x: res.gun, fs: res.free, gm: res.gems };
   },
   apply(t, e) {
     if (e.a !== 'pull') return;
     t.lever.t = 0.6;
-    t.pull = { mine: e.mine, who: e.n, m: e.m, prize: e.pz, left: 3 };
-    e.f.forEach((sym, i) => {
+    t.pull = { mine: e.mine, who: e.n, e, left: 3 };
+    e.g.forEach((col, i) => {
       const r = t.reels[i];
-      const k = Math.max(0, REEL_SYMBOLS.indexOf(sym));
+      // Land on a random cell, and paint the three that show with this spin's column.
+      const k = Math.floor(Math.random() * STRIP);
+      col.forEach((sym, row) => paintCell(r.tex, (k + 1 - row + STRIP) % STRIP, sym));
       const base = r.a - (r.a % (Math.PI * 2));
       r.run = { t: 0, dur: 1.4 + i * 0.5, from: r.a, to: base + Math.PI * 2 * (4 + i) + reelAngle(k) };
     });
-    t.show(`${e.n} pulls ${HUB_SLOTS[e.m].name}`, '🎰 Spinning…');
+    t.show(`${e.n} spins Lucky Slots`, '🎰 Spinning…');
     sfx.lever(t.pos, t.T.raid.listener);
   },
   update(t, dt) {
@@ -591,18 +602,20 @@ const Slots = {
   done(t) {
     const p = t.pull;
     t.pull = null;
-    const m = HUB_SLOTS[p.m];
-    const prize = p.prize;
-    const hit = REEL_HITS[prize.hit] || REEL_HITS[0];
-    const info = prize.item && itemInfo(prize.item);
-    const what = [info ? info.name : '', prize.chips ? `🪙 ${fmt(prize.chips)}` : ''].filter(Boolean).join(' + ');
-    t.show(`${p.who} · ${hit.sym && hit.sym !== 'item' ? `${hit.sym}${hit.sym}${hit.sym} ${hit.x}x` : m.name}`, what, info ? info.css : '#ffd23f');
-    t.T.pop(t, hit.x >= 1.5 ? `${hit.x}x!` : `+${fmt(prize.chips || 0)}`, info ? info.css : '#ffd23f', prize.hit >= 3);
-    if (prize.hit >= 3) t.flash = 3;
-    if (prize.hit >= 4) t.T.raid.feed(`🎰 ${p.who} hit ${hit.sym}${hit.sym}${hit.sym} on the Loot Reels${info ? `: ${info.name}` : ''}!`);
-    if (p.mine) {
-      const { payout } = t.T.hub.awardReel(m, prize);
-      t.T.afterSettle(m.cost, payout);
+    const e = p.e;
+    const jackpot = e.gm >= 3;
+    const info = e.x && itemInfo(e.x);
+    const what = [jackpot ? '💎💎💎 JACKPOT!' : '', info ? info.name : '', e.w ? `🪙 ${fmt(e.w)}` : '', e.fs ? `⭐ ${e.fs} free spins` : ''].filter(Boolean).join(' + ') || 'No win';
+    t.show(`${p.who} · Lucky Slots`, what, info ? info.css : '#ffd23f');
+    if (e.w || info || e.fs || jackpot) t.T.pop(t, jackpot ? 'JACKPOT!' : info ? info.name : e.fs ? `⭐ ${e.fs} FREE` : `+${fmt(e.w)}`, info ? info.css : '#ffd23f', jackpot || !!info);
+    if (jackpot || info || e.fs) t.flash = 3;
+    if (jackpot || info) t.T.raid.feed(`🎰 ${p.who} ${jackpot ? 'hit the JACKPOT' : `won ${info.name}`} on Lucky Slots!`);
+    if (p.mine && t.mine) {
+      const { bet, res, free } = t.mine;
+      t.mine = null;
+      if (res.free) { t.free += res.free; t.freeBet = bet; }
+      const payout = t.T.hub.payLucky(bet, res, free);
+      t.T.afterSettle(free ? 0 : bet, payout);
     }
   },
 };

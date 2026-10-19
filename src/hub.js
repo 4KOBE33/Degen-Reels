@@ -1964,13 +1964,40 @@ export class Hub {
     return Array.from({ length: n }, () => REEL_SYMBOLS[Math.floor(Math.random() * REEL_SYMBOLS.length)]);
   }
 
+  // Every paid Lucky Slots spin (here or at the Lounge cabinet) feeds the progressive pot.
+  feedJackpot(bet) {
+    save.update((x) => { x.jackpot = (x.jackpot || JACKPOT_SEED) + Math.max(1, Math.round(bet * JACKPOT_CUT)); });
+  }
+
+  // Pays out one Lucky Slots spin: the jackpot on three 💎, the chips, any gun, and the stats.
+  // Returns what it was all worth.
+  payLucky(bet, res, freeSpin = false) {
+    if (res.gems >= 3) {
+      res.jackpot = jackpotShare(this.data.jackpot || JACKPOT_SEED, bet);
+      res.win += res.jackpot;
+      save.update((x) => { x.jackpot = JACKPOT_SEED; x.stats.jackpots = (x.stats.jackpots || 0) + 1; });
+      this.toast(`💎💎💎 JACKPOT! 🪙 ${fmt(res.jackpot)}!`);
+    }
+    if (res.win) this.earn(res.win);
+    let out = null;
+    if (res.gun) {
+      const key = itemKey(res.gun);
+      save.update((x) => addToStash(x.stash.items, { ...res.gun }));
+      out = progress((x) => { x.collection[key] = (x.collection[key] || 0) + 1; });
+    }
+    const payout = res.win + (res.gun ? itemInfo(res.gun).value : 0);
+    this.settleBet('🎰', freeSpin ? 0 : bet, payout, (st) => { st.reelsPulled++; if (payout - bet > st.biggestWin) st.biggestWin = payout - bet; });
+    if (out) this.announce(out);
+    return payout;
+  }
+
   pullReels() {
     if (this.reels && this.reels.running) return;
     const freeSpin = (this.slotFree || 0) > 0;
     const bet = freeSpin ? this.slotFreeBet : this.bet;
     if (!freeSpin && !this.spend(bet)) { this.slotAuto = 0; return; }
     if (freeSpin) this.slotFree--;
-    else save.update((x) => { x.jackpot = (x.jackpot || JACKPOT_SEED) + Math.max(1, Math.round(bet * JACKPOT_CUT)); });
+    else this.feedJackpot(bet);
     const res = slotSpin(bet);
     // Each strip ends [..., top, middle, bottom]: it scrolls so those three fill the window.
     const strips = res.grid.map((col, k) => [...this.randomStrip(22 + k * 6), ...col]);
@@ -1993,23 +2020,7 @@ export class Hub {
       r.running = false;
       r.animating = false;
       if (res.free) { this.slotFree = (this.slotFree || 0) + res.free; this.slotFreeBet = bet; }
-      // Three diamonds: the jackpot.
-      if (res.gems >= 3) {
-        res.jackpot = jackpotShare(this.data.jackpot || JACKPOT_SEED, bet);
-        res.win += res.jackpot;
-        save.update((x) => { x.jackpot = JACKPOT_SEED; x.stats.jackpots = (x.stats.jackpots || 0) + 1; });
-        this.toast(`💎💎💎 JACKPOT! 🪙 ${fmt(res.jackpot)}!`);
-      }
-      if (res.win) this.earn(res.win);
-      let out = null;
-      if (res.gun) {
-        const key = itemKey(res.gun);
-        save.update((x) => addToStash(x.stash.items, { ...res.gun }));
-        out = progress((x) => { x.collection[key] = (x.collection[key] || 0) + 1; });
-      }
-      const payout = res.win + (res.gun ? itemInfo(res.gun).value : 0);
-      this.settleBet('🎰', freeSpin ? 0 : bet, payout, (st) => { st.reelsPulled++; if (payout - bet > st.biggestWin) st.biggestWin = payout - bet; });
-      if (out) this.announce(out);
+      this.payLucky(bet, res, freeSpin);
       if (res.jackpot || res.gun || res.win >= bet * 25) sfx.jackpot(); else if (res.free || res.win > bet) sfx.win(); else if (res.win) sfx.pickup(); else sfx.deny();
       if (this.tab === 'backroom' && this.game === 'slots') this.render(); else this.renderHeader();
       // Auto-spin (and free spins under auto) carry on by themselves.
