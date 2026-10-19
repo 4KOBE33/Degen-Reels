@@ -846,8 +846,17 @@ export class Raid {
     const items = [...p.weapons.filter(Boolean), ...p.backpack, ...(p.pocket || []).filter(Boolean)].filter((it) => !it.house);
     const value = items.reduce((n, it) => n + itemInfo(it).value, 0) + p.chips;
     sfx.extract();
+    // Extract streak: every raid in a row you got out of adds 5% to the chips you bring home
+    // (up to 25%). Dying resets it. The Lounge and the tutorial don't count either way.
+    const counts = !this.map.safe && !this.tutorialMode;
+    const streak = counts ? (save.get().stats.extractStreak || 0) : 0;
+    const streakBonus = counts ? Math.round(p.chips * Math.min(0.25, streak * 0.05)) : 0;
     save.update((d) => {
-      d.stash.chips += p.chips;
+      d.stash.chips += p.chips + streakBonus;
+      if (counts) {
+        d.stats.extractStreak = streak + 1;
+        d.stats.bestExtractStreak = Math.max(d.stats.bestExtractStreak || 0, streak + 1);
+      }
       for (const raw of items) {
         // Free-loadout gear you got out with is yours now.
         const it = { ...raw };
@@ -855,7 +864,7 @@ export class Raid {
         addToStash(d.stash.items, it);
       }
     });
-    this.finish({ success: true, where, items, chips: p.chips, value, riders });
+    this.finish({ success: true, where, items, chips: p.chips, value, riders, streak: counts ? streak + 1 : 0, streakBonus });
     // The player escapes: pull them out of the world.
     p.alive = false;
     p.char.root.visible = false;
@@ -874,7 +883,9 @@ export class Raid {
     const kept = (p.pocket || []).filter(Boolean).map((it) => { const x = { ...it }; delete x.free; return x; });
     if (kept.length) save.update((d) => { for (const it of kept) addToStash(d.stash.items, it); });
     p.pocket = (p.pocket || []).map(() => null);
-    this.finish({ success: false, reason, by, items, chips: p.chips, value, kept: kept.map((it) => itemInfo(it).name) });
+    const lostStreak = !this.map.safe && !this.tutorialMode ? save.get().stats.extractStreak || 0 : 0;
+    if (lostStreak) save.update((d) => { d.stats.extractStreak = 0; });
+    this.finish({ success: false, reason, by, items, chips: p.chips, value, kept: kept.map((it) => itemInfo(it).name), lostStreak });
   }
 
   // ---------- kill cam ----------

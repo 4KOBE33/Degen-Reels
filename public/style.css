@@ -1665,3 +1665,5 @@ body.scoped #crosshair, body.scoped #cdRing { display: none !important; }
 .gctrl .rbet { display: flex; justify-content: center; align-items: baseline; gap: 6px; padding: 6px; }
 .gctrl .rbet b { white-space: nowrap; }
 .rulechip.happy { background: #ff3fa4; color: #fff; animation: jpGlow 0.8s ease-in-out infinite alternate; }
+.streakline { color: #ff9f1c; }
+.streakline.lost { color: #ff5d5d; }

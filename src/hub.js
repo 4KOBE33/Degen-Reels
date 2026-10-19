@@ -478,7 +478,10 @@ export class Hub {
     const hasGun = d.loadout.weapons.some(Boolean);
     const m = MAPS[d.selectedMap];
     const party = this.net && this.net.inParty;
-    let html = hasGun ? `DEPLOY<small>${m.icon} ${m.name}</small>` : 'DEPLOY<small>no gun packed!</small>';
+    // On a streak? Show what this raid is worth on top (and that dying ends it).
+    const streak = m.safe ? 0 : d.stats.extractStreak || 0;
+    const fire = streak ? ` · 🔥${streak} (+${Math.min(25, streak * 5)}% chips)` : '';
+    let html = hasGun ? `DEPLOY<small>${m.icon} ${m.name}${fire}</small>` : 'DEPLOY<small>no gun packed!</small>';
     if (party && !this.net.isHost) html = this.net.room.inRaid ? 'JOIN RAID<small>drop in next to your squad</small>' : 'WAITING…<small>the party leader deploys everyone</small>';
     else if (party) html = `DEPLOY SQUAD<small>${m.icon} ${m.name} · ${this.net.partySize} players</small>`;
     $('deploy').innerHTML = html;
@@ -810,7 +813,7 @@ export class Hub {
         ${tile('🎲', 'Raids', fmt(s.raids))}${tile('🚁', 'Extracts', fmt(s.extracts))}${tile('💀', 'Deaths', fmt(s.deaths))}${tile('📈', 'Survival rate', `${rate}%`)}
         ${tile('💰', 'Best haul', `🪙 ${fmt(s.bestHaul)}`)}${tile('🏦', 'Total extracted', `🪙 ${fmt(s.totalHaul)}`)}${tile('🔧', 'Machines busted', fmt(s.machines))}${tile('🤠', 'Raiders busted', fmt(s.raiders))}
         ${tile('👑', 'Pit Bosses', fmt(s.bossKills))}${tile('🎯', 'Critical hits', fmt(s.crits))}${tile('🐊', 'Gators', fmt(s.gators))}${tile('💣', 'Throwables thrown', fmt(s.throws))}
-        ${tile('📦', 'Containers searched', fmt(s.containers))}${tile('🎰', 'Raid slots pulled', fmt(s.slotPulls))}${tile('⏱️', 'Time in raids', `${mins} min`)}${tile('🗺️', 'Maps escaped', `${Object.keys(s.extractsByMap).length} / ${Object.keys(MAPS).filter((id) => !MAPS[id].tutorial).length}`)}
+        ${tile('🔥', 'Best extract streak', fmt(s.bestExtractStreak || 0))}${tile('📦', 'Containers searched', fmt(s.containers))}${tile('🎰', 'Raid slots pulled', fmt(s.slotPulls))}${tile('⏱️', 'Time in raids', `${mins} min`)}${tile('🗺️', 'Maps escaped', `${Object.keys(s.extractsByMap).length} / ${Object.keys(MAPS).filter((id) => !MAPS[id].tutorial).length}`)}
       </div>
       <h3>The Back Room</h3>
       <div class="stat-tiles">

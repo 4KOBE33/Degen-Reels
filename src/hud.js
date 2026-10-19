@@ -866,6 +866,8 @@ export class Hud {
     } else if (r.success) {
       title = '🚁 EXTRACTED!';
       line = `You got out through the ${escapeHtml(r.where)} with <b>🪙 ${r.value}</b> worth of stuff.${r.riders && r.riders.length ? ` Rode out with ${r.riders.map(escapeHtml).join(', ')}.` : ''}`;
+      if (r.streak >= 2) line += `<br><b class="streakline">🔥 ${r.streak} raids in a row! +${Math.min(25, (r.streak - 1) * 5)}% chips${r.streakBonus ? ` (+🪙 ${r.streakBonus.toLocaleString('en-US')})` : ''}</b>`;
+      else if (r.streak === 1) line += '<br><b class="streakline">🔥 Streak started: get out of your next raid too for +5% chips.</b>';
     } else if (r.reason === 'time') {
       title = '⏰ LOCKED DOWN';
       line = 'The House locked the place down with you inside. Everything you carried is gone.';
@@ -878,6 +880,7 @@ export class Hud {
     } else {
       title = '💀 BUSTED';
       line = `${r.by ? `${escapeHtml(r.by)} got you.` : 'You died.'} Everything you carried is gone.`;
+      if (r.lostStreak >= 2) line += `<br><b class="streakline lost">💔 Your ${r.lostStreak}-raid streak is over.</b>`;
     }
     $('resultsTitle').textContent = title;
     $('resultsLine').innerHTML = `${line}${insuredNote}<br><small>Machines destroyed: ${r.run.machines} · Raiders busted: ${r.run.raiders}${(r.run.bestStreak || 0) >= 2 ? ` · 🔥 Best streak: ${r.run.bestStreak}` : ''}${r.run.bounty ? ' · 💰 Bounty claimed!' : ''}${r.run.boss ? ` · 👑 Took down ${this.raid && this.raid.bossName ? this.raid.bossName : 'the boss'}!` : ''}</small>`;
