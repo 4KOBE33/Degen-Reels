@@ -184,6 +184,11 @@ function reelOdds(tier) {
 
 // The "what's new" card, shown once after an update.
 const WHATS_NEW = {
+  88: [
+    ['🚨', 'Heat', 'Bust machines and the House notices: up to five stars. Every star adds 15% to machine chips, but it sends hunter crews after you. Lie low (or bust the crew) to cool off.'],
+    ['💎', 'Better vault loot', 'Vault chests never drop Common guns, and top-tier crates roll better rarities.'],
+    ['🏆', 'New goals', 'Achievements for a 5-raid extract streak and for beating all five House Rules, plus a Hi-Lo daily contract.'],
+  ],
   87: [
     ['🎲', 'House Rules', 'About half of all raids now roll a twist: Low Gravity, Glass Cannon, Jackpot Night, Headhunter or Double Bounty. Check the top-left panel.'],
     ['🍸', 'Happy Hour', 'Somewhere early in most raids: one minute of double chips from machines and crates.'],

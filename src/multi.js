@@ -612,6 +612,11 @@ export class Session {
       case 'toast':
         raid.hud.toast(d.text, d.big ? 'big' : '');
         break;
+      // Our heat, kept by the host: a star up or down, or a crew on its way.
+      case 'heat':
+        if (d.crew) raid.hud.toast(`🚨 The House sent a crew after you (${d.crew})!`);
+        else raid.showHeat(d.s, d.up);
+        break;
       case 'over': this.ended = true; break;
       case 'hostgone': this.hostLeft(); break;
       case 'duelInvite': if (raid.duel) raid.duel.showInvite(d); break;

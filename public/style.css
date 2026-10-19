@@ -1672,3 +1672,4 @@ body.scoped #crosshair, body.scoped #cdRing { display: none !important; }
 .whatsnew .wnlist li > span { font-size: 26px; line-height: 1; }
 .whatsnew .wnlist b { display: block; font: 400 18px var(--display); letter-spacing: 0.5px; color: var(--gold); }
 .whatsnew .wnlist small { font-size: 13px; font-weight: 700; opacity: 0.85; }
+.rulechip.heat { background: #e63946; color: #fff; letter-spacing: 1px; }

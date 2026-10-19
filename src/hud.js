@@ -239,7 +239,7 @@ export class Hud {
     if (this.slow <= 0) {
       this.slow = 0.2;
       this.set('timer', `⏰ ${clock(raid.timeLeft)}`);
-      this.set('zone', `${escapeHtml(raid.map.zoneName(p.pos.x, p.pos.z))} <span class="tier t${raid.map.tierAt(p.pos.x, p.pos.z)}">${['', 'SAFE-ISH', 'RISKY', 'DEADLY', 'VAULT'][raid.map.tierAt(p.pos.x, p.pos.z)]}</span>${raid.rule ? ` <span class="rulechip" title="${escapeHtml(raid.rule.desc)}">${raid.rule.icon} ${escapeHtml(raid.rule.name)}</span>` : ''}${raid.happyHour && raid.happyHour() ? ` <span class="rulechip happy">🍸 2× CHIPS ${Math.ceil(raid.timeLeft - raid.happyEnd)}s</span>` : ''}`);
+      this.set('zone', `${escapeHtml(raid.map.zoneName(p.pos.x, p.pos.z))} <span class="tier t${raid.map.tierAt(p.pos.x, p.pos.z)}">${['', 'SAFE-ISH', 'RISKY', 'DEADLY', 'VAULT'][raid.map.tierAt(p.pos.x, p.pos.z)]}</span>${raid.rule ? ` <span class="rulechip" title="${escapeHtml(raid.rule.desc)}">${raid.rule.icon} ${escapeHtml(raid.rule.name)}</span>` : ''}${p.heatStars ? ` <span class="rulechip heat">🚨 ${'★'.repeat(p.heatStars)}${'☆'.repeat(5 - p.heatStars)}</span>` : ''}${raid.happyHour && raid.happyHour() ? ` <span class="rulechip happy">🍸 2× CHIPS ${Math.ceil(raid.timeLeft - raid.happyEnd)}s</span>` : ''}`);
       this.set('exits', raid.extracts.filter((e) => e.active).map((e) => `<div>🟢 ${e.name} · ${Math.round(Math.hypot(e.x - p.pos.x, e.z - p.pos.z))}m ${bearing(p, e.x, e.z)}</div>`).join(''));
       const now = performance.now();
       this.feedItems = this.feedItems.filter((f) => now - f.t < 7000);

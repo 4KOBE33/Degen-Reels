@@ -491,6 +491,65 @@ export class Raid {
     }
   }
 
+  // ---------- Heat ----------
+  // Bust machines and the House notices: heat climbs (a star for every few busts, up to five), it
+  // sends hunter crews after you, and every star adds 15% to the chips machines drop. Lie low for a
+  // bit and it cools off. The host (or you, solo) keeps everyone's heat; friends hear when theirs moves.
+  heatOn() { return !this.map.safe && !this.tutorialMode && !this.isClient; }
+  heatBonus(c) { return 1 + 0.15 * Math.floor((c && c.heat) || 0); }
+  addHeat(c, amt) {
+    if (!c || !(c.isPlayer || c.human) || !this.heatOn()) return;
+    const before = Math.floor(c.heat || 0);
+    c.heat = Math.min(5, (c.heat || 0) + amt);
+    c.heatCool = 25;
+    // First star: the first crew isn't far behind.
+    if (before === 0 && c.heat >= 1) c.huntIn = 12;
+    if (Math.floor(c.heat) !== before) this.heatChanged(c, Math.floor(c.heat), true);
+  }
+  heatChanged(c, stars, up) {
+    if (c.isPlayer) this.showHeat(stars, up);
+    else if (c.human && this.net) this.net.net.to(c.owner, { k: 'heat', s: stars, up });
+  }
+  showHeat(stars, up) {
+    if (this.player) this.player.heatStars = stars;
+    if (up && stars > 0) {
+      this.hud.toast(`🚨 HEAT ${'★'.repeat(stars)}${'☆'.repeat(5 - stars)} · The House is sending people. +${stars * 15}% machine chips.`, stars >= 3 ? 'big' : undefined);
+      sfx.alert(this.player ? this.player.pos : this.focus, this.listener);
+    } else if (!up) this.hud.toast(stars ? `🚨 Heat cooling off: ${'★'.repeat(stars)}` : '😎 The heat is off.');
+  }
+  updateHeat(dt) {
+    if (!this.heatOn()) return;
+    const hunters = this.machines.filter((m) => m.alive && m.hunter).length;
+    for (const c of this.combatants) {
+      if (!(c.isPlayer || c.human) || !c.alive || !c.heat) continue;
+      // Cooling off: a star every 20 seconds once you've gone 25 seconds without a bust.
+      c.heatCool = (c.heatCool || 0) - dt;
+      if (c.heatCool <= 0) {
+        const before = Math.floor(c.heat);
+        c.heat = Math.max(0, c.heat - dt / 20);
+        if (Math.floor(c.heat) !== before) this.heatChanged(c, Math.floor(c.heat), false);
+      }
+      const stars = Math.floor(c.heat);
+      if (stars < 1 || c.downed) continue;
+      c.huntIn = (c.huntIn ?? 12) - dt;
+      // Not on top of the boss fight or an extraction siren: those bring their own crowds.
+      const busy = (this.bossSpawned && this.boss && this.boss.alive && this.inCasino(c.pos, 6)) || this.extracts.some((e) => e.call && Math.hypot(e.x - c.pos.x, e.z - c.pos.z) < 90);
+      if (c.huntIn > 0 || hunters >= 10 || busy) continue;
+      c.huntIn = 55 - stars * 6;
+      // A crew from somewhere out of sight, bigger and nastier the hotter you are.
+      const pool = stars >= 4 ? ['bouncer', 'dealer', 'shark', 'roller'] : stars >= 2 ? ['shark', 'dicer', 'roller', 'bouncer'] : ['dicer', 'shark', 'dicer'];
+      const n = Math.min(5, 1 + stars);
+      for (let i = 0; i < n; i++) {
+        const [sx, sz] = this.reinforcementSpot({ x: c.pos.x, z: c.pos.z });
+        const m = this.spawnMachine(pick(pool), sx, sz);
+        m.hunter = true;
+        m.target = c;
+      }
+      if (c.isPlayer) this.hud.toast(`🚨 The House sent a crew after you (${n})!`);
+      else if (this.net) this.net.net.to(c.owner, { k: 'heat', s: stars, crew: n });
+    }
+  }
+
   // ---------- Happy Hour ----------
   // Tracked on the raid clock (timeLeft), which every player in a party counts down together.
   happyHour() { return this.happyEnd !== null && this.timeLeft > this.happyEnd; }
@@ -1783,7 +1842,9 @@ export class Raid {
       const def = target.def;
       this.fx.explosion(target.center(new THREE.Vector3()), target.isBoss ? 8 : 1.8);
       sfx.bust(at, this.listener);
-      this.chips.spawnBurst(target.center(new THREE.Vector3()), randInt(def.chips[0], def.chips[1]) * this.chipBoost(), null, { speed: target.isBoss ? 7 : 3 });
+      this.chips.spawnBurst(target.center(new THREE.Vector3()), Math.round(randInt(def.chips[0], def.chips[1]) * this.chipBoost() * this.heatBonus(attacker)), null, { speed: target.isBoss ? 7 : 3 });
+      // (Busting the crew the House sent doesn't make it angrier: that's how you cool off.)
+      if (!target.isBoss && !target.hunter) this.addHeat(attacker, 0.16);
       const tier = this.map.tierAt(at.x, at.z);
       if (target.isBoss) {
         const haul = [...Array.from({ length: 5 }, () => rollLoot(4)), makeGun(pick(['rifle', 'rocket', 'sniper', 'minigun', 'ar', 'dbarrel']), Math.random() < 0.25 ? 3 : 2), makeItem('keycard')];
@@ -1969,6 +2030,7 @@ export class Raid {
 
     if (!this.isClient) for (const b of this.bots) b.update(dt);
     this.updateAirdrop(dt);
+    this.updateHeat(dt);
     // Where's the bounty? A tip every so often.
     const bt = this.bountyOn;
     if (bt && this.active) {
