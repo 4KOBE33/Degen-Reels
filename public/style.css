@@ -1673,3 +1673,6 @@ body.scoped #crosshair, body.scoped #cdRing { display: none !important; }
 .whatsnew .wnlist b { display: block; font: 400 18px var(--display); letter-spacing: 0.5px; color: var(--gold); }
 .whatsnew .wnlist small { font-size: 13px; font-weight: 700; opacity: 0.85; }
 .rulechip.heat { background: #e63946; color: #fff; letter-spacing: 1px; }
+.hero.m-boardwalk, .mapcard.m-boardwalk.on { background: linear-gradient(135deg, #1d3557, #e76f51); }
+.maptile.m-boardwalk { background: linear-gradient(150deg, #2a9d8f, #1d3557 55%, #e76f51); }
+.gearhead.m-boardwalk { background: linear-gradient(120deg, #1d3557, #e76f51); }

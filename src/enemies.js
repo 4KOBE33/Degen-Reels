@@ -719,7 +719,7 @@ export class Machine {
     this.name = type === 'boss' ? bossTheme(raid.mapId).name : this.def.name;
     this.team = 'machine';
     this.isBoss = type === 'boss';
-    this.maxHp = Math.round(this.def.hp * (type === 'boss' && raid.map.boss ? raid.map.boss.hp : raid.map.toughness || 1) * ((raid.rule && raid.rule.machineHp) || 1));
+    this.maxHp = Math.round(this.def.hp * (type === 'boss' && raid.map.boss ? raid.map.boss.hp : raid.map.toughness || 1) * (type !== 'boss' && raid.rule && raid.rule.machineHp ? raid.rule.machineHp : 1));
     this.hp = this.maxHp;
     this.armor = 0;
     this.alive = true;

@@ -148,6 +148,13 @@ export const MAPS = {
     ground: { base: '#c8b27a', a: 'rgba(120,140,60,0.25)', b: 'rgba(255,236,190,0.25)' },
     mapGround: '#bfae78', hemi: [0xfff1dc, 0x6b5a4a, 1.75], sun: [0xffe2b8, 2.3], mountains: [0x9c7b5b, 0x7a6248], glow: 0xff7eb6, tough: 1.15,
   },
+  boardwalk: {
+    name: 'Neon Boardwalk', icon: '🎡', size: 'Big', danger: 'Medium', half: 260, wilds: 'The Shore',
+    blurb: 'A seaside strip at sunset: an arcade row on the boardwalk, a beach full of umbrellas, and a pier out to the Big Wheel. The Salty Sevens casino sits up the hill.',
+    sky: [0x1d3557, 0xe76f51, 0xf9c74f], fog: 0xe9a98a,
+    ground: { base: '#e3cf9c', a: 'rgba(160,120,70,0.16)', b: 'rgba(255,240,200,0.25)' },
+    mapGround: '#e3cf9c', hemi: [0xffe8d0, 0x5a6a8a, 1.75], sun: [0xffd2a1, 2.3], mountains: [0x7a8ca8, 0x5f708a], glow: 0x2ee6d6, tough: 1,
+  },
   bunker: {
     name: 'The Bunker', icon: '🥊', size: 'Small', danger: 'Deadly', half: 95, wilds: 'Service Tunnels', indoor: true,
     blurb: 'An underground high-stakes den. Guard machines in every room, a pack of raiders who want your stuff, the meanest boss in the game, and the BEST loot: every crate is vault-grade.',
@@ -1582,6 +1589,33 @@ export function buildMap(scene, mapId = 'vegas') {
         const s = neonSign('OLD CHOMPER', '#5ee27a', 18);
         s.position.set(x, h + 16, z);
         statics.add(s);
+      } else if (mapId === 'boardwalk') {
+        // LUCKY LIGHTHOUSE: striped red and white, with a spinning gold lamp on top.
+        for (let i = 0; i < 6; i++) {
+          const ring = part(new THREE.CylinderGeometry(4.6 - i * 0.35, 4.95 - i * 0.35, 5, 20), i % 2 ? 0xfff6e0 : 0xe63946, { ink: 0.02 });
+          ring.position.set(x, h + 2.5 + i * 5, z - 4);
+          statics.add(ring);
+        }
+        const deck = part(new THREE.CylinderGeometry(3.6, 3.6, 0.5, 20), 0x1b0f2b, { ink: 0.02 });
+        deck.position.set(x, h + 30.2, z - 4);
+        const lamp = new THREE.Mesh(new THREE.CylinderGeometry(2.2, 2.2, 3, 16), new THREE.MeshBasicMaterial({ color: 0xffd23f }));
+        lamp.position.set(x, h + 32, z - 4);
+        const cap = part(new THREE.ConeGeometry(3, 2.6, 16), 0xe63946, { ink: 0.02 });
+        cap.position.set(x, h + 34.8, z - 4);
+        statics.add(deck, lamp, cap);
+        const beam = new THREE.Mesh(new THREE.ConeGeometry(4, 40, 16, 1, true), new THREE.MeshBasicMaterial({ color: 0xfff1b8, transparent: true, opacity: 0.12, depthWrite: false, side: THREE.DoubleSide }));
+        beam.rotation.z = Math.PI / 2;
+        beam.position.set(20, 0, 0);
+        const beamer = new THREE.Group();
+        beamer.position.set(x, h + 32, z - 4);
+        beamer.add(beam);
+        beamer.userData.live = true;
+        animated.push((dt) => { beamer.rotation.y += dt * 0.6; });
+        statics.add(beamer);
+        circle(x, z - 4, 5, h + 31);
+        const s = neonSign('LUCKY LIGHTHOUSE', '#ffd23f', 18);
+        s.position.set(x, h + 39, z - 4);
+        statics.add(s);
       } else if (mapId === 'tequila') {
         // THE BIG POUR: a wine bottle the size of a building, tipping into a giant glass.
         const glassMat = new THREE.MeshBasicMaterial({ color: 0x14532d, transparent: true, opacity: 0.85 });
@@ -1618,7 +1652,7 @@ export function buildMap(scene, mapId = 'vegas') {
       enemies('turret', ...at(10, -10), 1, 0, h);
       enemies('bouncer', ...at(0, S / 2 + 10), 1, 2);
       enemies('bouncer', ...at(-6, S / 2 + 8), 1, 2);
-      const name = { vegas: 'Lucky Seven', frost: 'The Ice Crown', bayou: 'Old Chomper', tequila: 'The Big Pour' }[mapId] || 'The Monument';
+      const name = { vegas: 'Lucky Seven', frost: 'The Ice Crown', bayou: 'Old Chomper', tequila: 'The Big Pour', boardwalk: 'Lucky Lighthouse' }[mapId] || 'The Monument';
       zones.push({ name, x, z, w: S, d: S, tier: 3 });
       minimap.push({ x, z, w: S, d: S, color: '#d4a63a', label: name, tier: 3 });
     }
@@ -1627,6 +1661,7 @@ export function buildMap(scene, mapId = 'vegas') {
       vegas: [['Hotel Jackpot', 0xf1faee, 0xe63946, '#ff3fa4'], ['Neon Arms', 0x7b2cbf, 0x1b0f2b, '#2ee6d6'], ['The High Rise', 0xffd6a5, 0x6b3a1e, '#ffd23f']],
       frost: [['Summit Lodge', 0x8d6e63, 0x3e2723, '#7dd3fc'], ['Glacier Suites', 0xe2e8f0, 0x475569, '#2ee6d6'], ['Avalanche Tower', 0x94a3b8, 0x1e293b, '#ff5d5d']],
       bayou: [['Swamp Spire', 0x6b705c, 0x3f3f2f, '#5ee27a'], ['Moonshine Mill', 0x9c6644, 0x3e2723, '#ffd23f'], ['Heron Hotel', 0xa5a58d, 0x3f3f2f, '#ff7eb6']],
+      boardwalk: [['Ocean View Hotel', 0xf1faee, 0x1d3557, '#2ee6d6'], ['The Sandcastle', 0xf4a261, 0x7f5539, '#ffd23f'], ['Seagull Suites', 0xe76f51, 0x1b0f2b, '#ff7eb6']],
       tequila: [['Vineyard View Inn', 0xe9d8a6, 0x3e2716, '#ff7eb6'], ['Barrel Tower', 0x9c6644, 0x2b1a0e, '#ffd23f'], ['Grand Cru Suites', 0x7f1d3a, 0x2b0f1c, '#fff6e0']],
     }[mapId] || [];
     const m = findSpot(30, 52);
@@ -1641,7 +1676,7 @@ export function buildMap(scene, mapId = 'vegas') {
       zones.push({ name, x, z, w, d, tier });
       minimap.push({ x, z, w, d, color, label: name, tier });
     };
-    const spin = (obj, speed, axis = 'z') => animated.push((dt) => { obj.rotation[axis] += dt * speed; });
+    const spin = (obj, speed, axis = 'z') => { obj.userData.live = true; animated.push((dt) => { obj.rotation[axis] += dt * speed; }); };
     const LANDMARKS = {
       vegas: [
         // THE HIGH ROLLER: a giant observation wheel that never stops turning.
@@ -1683,6 +1718,7 @@ export function buildMap(scene, mapId = 'vegas') {
           const hub = part(new THREE.CylinderGeometry(1.6, 1.6, 4, 16), 0xd4a63a);
           hub.rotation.x = Math.PI / 2;
           wheel.add(hub);
+          wheel.userData.live = true;
           statics.add(wheel);
           animated.push((dt) => { wheel.rotation.z += dt * 0.08; });
           const sign = neonSign('THE HIGH ROLLER', '#ff3fa4', 16);
@@ -1776,6 +1812,7 @@ export function buildMap(scene, mapId = 'vegas') {
             const hang = new THREE.Mesh(new THREE.BoxGeometry(0.08, 2.4, 0.08), new THREE.MeshBasicMaterial({ color: 0x1e293b }));
             hang.position.y = -1.2;
             c.add(seat, back, hang);
+            c.userData.live = true;
             statics.add(c);
             chairs.push({ c, t: i / 14 });
           }
@@ -1884,6 +1921,7 @@ export function buildMap(scene, mapId = 'vegas') {
         vegas: { tuft: [0xc9a46a, 0xb08850], pebble: 0x9c7b5b, tumble: 0x9a7444, mound: null, puddle: null },
         tequila: { tuft: [0x9aa65a, 0xc9a46a, 0x7d8f4a], pebble: 0x9c8a6a, tumble: 0x9a7444, mound: null, puddle: null },
         frost: { tuft: [0x8fa3a0], pebble: 0x94a3b8, tumble: null, mound: 0xf8fbff, puddle: null },
+        boardwalk: { tuft: [0xb8b26a, 0xd9c48a], pebble: 0xc9b48a, tumble: null, mound: null, puddle: null },
         bayou: { tuft: [0x5a7d2a, 0x6f8f3c, 0x4d6b22], pebble: 0x6b6b5a, tumble: null, mound: null, puddle: 0x3d4a2a },
       }[mapId] || { tuft: [0x9aa65a], pebble: 0x9c8a6a, tumble: null, mound: null, puddle: null };
       const tuftMats = STYLE.tuft.map((c) => toon(c));
@@ -2338,6 +2376,10 @@ export function buildMap(scene, mapId = 'vegas') {
     bake() {
       scene.add(statics);
       statics.updateMatrixWorld(true);
+      // Anything that moves (wheels, chairlifts, balloons) stays its own object; the rest gets merged.
+      const live = [];
+      statics.traverse((o) => { if (o.userData.live) live.push(o); });
+      for (const o of live) scene.attach(o);
       const buckets = new Map();
       const center = new THREE.Vector3();
       statics.traverse((o) => {
@@ -4593,6 +4635,7 @@ function wineCountry(k) {
       const r = 60 + Math.random() * (H - 60);
       const a = Math.random() * Math.PI * 2;
       g.position.set(Math.cos(a) * r, 45 + Math.random() * 45, Math.sin(a) * r);
+      g.userData.live = true;
       statics.add(g);
       drifting.push({ g, vx: 0.6 + Math.random() * 0.8, vz: (Math.random() - 0.5) * 0.6, bob: Math.random() * 6, y: g.position.y });
     }
@@ -4677,4 +4720,227 @@ function wineCountry(k) {
   };
 }
 
-const BUILDERS = { training: trainingFloor, vegas: lostVegas, frost: frostbitePeaks, bayou: bayouRoyale, tequila: wineCountry, bunker: theBunker, lounge: theLounge };
+// ---------- Neon Boardwalk: a seaside strip with a pier, a beach and an arcade row ----------
+
+function neonBoardwalk(k) {
+  const {
+    H, THREE, statics, zones, minimap, slotSpots, part, toon, neonSign, flat, box, circle,
+    rock, streetLight, billboard, crateStack, building, container, enemies, casino,
+    palm, scatter, car, watchtower, fire, animate,
+  } = k;
+  const SHORE = 150; // where the sand meets the sea
+  const planks = toon(0xa47148);
+  const asphalt = toon(0x3a3446);
+  const sand = toon(0xf2d49b);
+
+  // ----- The sea, and the invisible wall at the waterline (everywhere but the pier) -----
+  const sea = new THREE.Mesh(new THREE.PlaneGeometry(H * 2, H - SHORE + 40), new THREE.MeshBasicMaterial({ color: 0x1f9bc4 }));
+  sea.rotation.x = -Math.PI / 2;
+  sea.position.set(0, 0.04, (SHORE + H + 40) / 2);
+  statics.add(sea);
+  for (const [z, w, c] of [[SHORE + 1, 1.6, 0xffffff], [SHORE + 9, 1, 0x7fd6ee], [SHORE + 24, 1, 0x5cc3e3], [SHORE + 48, 1, 0x48b5da]]) {
+    flat(0, z, H * 2, w, new THREE.MeshBasicMaterial({ color: c }), 0.05);
+  }
+  minimap.push({ x: 0, z: (SHORE + H) / 2, w: H * 2, d: H - SHORE, color: '#1f9bc4' });
+  const water = (x0, x1, z0, z1) => box((x0 + x1) / 2, (z0 + z1) / 2, x1 - x0, z1 - z0, 4);
+  water(-H, -9, SHORE, 180);
+  water(9, H, SHORE, 180);
+  water(-H, -31, 180, 236);
+  water(31, H, 180, 236);
+  water(-H, H, 236, H);
+
+  // ----- Beach -----
+  flat(0, (SHORE + 104) / 2, H * 2, SHORE - 104, sand, 0.03);
+  minimap.push({ x: 0, z: (SHORE + 104) / 2, w: H * 2, d: SHORE - 104, color: '#f2d49b' });
+  const umbrella = (x, z, color) => {
+    const pole = part(new THREE.CylinderGeometry(0.08, 0.08, 3, 6), 0xfff6e0, { ink: 0.01, shadow: false });
+    pole.position.set(x, 1.5, z);
+    const top = part(new THREE.ConeGeometry(2.2, 1, 8), color, { ink: 0.02 });
+    top.position.set(x, 3.1, z);
+    const towel = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 2.4), new THREE.MeshBasicMaterial({ color: [0xff6b6b, 0x4dabff, 0xffd23f, 0x5ee27a][Math.floor(Math.random() * 4)] }));
+    towel.rotation.x = -Math.PI / 2;
+    towel.position.set(x + 1.6, 0.05, z + 0.4);
+    statics.add(pole, top, towel);
+    circle(x, z, 0.25, 3);
+  };
+  const uColors = [0xff6b6b, 0xffd23f, 0x2ee6d6, 0xc77dff, 0xff9f43, 0xf1faee];
+  for (let i = 0; i < 34; i++) {
+    const x = -H + 30 + Math.random() * (H * 2 - 60);
+    const z = 112 + Math.random() * 32;
+    if (Math.abs(x) < 14) continue;
+    umbrella(x, z, uColors[i % uColors.length]);
+  }
+  for (const x of [-150, -70, 70, 150]) watchtower(x, 140, 0xe63946);
+  for (const [x, z] of [[-110, 128], [40, 135], [130, 122], [-30, 140]]) container('crate', x, z, 1);
+  enemies('roller', -100, 125, 2, 30);
+  enemies('roller', 100, 125, 2, 30);
+  zones.push({ name: 'The Beach', x: 0, z: (SHORE + 104) / 2, w: H * 2 - 20, d: SHORE - 104, tier: 1 });
+
+  // ----- The boardwalk and its arcade row -----
+  flat(0, 96, H * 2 - 20, 16, planks, 0.06);
+  minimap.push({ x: 0, z: 96, w: H * 2 - 20, d: 16, color: '#a47148' });
+  for (let x = -H + 30; x < H - 20; x += 24) { streetLight(x, 89); streetLight(x + 12, 103); }
+  const shops = [
+    ['Skee-Ball Palace', -175, 0xff3fa4, '#ff3fa4', 'SKEE-BALL'],
+    ['Saltwater Taffy', -125, 0xffb3c1, '#ff7eb6', 'TAFFY'],
+    ["Madame Zelda's", -75, 0x7b2cbf, '#c77dff', 'FORTUNES'],
+    ['Hot Dog Heaven', 75, 0xffd23f, '#ffd23f', 'HOT DOGS'],
+    ['Surf Shack', 125, 0x2ee6d6, '#2ee6d6', 'SURF SHACK'],
+    ['Pinball Parlor', 175, 0x4dabff, '#4dabff', 'PINBALL'],
+  ];
+  shops.forEach(([name, x, color, signColor, sign], i) => {
+    building({
+      name, x, z: 74, w: 22, d: 14, h: 5, color, trim: 0x1b0f2b, tier: 2, sign, signColor, mapColor: '#7a4a6a',
+      doors: [{ side: 's', at: 0, width: 4 }],
+    });
+    container(i % 2 ? 'register' : 'locker', x + 7, 70, 2);
+    container('crate', x - 7, 70, 2);
+    if (i % 2 === 0) slotSpots.push({ x: x - 9.5, z: 76, rot: Math.PI / 2, tier: 2 });
+    enemies(i % 3 === 0 ? 'slotbot' : 'dicer', x, 88, 1);
+  });
+  container('safe', -75, 78, 2);
+  zones.push({ name: 'The Boardwalk', x: 0, z: 90, w: H * 2 - 20, d: 30, tier: 2 });
+
+  // ----- The pier: out over the water to the amusement deck -----
+  flat(0, 140, 16, 80, planks, 0.07);
+  flat(0, 208, 62, 56, planks, 0.07);
+  minimap.push({ x: 0, z: 140, w: 16, d: 80, color: '#a47148' }, { x: 0, z: 208, w: 62, d: 56, color: '#a47148', label: 'Pier' });
+  for (let z = 104; z < 236; z += 8) {
+    for (const side of [-1, 1]) {
+      const w = z < 180 ? 8.4 : 31.4;
+      const post = part(new THREE.CylinderGeometry(0.12, 0.12, 1.2, 6), 0xfff6e0, { ink: 0, shadow: false });
+      post.position.set(side * w, 0.6, z);
+      statics.add(post);
+    }
+  }
+  for (let z = 112; z < 180; z += 16) { streetLight(-7, z); streetLight(7, z + 8); }
+  // The big wheel on the deck: it turns.
+  {
+    const x = 16;
+    const z = 214;
+    const R = 13;
+    const wheel = new THREE.Group();
+    wheel.position.set(x, R + 3, z);
+    wheel.rotation.y = Math.PI / 2;
+    const rim = part(new THREE.TorusGeometry(R, 0.35, 8, 48), 0xff3fa4, { ink: 0.02 });
+    wheel.add(rim);
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2;
+      const spoke = part(new THREE.BoxGeometry(0.2, R, 0.2), 0xfff6e0, { ink: 0, shadow: false });
+      spoke.position.set(Math.cos(a) * R / 2, Math.sin(a) * R / 2, 0);
+      spoke.rotation.z = a - Math.PI / 2;
+      const cab = part(new THREE.BoxGeometry(1.8, 1.6, 1.6), [0x2ee6d6, 0xffd23f, 0xc77dff, 0x5ee27a][i % 4], { ink: 0.03 });
+      cab.position.set(Math.cos(a) * R, Math.sin(a) * R - 1.2, 0);
+      const bulb = new THREE.Mesh(new THREE.SphereGeometry(0.3, 8, 6), new THREE.MeshBasicMaterial({ color: i % 2 ? 0xffd23f : 0x2ee6d6 }));
+      bulb.position.set(Math.cos(a) * R, Math.sin(a) * R, 0.4);
+      wheel.add(spoke, cab, bulb);
+    }
+    wheel.userData.live = true;
+    statics.add(wheel);
+    animate((dt) => { wheel.rotation.x += dt * 0.12; });
+    for (const dz of [-3, 3]) {
+      const leg = part(new THREE.BoxGeometry(0.6, R + 4, 0.6), 0x1b0f2b, { ink: 0.02 });
+      leg.position.set(x, (R + 4) / 2, z + dz);
+      leg.rotation.x = dz > 0 ? -0.18 : 0.18;
+      statics.add(leg);
+      box(x, z + dz * 1.4, 1.2, 1.2, R + 4);
+    }
+    const s = neonSign('THE BIG WHEEL', '#ff3fa4', 14);
+    s.position.set(x, 2.6, z - 8);
+    statics.add(s);
+  }
+  // The pavilion: the best loot on the pier, and a boat out the back.
+  building({
+    name: 'Pier Pavilion', x: -14, z: 214, w: 24, d: 18, h: 6, color: 0xf1faee, trim: 0x1d3557, tier: 3, sign: 'PAVILION', signColor: '#2ee6d6', mapColor: '#457b9d',
+    doors: [{ side: 'e', at: 0, width: 4 }, { side: 'n', at: 0, width: 4 }],
+  });
+  container('safe', -20, 220, 3);
+  container('locker', -8, 220, 3);
+  container('crate', -20, 208, 3);
+  slotSpots.push({ x: -24.5, z: 214, rot: Math.PI / 2, tier: 3 });
+  enemies('shark', 0, 160, 2, 10);
+  enemies('bouncer', 0, 196, 1);
+  enemies('dealer', 10, 228, 1);
+  zones.push({ name: 'The Pier', x: 0, z: 208, w: 62, d: 56, tier: 3 });
+
+  // ----- Town: the casino up the hill and the streets around it -----
+  flat(0, (-H + 88) / 2, 12, H + 88, asphalt, 0.04);
+  flat(0, 40, H * 2 - 20, 10, asphalt, 0.045);
+  minimap.push({ x: 0, z: (-H + 88) / 2, w: 12, d: H + 88, color: '#3a3446' }, { x: 0, z: 40, w: H * 2 - 20, d: 10, color: '#3a3446' });
+  for (let i = 0; i < 6; i++) car(-60 + i * 22, 33, 'x', undefined, i === 4);
+  const cas = casino({
+    x: 0, z: -40, name: 'The Salty Sevens', sign: 'SALTY SEVENS', signColor: '#2ee6d6',
+    color: 0x1d3557, trim: 0xe63946, mapColor: '#1d3557', felt: 0x0f5a6b,
+    plaza(px, pz) {
+      for (const dx of [-16, 16]) palm(px + dx, pz + 4);
+      enemies('dicer', px, pz + 4, 2, 14);
+    },
+  });
+  billboard(-30, 55, 0, 'SALT AIR\nHOT DICE', '#1d3557', '#ffd23f');
+  billboard(30, 55, 0, 'TAFFY\n2 FOR 1', '#ff7eb6', '#fff6e0');
+
+  // ----- Out of town -----
+  building({
+    name: 'Seaside Motel', x: -150, z: -10, w: 40, d: 12, h: 4.5, color: 0xffe8d6, trim: 0x2a9d8f, tier: 2, sign: 'MOTEL', signColor: '#2ee6d6', mapColor: '#2a9d8f',
+    doors: [{ side: 's', at: -12, width: 2.4 }, { side: 's', at: 0, width: 2.4 }, { side: 's', at: 12, width: 2.4 }],
+  });
+  container('locker', -162, -12, 2);
+  container('crate', -150, -12, 2);
+  container('safe', -138, -12, 2);
+  enemies('slotbot', -150, 6, 1);
+  enemies('shark', -130, 6, 1);
+  building({
+    name: 'Bait & Boat Rental', x: 150, z: 0, w: 22, d: 14, h: 4.5, color: 0x6b705c, trim: 0x1b0f2b, tier: 2, sign: 'BOATS', signColor: '#5ee27a', mapColor: '#6b705c',
+    doors: [{ side: 'w', at: 0, width: 3 }],
+  });
+  container('register', 145, -3, 2);
+  container('locker', 157, 3, 2);
+  enemies('dicer', 130, 0, 2, 10);
+  building({
+    name: 'Old Arcade Warehouse', x: -140, z: -150, w: 30, d: 20, h: 6, color: 0x78716c, trim: 0x292524, tier: 2, mapColor: '#57534e',
+    doors: [{ side: 'e', at: 0, width: 5 }],
+  });
+  for (const [x, z] of [[-148, -156], [-134, -156], [-146, -144]]) container('crate', x, z, 2);
+  container('safe', -152, -144, 3);
+  crateStack(-136, -146);
+  enemies('slotbot', -140, -150, 2, 10);
+
+  const extracts = [
+    { name: 'Pier Speedboat', x: 0, z: 230 },
+    { name: 'Beach Bus', x: -H + 25, z: 125 },
+    { name: 'Parking Garage', x: H - 25, z: -H + 25 },
+    { name: 'Train Depot', x: -H + 25, z: -H + 25 },
+  ];
+  k.outposts({
+    exits: extracts,
+    names: ['Clam Shack', 'Lobster Pot', 'Gull Motel', 'Mini Golf', 'Sea Breeze Inn', 'Tackle Box', 'Funnel Cake Hut', 'Lucky Lagoon'],
+    colors: [0xffe8d6, 0x2a9d8f, 0xe76f51, 0xf4a261, 0x457b9d, 0xffb3c1], inner: 120, outer: H - 22, count: 8,
+    avoid: (x, z) => z > 60 || Math.abs(x) < 20 || Math.abs(z - 40) < 18,
+  });
+  scatter(420, (x, z) => {
+    const r = Math.random();
+    if (r < 0.55) palm(x, z);
+    else if (r < 0.85) rock(x, z, 0.7 + Math.random() * 1.6);
+    else crateStack(x, z);
+  }, (x, z) => z > 84 || Math.abs(x) < 14 || Math.abs(z - 40) < 13 || extracts.some((e) => Math.hypot(x - e.x, z - e.z) < 22));
+  for (let i = 0; i < 16; i++) enemies('dicer', (Math.random() * 2 - 1) * H * 0.85, -H * 0.85 + Math.random() * (H * 0.85 + 70), 1);
+  for (let i = 0; i < 5; i++) enemies('shark', (Math.random() * 2 - 1) * H * 0.85, -H * 0.85 + Math.random() * (H * 0.85 + 70), 1);
+  for (let i = 0; i < 40; i++) {
+    const x = (Math.random() * 2 - 1) * (H - 20);
+    const z = -H + 20 + Math.random() * (H + 60);
+    if (zones.some((zn) => Math.abs(x - zn.x) < zn.w / 2 + 4 && Math.abs(z - zn.z) < zn.d / 2 + 4)) continue;
+    container('crate', x, z, 1);
+  }
+  fire(-40, 130);
+  fire(60, 138);
+  rock(-200, 145, 2.4);
+  rock(205, 140, 2.8);
+
+  return {
+    ...cas,
+    extracts,
+    spawns: [[-230, -230], [0, -238], [230, -230], [-238, -90], [238, -90], [-238, 20], [238, 20], [-200, 120], [200, 120], [-120, -235], [120, -235], [-90, 130]],
+  };
+}
+
+const BUILDERS = { training: trainingFloor, vegas: lostVegas, boardwalk: neonBoardwalk, frost: frostbitePeaks, bayou: bayouRoyale, tequila: wineCountry, bunker: theBunker, lounge: theLounge };

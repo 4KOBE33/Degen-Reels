@@ -185,6 +185,7 @@ function reelOdds(tier) {
 // The "what's new" card, shown once after an update.
 const WHATS_NEW = {
   88: [
+    ['🎡', 'New map: Neon Boardwalk', 'A seaside strip at sunset: an arcade row on the boardwalk, a beach full of umbrellas, the Lucky Lighthouse, and a pier out to the Big Wheel. Bust Commodore Clams in the Salty Sevens.'],
     ['🚨', 'Heat', 'Bust machines and the House notices: up to five stars. Every star adds 15% to machine chips, but it sends hunter crews after you. Lie low (or bust the crew) to cool off.'],
     ['💬', 'Emotes', 'Press J to say something over your head: Jackpot!, Too easy, Let it ride... Your party sees it. Going down? It calls for a revive.'],
     ['💎', 'Better vault loot', 'Vault chests never drop Common guns, and top-tier crates roll better rarities.'],
@@ -580,7 +581,7 @@ export class Hub {
   // Step 1: where are we going? Big map tiles (and the tutorial), nothing else to think about.
   renderMapPick() {
     const d = this.data;
-    const order = ['lounge', 'vegas', 'bayou', 'frost', 'tequila', 'bunker'].filter((id) => MAPS[id]);
+    const order = ['lounge', 'vegas', 'bayou', 'boardwalk', 'frost', 'tequila', 'bunker'].filter((id) => MAPS[id]);
     const partyMember = this.net && this.net.inParty && !this.net.isHost;
     const tiles = order.map((id) => {
       const m = MAPS[id];
@@ -1960,7 +1961,7 @@ export class Hub {
       case 'allmaps': this.showMaps = !this.showMaps; break;
       case 'mapstep': {
         if (this.net && this.net.inParty && !this.net.isHost) { this.toast('The party leader picks the map.'); return; }
-        const order = ['lounge', 'vegas', 'bayou', 'frost', 'tequila', 'bunker'].filter((id) => MAPS[id]);
+        const order = ['lounge', 'vegas', 'bayou', 'boardwalk', 'frost', 'tequila', 'bunker'].filter((id) => MAPS[id]);
         const at = Math.max(0, order.indexOf(d.selectedMap));
         const next = order[(at + Number(b.dataset.d) + order.length) % order.length];
         save.update((x) => { x.selectedMap = next; });

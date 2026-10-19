@@ -156,6 +156,7 @@ export const BOSS_THEMES = {
   frost: { name: 'The Snow Baron', body: 0xbfe9ff, top: 0x1e3a5f, eye: 0x2ee6d6, crown: 0xe0f2fe, weak: 'THE ICE HEART', look: 'ice', rain: '❄️ AVALANCHE!', adds2: ['roller', 'roller'], adds3: ['bouncer', 'roller', 'dicer'], summon: ['roller', 'dicer'] },
   bayou: { name: 'Boss Gator', body: 0x4d7c0f, top: 0x3f2a14, eye: 0xfacc15, crown: 0x84cc16, weak: 'THE GOLD BUCKLE', look: 'gator', rain: '🐊 SWAMP STORM!', adds2: ['shark', 'shark'], adds3: ['bouncer', 'shark', 'shark'], summon: ['shark', 'dicer'] },
   tequila: { name: 'Baron Vino', body: 0x7f1d3a, top: 0x2b0f1c, eye: 0xffd23f, crown: 0x6b21a8, weak: 'THE LABEL', look: 'wine', rain: '🍷 WINE RAIN!', adds2: ['roller', 'roller'], adds3: ['dealer', 'dicer', 'dicer'], summon: ['roller', 'dicer'] },
+  boardwalk: { name: 'Commodore Clams', body: 0x2a9d8f, top: 0x1d3557, eye: 0xffd23f, crown: 0xffb703, weak: 'THE PEARL', look: 'crown', rain: '🌊 TIDAL WAVE!', adds2: ['roller', 'roller'], adds3: ['bouncer', 'roller', 'dicer'], summon: ['roller', 'dicer'] },
   bunker: { name: 'The Enforcer', body: 0x1f2937, top: 0x111827, eye: 0xff3fa4, crown: 0xd4a63a, weak: 'THE BADGE', look: 'suit', rain: '💣 BOMBARDMENT!', adds2: ['bouncer', 'bouncer'], adds3: ['dealer', 'bouncer'], summon: ['bouncer', 'dicer'] },
 };
 export const bossTheme = (mapId) => BOSS_THEMES[mapId] || BOSS_THEMES.vegas;

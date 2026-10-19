@@ -92,6 +92,7 @@ const THEMES = {
   tequila: { wood: 0xd9b27c, dark: 0x6b4423, metal: 0x8b6b4a, door: 0xa47e58, accent: 0x7f1d3a, trim: 0xb08d57, extra: 'wine', names: { crate: 'Wine Crate', locker: 'Wine Barrel', safe: 'Strongbox' } },
   frost: { wood: 0x9c7b5b, dark: 0x4e342e, metal: 0x4f7cac, door: 0x6b98c8, accent: 0x2ee6d6, trim: 0xcbd5e1, extra: 'snow', names: { crate: 'Supply Crate', locker: 'Ski Locker' } },
   bayou: { wood: 0x8a7a48, dark: 0x4a3f22, metal: 0x4f6b4a, door: 0x6b8a5e, accent: 0xffd23f, trim: 0x8a7a5a, extra: 'moss', names: { crate: 'Tackle Crate', locker: 'Rusty Locker' } },
+  boardwalk: { wood: 0xd4a373, dark: 0x7f5539, metal: 0x5a8fa8, door: 0x7fb3c8, accent: 0xff6b6b, trim: 0xf1faee, extra: 'chips', names: { crate: 'Beach Crate', locker: 'Cabana Locker' } },
   bunker: { wood: 0x5b6b34, dark: 0x343f1f, metal: 0x4b5563, door: 0x6b7280, accent: 0xff3fa4, trim: 0xa3a3a3, extra: 'stencil', names: { crate: 'Ammo Crate', locker: 'Gun Locker' } },
 };
 
