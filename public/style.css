@@ -282,6 +282,10 @@ input#lookName { width: 100%; max-width: 360px; padding: 10px 12px; border: 4px 
 #intro .kicker { font-family: var(--display); color: #ffb3c1; font-size: 20px; }
 #intro h2 { font-size: 64px; }
 #intro.show { animation: intro 5s ease-out forwards; }
+#intro .introrule { display: inline-grid; gap: 4px; margin-top: 12px; padding: 10px 18px; border-radius: 14px; background: rgba(27, 15, 43, 0.82); border: 3px solid #ffd23f; box-shadow: 0 0 24px rgba(255, 210, 63, 0.45); text-shadow: none; }
+#intro .introrule b { font: 400 26px var(--display); letter-spacing: 1px; color: #ffd23f; }
+#intro .introrule span { font-size: 15px; color: #fff6e0; }
+.rulechip { display: inline-block; margin-left: 4px; padding: 1px 7px; border-radius: 8px; font-size: 11px; font-weight: 900; letter-spacing: 0.5px; background: #ffd23f; color: var(--ink); vertical-align: 1px; }
 @keyframes intro { 0% { opacity: 0; transform: translate(-50%, 20px); } 10%, 75% { opacity: 1; transform: translate(-50%, 0); } 100% { opacity: 0; } }
 
 #bag { position: fixed; inset: 0; background: rgba(18, 8, 33, 0.78); backdrop-filter: blur(3px); display: flex; align-items: safe center; justify-content: center; padding: 16px; overflow-y: auto; }

@@ -198,4 +198,6 @@ export const HAT_UNLOCKS = {
 export const RAIDER_NAMES = [
   'Lucky Lou', 'Big Stack Betty', 'Slots McGee', 'Snake Eyes', 'Pit Boss Pete', 'High Roller Hal',
   'Double Down Dot', 'Whale Wendell', 'Loaded Lola', 'Busted Bob', 'Martingale Mo', 'Chip Chipperson',
+  'Comp Card Carl', 'Free Spin Fran', 'Jackpot Jo', 'Split Aces Sid', 'Nickel Nora', 'Craps Craig',
+  'Keno Kim', 'Baccarat Bea', 'Roulette Rita', 'All-In Archie', 'Tilted Ted', 'Bluffing Bev',
 ];

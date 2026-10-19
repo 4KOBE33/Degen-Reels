@@ -6,6 +6,7 @@ import { resolve } from './physics.js';
 import { fullAmmo, itemInfo, isConsumable, slotsUsed, holdRoom } from './items.js';
 import { smoothMove } from './netsmooth.js';
 import { sfx } from './audio.js';
+import { live } from './rules.js';
 
 export class Combatant {
   constructor(raid, { name, look, isPlayer = false, team = 'raider' }) {
@@ -303,13 +304,13 @@ export class Combatant {
     if (this.wantJump && !this.downed && this.onGround && canMove && this.stamina >= PLAYER.jumpCost * 0.5) {
       this.stamina = Math.max(0, this.stamina - PLAYER.jumpCost);
       this.staminaWait = PLAYER.staminaDelay;
-      this.vel.y = PLAYER.jump;
+      this.vel.y = PLAYER.jump * live.jump;
       this.onGround = false;
       this.char.jump();
       if (this.isPlayer) sfx.jump();
     }
 
-    this.vel.y -= PLAYER.gravity * dt;
+    this.vel.y -= PLAYER.gravity * live.gravity * dt;
     this.pos.addScaledVector(this.vel, dt);
     const wasOnGround = this.onGround;
     const r = resolve(this.pos, this.vel, PLAYER.radius, this.raid.map);

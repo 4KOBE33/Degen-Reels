@@ -4,10 +4,11 @@ import * as THREE from 'three';
 import { ITEMS } from './config.js';
 import { part, toon, canvasTexture } from './toon.js';
 import { sfx } from './audio.js';
+import { live } from './rules.js';
 
 const SPEED = 17;
 const LIFT = 4.5;
-const GRAVITY = 22;
+const G0 = 22;
 
 // Dice faces: 1-6 pips on a red casino die.
 const PIPS = {
@@ -161,7 +162,7 @@ export class Throwables {
   // Move one step: gravity, bounces off walls and floors. Returns true on a hard bounce.
   step(g, dt) {
     let bounced = false;
-    g.vel.y -= GRAVITY * dt;
+    g.vel.y -= (G0 * live.gravity) * dt;
     const speed = g.vel.length();
     if (speed > 0.01) {
       const dir = g.vel.clone().divideScalar(speed);
@@ -502,7 +503,7 @@ export class Throwables {
       const vh = SPEED * Math.cos(pitch);
       const vy = SPEED * Math.sin(pitch) + LIFT;
       const h0 = from.y - to.y;
-      const tLand = (vy + Math.sqrt(Math.max(0, vy * vy + 2 * GRAVITY * h0))) / GRAVITY;
+      const tLand = (vy + Math.sqrt(Math.max(0, vy * vy + 2 * (G0 * live.gravity) * h0))) / (G0 * live.gravity);
       const err = Math.abs(vh * tLand - d);
       if (!best || err < best.err) best = { dir, err };
     }

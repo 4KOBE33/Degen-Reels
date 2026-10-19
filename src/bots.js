@@ -3,7 +3,7 @@
 // one of them can actually play: they strafe, jump, track you, go for headshots, switch guns for
 // the range, back off to heal, and throw things.
 import * as THREE from 'three';
-import { WEAPONS, RAIDERS, PLAYER } from './config.js';
+import { WEAPONS, RAIDERS, PLAYER, EXTRACT_RADIUS } from './config.js';
 
 const RESCUE_LINES = ['Hang on, I got you!', "Don't bleed on my shoes.", 'Coming! Stay down!', 'You owe me one.', 'Nobody gets left in Lost Vegas.'];
 // Bots' extra aim error, and extra pause between shots, by gun.
@@ -167,6 +167,26 @@ export class RaiderBrain {
     return best;
   }
 
+  // Waiting on a ride: fight from inside the circle instead of strafing out of it and missing the
+  // pickup (then calling it again, and again).
+  holdExit() {
+    const { c } = this;
+    if (this.goalKind !== 'exit' || !this.goal || this.age <= this.leaveAt) return;
+    const dx = this.goal.x - c.pos.x;
+    const dz = this.goal.z - c.pos.z;
+    const d = Math.hypot(dx, dz);
+    if (d > EXTRACT_RADIUS + 6 || d < EXTRACT_RADIUS * 0.5) return;
+    c.move.set(dx / d, dz / d);
+    c.sprint = false;
+  }
+
+  // Nothing left to shoot with: both guns empty and no Ammo Boxes to reload from.
+  dry() {
+    const { c } = this;
+    if (c.count('ammo')) return false;
+    return c.weapons.some(Boolean) && !c.weapons.some((g) => g && (!Number.isFinite(g.ammo) || g.ammo > 0));
+  }
+
   // ---------- deciding what to do ----------
 
   think() {
@@ -189,6 +209,11 @@ export class RaiderBrain {
       // Whoever's shooting at me first, then the closest.
       const score = d - (a === c.lastAttacker ? 25 : 0) - (person && this.hostile ? 8 : 0);
       if (score < bestScore) { bestScore = score; best = a; }
+    }
+    // Out of ammo: no point squaring up to anything. Grab what's lying around and head home.
+    if (this.dry()) {
+      if (best && best.pos.distanceTo(c.pos) > 4) best = null;
+      if (this.leaveAt > this.age) this.leaveAt = this.age;
     }
     if (best !== this.target) this.lastSeen = null; // where the old one was doesn't help find the new one
     if (best && best !== this.target) {
@@ -276,7 +301,7 @@ export class RaiderBrain {
     const t = this.target;
     // Only fight what it's seen: a target picked through a wall it's never laid eyes on would have
     // it backing and strafing straight into that wall. Keep doing its thing until it shows up.
-    if (t && t.alive && (this.los || this.lastSeen)) this.fight(t, dt);
+    if (t && t.alive && (this.los || this.lastSeen)) { this.fight(t, dt); this.holdExit(); }
     else if (this.rescue) this.doRescue(dt);
     else if (this.loot && raid.pickups.includes(this.loot)) {
       if (this.steer(this.loot.spot, dt) < 1.4) {
@@ -330,7 +355,9 @@ export class RaiderBrain {
       if (want !== c.active && c.weapons[want]) c.switchTo(want);
     }
     const w = WEAPONS[c.weapon];
-    const ideal = IDEAL_RANGE[c.weapon] || 12;
+    // Things that only hit up close (sharks, bouncers, gators, rollers): keep them at arm's length.
+    const brawler = t.team === 'machine' && t.def && t.def.melee;
+    const ideal = Math.max(IDEAL_RANGE[c.weapon] || 12, brawler && !w.melee ? 9 : 0);
 
     // Hurt? Back off and heal when there's a moment.
     const hurting = c.hp < 40 && (c.count('bandage') || c.count('soda'));

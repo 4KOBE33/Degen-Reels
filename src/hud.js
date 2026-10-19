@@ -239,7 +239,7 @@ export class Hud {
     if (this.slow <= 0) {
       this.slow = 0.2;
       this.set('timer', `⏰ ${clock(raid.timeLeft)}`);
-      this.set('zone', `${escapeHtml(raid.map.zoneName(p.pos.x, p.pos.z))} <span class="tier t${raid.map.tierAt(p.pos.x, p.pos.z)}">${['', 'SAFE-ISH', 'RISKY', 'DEADLY', 'VAULT'][raid.map.tierAt(p.pos.x, p.pos.z)]}</span>`);
+      this.set('zone', `${escapeHtml(raid.map.zoneName(p.pos.x, p.pos.z))} <span class="tier t${raid.map.tierAt(p.pos.x, p.pos.z)}">${['', 'SAFE-ISH', 'RISKY', 'DEADLY', 'VAULT'][raid.map.tierAt(p.pos.x, p.pos.z)]}</span>${raid.rule ? ` <span class="rulechip" title="${escapeHtml(raid.rule.desc)}">${raid.rule.icon} ${escapeHtml(raid.rule.name)}</span>` : ''}`);
       this.set('exits', raid.extracts.filter((e) => e.active).map((e) => `<div>🟢 ${e.name} · ${Math.round(Math.hypot(e.x - p.pos.x, e.z - p.pos.z))}m ${bearing(p, e.x, e.z)}</div>`).join(''));
       const now = performance.now();
       this.feedItems = this.feedItems.filter((f) => now - f.t < 7000);
@@ -798,7 +798,8 @@ export class Hud {
   raidIntro(raid) {
     const open = raid.extracts.filter((e) => e.active).map((e) => e.name).join(' and ');
     const el = $('intro');
-    el.innerHTML = `<div class="kicker">DEPLOYING TO</div><h2>${escapeHtml(raid.map.name.toUpperCase())}</h2><p>${open ? `Exits open: <b>${open}</b>. Loot, survive, get out.` : 'Gamble, duel, and cash out at the door when you\'re done.'}</p>`;
+    const rule = raid.rule ? `<div class="introrule"><b>${raid.rule.icon} HOUSE RULES: ${escapeHtml(raid.rule.name.toUpperCase())}</b><span>${escapeHtml(raid.rule.desc)}</span></div>` : '';
+    el.innerHTML = `<div class="kicker">DEPLOYING TO</div><h2>${escapeHtml(raid.map.name.toUpperCase())}</h2><p>${open ? `Exits open: <b>${open}</b>. Loot, survive, get out.` : 'Gamble, duel, and cash out at the door when you\'re done.'}</p>${rule}`;
     el.classList.remove('show');
     void el.offsetWidth;
     el.classList.add('show');

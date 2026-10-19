@@ -17,6 +17,7 @@ import { Throwables } from './throwables.js';
 import { NavGrid } from './nav.js';
 import { Recorder, Replay } from './replay.js';
 import { RaiderBrain } from './bots.js';
+import { rollRule, applyRule } from './rules.js';
 import { ItemPickup } from './pickups.js';
 import {
   makeGun, makeItem, rollLoot, randInt, pick, addToList, itemInfo, isGun, rollRarity, fullAmmo, holdRoom, holdLimitText,
@@ -308,7 +309,13 @@ export class Raid {
       this.spawnMachine(s.type, s.x + (Math.random() - 0.5) * 10, s.z + (Math.random() - 0.5) * 10);
     }
     // Bayou ponds hide gators.
-    if (this.mapId === 'bayou') for (const pd of this.map.hazards.ponds) this.spawnMachine('gator', pd.x, pd.z);
+    // (Never right next to where people drop in: getting eaten 10 seconds in is no fun.)
+    if (this.mapId === 'bayou') {
+      for (const pd of this.map.hazards.ponds) {
+        if (this.map.spawns.some(([sx, sz]) => Math.hypot(sx - pd.x, sz - pd.z) < pd.r + 25)) continue;
+        this.spawnMachine('gator', pd.x, pd.z);
+      }
+    }
     for (let i = 0; i < Math.round((this.map.raiders ?? RAIDERS.count) * (this.map.raiderScale || 1)); i++) this.spawnRaider();
   }
 
@@ -321,7 +328,7 @@ export class Raid {
 
   spawnRaider() {
     const taken = new Set(this.combatants.map((c) => c.name));
-    const name = pick(RAIDER_NAMES.filter((n) => !taken.has(n))) || 'Some Raider';
+    const name = pick(RAIDER_NAMES.filter((n) => !taken.has(n))) || `${pick(RAIDER_NAMES)} Jr.`;
     const c = new Combatant(this, { name, look: randomLook() });
     const [sx, sz] = pick(this.map.spawns);
     const [x, z] = this.openSpot(sx + (Math.random() - 0.5) * 10, sz + (Math.random() - 0.5) * 10);
@@ -364,6 +371,9 @@ export class Raid {
       this.scene.remove(this.player.char.root);
       this.combatants = this.combatants.filter((c) => c !== this.player);
     }
+    // House Rules: a twist for this raid (none in the Lounge or the tutorial).
+    this.ruleId = this.map.safe || opts.tutorial || this.map.tutorial ? null : rollRule(this.seed);
+    this.rule = applyRule(this.ruleId);
     if (opts.client) {
       // Clients don't run machines or bots; they arrive in the host's snapshots.
       for (const m of this.machines) this.scene.remove(m.group);
@@ -469,7 +479,10 @@ export class Raid {
     this.kidnap = !this.map.safe && !opts.tutorial && mobDebt() ? new Kidnap(this) : null;
     if (!this.tutorialMode) save.update((d) => { d.stats.raids++; });
     this.hud.raidIntro(this);
-    if (!this.isClient && !this.map.safe && !this.tutorialMode) { this.placeBounty(); this.placeGolden(); }
+    if (!this.isClient && !this.map.safe && !this.tutorialMode) {
+      for (let i = 0; i < ((this.rule && this.rule.bounties) || 1); i++) this.placeBounty();
+      this.placeGolden();
+    }
   }
 
   // ---------- supply drop ----------
@@ -1437,7 +1450,7 @@ export class Raid {
           if (this.isClient && c.isPlayer) this.net.send({ k: 'shot', ...shot });
           else if (this.isHost) this.net.ev({ k: 'tr', ...shot }, muzzle);
         }
-        if (hit.target) this.damage(hit.target, damage * hit.crit, c, hit.point, hit.crit > 1);
+        if (hit.target) this.damage(hit.target, damage * hit.crit * (hit.crit > 1 && this.rule && this.rule.crit ? this.rule.crit : 1), c, hit.point, hit.crit > 1);
         else if (hit.hit) this.fx.puff(hit.point, 0xfff6e0, 0.12);
       }
     }
@@ -1609,6 +1622,8 @@ export class Raid {
     if (attacker && attacker.team === 'machine' && target.brain && !target.human) amount *= 0.3;
     // The boss's backup hits softer on easier maps.
     if (attacker && attacker.addDmg) amount *= attacker.addDmg;
+    // Glass Cannon: everything hits harder. (Once: a hit a friend already scaled arrives fromNet.)
+    if (this.rule && this.rule.dmg && !fromNet) amount *= this.rule.dmg;
     amount = Math.round(amount);
     if (amount <= 0) return;
     // Mid-roll: it whiffs.
@@ -1917,7 +1932,8 @@ export class Raid {
     // Where's the bounty? A tip every so often.
     const bt = this.bountyOn;
     if (bt && this.active) {
-      if (!bt.alive || !bt.bounty) { this.bountyOn = null; this.bountyTip = null; }
+      // Claimed (or gone): tips move on to the next one, if there's another price on someone's head.
+      if (!bt.alive || !bt.bounty) { this.bountyOn = this.bots.map((b) => b.c).find((c) => c.alive && c.bounty) || null; this.bountyTip = null; this.bountyPing = 20; }
       else if ((this.bountyPing -= dt) <= 0) {
         this.bountyPing = 45;
         const z = this.map.zones.find((q) => Math.abs(bt.pos.x - q.x) < q.w / 2 && Math.abs(bt.pos.z - q.z) < q.d / 2);

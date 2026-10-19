@@ -411,7 +411,7 @@ export class Container {
     // A crate set up with exactly what's in it (the tutorial's), otherwise a roll of the dice.
     const fixed = this.fixedLoot;
     this.fixedLoot = null;
-    const n = fixed ? fixed.length : randInt(a, b) + (raid.map.lootRolls || 0);
+    const n = fixed ? fixed.length : randInt(a, b) + (raid.map.lootRolls || 0) + ((raid.rule && raid.rule.lootRolls) || 0);
     for (let i = 0; i < n; i++) {
       const loot = fixed ? fixed[i] : rollLoot(this.tier);
       const at = this.spot.clone().add(new THREE.Vector3((Math.random() - 0.5) * 2, 0, (Math.random() - 0.5) * 2));
