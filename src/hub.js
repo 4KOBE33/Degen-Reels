@@ -182,6 +182,19 @@ function reelOdds(tier) {
   return { legendary: gun * RARITY_BY_TIER[tier][3] + legItems * 100, epic: gun * RARITY_BY_TIER[tier][2], gun: gun * 100 };
 }
 
+// The "what's new" card, shown once after an update.
+const WHATS_NEW = {
+  87: [
+    ['🎲', 'House Rules', 'About half of all raids now roll a twist: Low Gravity, Glass Cannon, Jackpot Night, Headhunter or Double Bounty. Check the top-left panel.'],
+    ['🍸', 'Happy Hour', 'Somewhere early in most raids: one minute of double chips from machines and crates.'],
+    ['🔥', 'Extract streaks', 'Every raid you survive in a row adds +5% to the chips you bring home (up to +25%). Dying resets it.'],
+    ['🪙', 'Double or Nothing', 'Made it out with chips? Flip a coin for them on the results screen.'],
+    ['💎', 'Slots jackpot', 'Lucky Slots has a progressive jackpot: three 💎 anywhere takes the pot. The Lounge cabinet plays Lucky Slots now too.'],
+    ['🂠', 'Hi-Lo', 'A new Back Room game: call the next card higher or lower and ride the multiplier.'],
+    ['🚀', 'Crash auto cash-out, more Roulette bets', 'Set Crash to cash out at 1.5x-10x by itself. Roulette adds 1-18, 19-36 and the dozens.'],
+  ],
+};
+
 const GAMES = [
   ['blackjack', '🃏', 'Blackjack', 'Beat the dealer to 21'],
   ['plinko', '🔴', 'Plinko', 'Drop a ball, pray for the edges'],
@@ -919,10 +932,29 @@ export class Hub {
     document.body.classList.remove('titleup');
     this.render();
     this.dailyBonus();
+    this.whatsNew();
   }
 
   // Come back every day for chips: the streak climbs for a week, then the 7th day pays big and it
   // keeps going. Miss a day and it starts over. (Not before the tutorial, which has its own gift.)
+  // Once per update: a card with what's new, after the daily bonus card (if that's up) is closed.
+  whatsNew() {
+    if (!this.data.tutorialDone) return;
+    let seen = 0;
+    try { seen = Number(localStorage.getItem('bth-seen-build')) || 0; } catch (e) { return; }
+    const notes = WHATS_NEW[BUILD];
+    if (!notes || seen >= BUILD) return;
+    if (document.getElementById('dailyBonus')) { setTimeout(() => this.whatsNew(), 800); return; }
+    if (!$('hub') || $('hub').hidden) return;
+    try { localStorage.setItem('bth-seen-build', String(BUILD)); } catch (e) { /* fine */ }
+    const el = document.createElement('div');
+    el.id = 'dailyBonus';
+    el.className = 'whatsnew';
+    el.innerHTML = `<div class="dcard"><h3>✨ New in Build ${BUILD}</h3><ul class="wnlist">${notes.map(([icon, title, text]) => `<li><span>${icon}</span><div><b>${title}</b><small>${text}</small></div></li>`).join('')}</ul><button class="btn big" data-close="1">Let's go!</button></div>`;
+    el.addEventListener('click', (e) => { if (e.target === el || e.target.closest('[data-close]')) el.remove(); });
+    document.body.appendChild(el);
+  }
+
   dailyBonus() {
     const d = this.data;
     if (!d.tutorialDone) return;
