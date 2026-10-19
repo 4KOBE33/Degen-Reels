@@ -1393,6 +1393,7 @@ export class Hub {
     }
     g.mult = Math.round(g.mult * hiloPays(r, dir) * 100) / 100;
     g.streak++;
+    save.update((x) => { x.stats.hiloCalls = (x.stats.hiloCalls || 0) + 1; });
     sfx.pickup();
     // Capped at 5,000x: past that the house just pays you.
     if (g.mult >= 5000) this.cashHilo();

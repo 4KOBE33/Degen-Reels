@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import { save } from './save.js';
 import { part, toon } from './toon.js';
-import { rollLoot, randInt } from './items.js';
+import { rollLoot, randInt, makeGun } from './items.js';
 import { sfx } from './audio.js';
 import { keyName } from './keys.js';
 
@@ -414,6 +414,8 @@ export class Container {
     const n = fixed ? fixed.length : randInt(a, b) + (raid.map.lootRolls || 0) + ((raid.rule && raid.rule.lootRolls) || 0);
     for (let i = 0; i < n; i++) {
       const loot = fixed ? fixed[i] : rollLoot(this.tier);
+      // The vault's chests never hand you a plain Common gun: you broke into the vault for this.
+      if (this.kind === 'vault' && loot.id === 'gun' && loot.rarity < 1) Object.assign(loot, makeGun(loot.kind, 1));
       const at = this.spot.clone().add(new THREE.Vector3((Math.random() - 0.5) * 2, 0, (Math.random() - 0.5) * 2));
       if (loot.chips) this.raid.chips.spawnBurst(at.setY(this.spot.y + this.h + 0.3), loot.chips * this.raid.chipBoost(), null, { speed: 1.5 });
       else {

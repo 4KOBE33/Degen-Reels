@@ -89,7 +89,7 @@ export const RARITY_BY_TIER = {
   1: [80, 18, 2, 0],
   2: [66, 26, 7.5, 0.5],
   3: [55, 30, 13, 2],
-  4: [38, 32, 23, 7],
+  4: [30, 35, 27, 8],
 };
 
 // Everything that isn't a gun.

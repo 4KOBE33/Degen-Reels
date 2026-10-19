@@ -118,6 +118,8 @@ export const ACHIEVEMENTS = [
   { id: 'mines10', group: 'Gambling', icon: '💎', tier: 2, name: 'Minesweeper', desc: 'Cash out of Mines after finding 10 gems', prog: (d) => [Math.min(S(d).minesBest, 10), 10] },
   { id: 'plinko24', group: 'Gambling', icon: '🔴', tier: 2, name: 'Edge Lord', desc: 'Land a 24x or better in Plinko', prog: (d) => [Math.min(S(d).plinkoBest, 24), 24] },
   { id: 'reels50', group: 'Gambling', icon: '🎰', tier: 1, name: 'Reel Regular', desc: 'Spin Lucky Slots 50 times', prog: (d) => [S(d).reelsPulled, 50] },
+  { id: 'streak5', group: 'Survival', icon: '🔥', tier: 2, name: 'On Fire', desc: 'Get out of 5 raids in a row', prog: (d) => [Math.min(S(d).bestExtractStreak || 0, 5), 5] },
+  { id: 'rules5', group: 'Survival', icon: '🎲', tier: 2, name: 'Rules Lawyer', desc: 'Extract under all five House Rules', prog: (d) => [Math.min(Object.keys(S(d).rulesWon || {}).length, 5), 5] },
   { id: 'hilo10', group: 'Gambling', icon: '🂠', tier: 2, name: 'Card Sharp', desc: 'Call 10 cards in a row in Hi-Lo', prog: (d) => [Math.min(S(d).hiloBest || 0, 10), 10] },
   { id: 'jackpot1', group: 'Gambling', icon: '💎', tier: 3, name: 'Diamond Hands', desc: 'Hit the Lucky Slots jackpot', prog: (d) => [Math.min(S(d).jackpots || 0, 1), 1] },
   // Levels

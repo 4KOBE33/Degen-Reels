@@ -856,6 +856,8 @@ export class Raid {
       if (counts) {
         d.stats.extractStreak = streak + 1;
         d.stats.bestExtractStreak = Math.max(d.stats.bestExtractStreak || 0, streak + 1);
+        // Which House Rules you've made it out under (for Rules Lawyer).
+        if (this.ruleId) d.stats.rulesWon = { ...d.stats.rulesWon, [this.ruleId]: ((d.stats.rulesWon || {})[this.ruleId] || 0) + 1 };
       }
       for (const raw of items) {
         // Free-loadout gear you got out with is yours now.
