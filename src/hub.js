@@ -1126,12 +1126,23 @@ export class Hub {
 
   betChips(disabled = false) {
     // Everything you can bet, plus a peek at the next one to unlock (not a wall of locked chips).
-    let teased = false;
-    return `<div class="betchips"><small>BET</small>${BETS.map((b) => {
+    const list = [];
+    for (const b of BETS) {
       const lock = betLock(b, this.data);
-      if (lock) { if (teased) return ''; teased = true; }
-      return `<button class="cchip c${b} ${b === this.bet ? 'on' : ''} ${lock ? 'locked' : ''}" data-act="bet" data-b="${b}" ${disabled ? 'disabled' : ''} title="${lock ? (b >= MILLION ? 'Unlocks once you have a million chips' : `Unlocks at level ${BET_LEVEL[b]}`) : ''}">${chipLabel(b)}${lock ? `<i>${lock}</i>` : ''}</button>`;
-    }).join('')}</div>`;
+      list.push({ b, lock });
+      if (lock) break;
+    }
+    const chip = ({ b, lock }) => `<button class="cchip c${b} ${b === this.bet ? 'on' : ''} ${lock ? 'locked' : ''}" data-act="bet" data-b="${b}" ${disabled ? 'disabled' : ''} title="${lock ? (b >= MILLION ? 'Unlocks once you have a million chips' : `Unlocks at level ${BET_LEVEL[b]}`) : ''}">${chipLabel(b)}${lock ? `<i>${lock}</i>` : ''}</button>`;
+    // A long list (high levels): four chips around your bet, with arrows to step up and down.
+    const WIN = 4;
+    if (list.length > 8) {
+      const at = Math.max(0, list.findIndex((c) => c.b === this.bet));
+      const from = Math.max(0, Math.min(list.length - WIN, at - 2));
+      const canDown = at > 0;
+      const canUp = at < list.length - 1 && !list[at + 1].lock;
+      return `<div class="betchips stepper"><small>BET</small><button class="cstep" data-act="betstep" data-d="-1" ${disabled || !canDown ? 'disabled' : ''} aria-label="Lower bet">‹</button>${list.slice(from, from + WIN).map(chip).join('')}<button class="cstep" data-act="betstep" data-d="1" ${disabled || !canUp ? 'disabled' : ''} aria-label="Raise bet">›</button></div>`;
+    }
+    return `<div class="betchips"><small>BET</small>${list.map(chip).join('')}</div>`;
   }
 
   renderReels() {
@@ -1918,7 +1929,13 @@ export class Hub {
         this.bet = Number(b.dataset.b);
         break;
       }
-      case 'machine': if (!(this.reels && this.reels.running)) { this.machine = i; this.reels = null; } break;
+      case 'betstep': {
+        const open = BETS.filter((v) => !betLock(v, d));
+        const at = open.indexOf(this.bet);
+        const to = open[Math.max(0, Math.min(open.length - 1, (at < 0 ? 0 : at) + Number(b.dataset.d)))];
+        if (to) this.bet = to;
+        break;
+      }
       case 'pull': this.pullReels(); return;
       case 'slotauto': {
         const n = Number(b.dataset.v);

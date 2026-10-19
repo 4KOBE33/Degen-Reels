@@ -1641,3 +1641,17 @@ body.scoped #crosshair, body.scoped #cdRing { display: none !important; }
 .dblres { margin: 0; font-weight: 900; font-size: 18px; }
 .dblres.win { color: #5ee27a; }
 .dblres.loss { color: #ff5d5d; }
+.betchips.stepper { display: flex !important; flex-wrap: wrap; align-items: center; justify-content: center; gap: 6px !important; }
+.betchips.stepper > small { flex-basis: 100%; text-align: center; }
+.cstep { width: 26px; height: 44px; border-radius: 10px; border: 2px solid rgba(255, 255, 255, 0.25); background: rgba(255, 255, 255, 0.08); color: #fff6e0; font: 400 24px var(--display); line-height: 1; cursor: pointer; padding: 0; }
+.cstep:disabled { opacity: 0.3; cursor: default; }
+.cstep:not(:disabled):hover { background: rgba(255, 210, 63, 0.25); }
+.gctrl .minecount { gap: 5px; }
+.gctrl .minecount .subtab { padding: 5px 9px; }
+/* Seven games and the Mob on one row, even on a laptop. */
+.gamecard { padding: 5px 10px 5px 7px; gap: 5px; }
+.gamecard .gi { font-size: 19px; }
+.gamecard b { font-size: 15px; letter-spacing: 0.5px; }
+@media (max-width: 1500px) { .mob small { display: none; } .gamecard b { font-size: 14px; } }
+@media (max-height: 820px) { .gview .plinko { max-width: 520px; } }
+@media (max-height: 700px) { .gview .plinko { max-width: 460px; } }
