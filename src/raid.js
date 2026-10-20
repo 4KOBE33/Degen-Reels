@@ -492,6 +492,7 @@ export class Raid {
     this.clearAirdrop();
     // A supply drop comes down a bit before halfway through (not in the Lounge or the tutorial).
     this.airdropAt = !this.map.safe && !opts.tutorial && !opts.client ? this.raidTime * (0.5 + Math.random() * 0.15) : -1;
+    this.airdropMore = [];
     // Happy Hour: a minute of double chips, somewhere in the first third of most raids.
     this.happyEnd = null;
     this.happyOver = false;
@@ -523,6 +524,9 @@ export class Raid {
     this.royalePlace = null;
     const p = this.player;
     if (!opts.client) {
+      // Supply drops: three of them, each inside the circle that's coming.
+      this.airdropAt = 95;
+      this.airdropMore = [250, 400];
       // Thin out the machines: they're loot and trouble now, not the main event.
       for (const m of this.machines) if (!m.isBoss && Math.random() < 0.6) { m.alive = false; this.scene.remove(m.group); }
       this.machines = this.machines.filter((m) => m.alive);
@@ -724,11 +728,16 @@ export class Raid {
       this.hud.toast('🍸 Last call: Happy Hour is over.');
     }
     if (this.airdropAt > 0 && this.active && !this.isClient && this.raidTime - this.timeLeft >= this.airdropAt) {
-      this.airdropAt = -1;
-      // Somewhere open, away from the edges.
+      this.airdropAt = this.airdropMore && this.airdropMore.length ? this.airdropMore.shift() : -1;
+      // Royale: the last one's beam goes (its crate stays where it landed).
+      if (this.airdrop && this.royale) { this.scene.remove(this.airdrop.g, this.airdrop.beam); this.airdrop = null; }
+      const ring = this.royale ? this.royale.state().next : null;
+      // Somewhere open, away from the edges (Royale: inside the next circle).
       for (let k = 0; k < 60; k++) {
-        const x = (Math.random() - 0.5) * this.map.half * 1.3;
-        const z = (Math.random() - 0.5) * this.map.half * 1.3;
+        const a = Math.random() * Math.PI * 2;
+        const rr = ring ? Math.sqrt(Math.random()) * ring.r * 0.7 : 0;
+        const x = ring ? ring.x + Math.cos(a) * rr : (Math.random() - 0.5) * this.map.half * 1.3;
+        const z = ring ? ring.z + Math.sin(a) * rr : (Math.random() - 0.5) * this.map.half * 1.3;
         if (this.map.isFree(x, z, 3) && (!this.map.casino || !this.inCasino(new THREE.Vector3(x, 0, z), 4))) { this.startAirdrop(x, z); break; }
       }
     }
@@ -751,8 +760,8 @@ export class Raid {
         this.fx.confetti(new THREE.Vector3(a.x, 1.5, a.z), 30);
         a.crate = new Container(this, { kind: 'drop', x: a.x, z: a.z, tier: 3 });
         this.containers.push(a.crate);
-        this.nav.cache.clear();
-        this.nav.edges.clear();
+        // The crate's in the way now: forget what the bots knew about that spot.
+        for (let cx = -3; cx <= 3; cx++) for (let cz = -3; cz <= 3; cz++) this.nav.cache.delete(this.nav.key(Math.round(a.x / 2) + cx, Math.round(a.z / 2) + cz));
       }
     } else if (a.crate && a.crate.opened) {
       this.scene.remove(a.beam);

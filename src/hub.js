@@ -187,6 +187,11 @@ function reelOdds(tier) {
 
 // The "what's new" card, shown once after an update.
 const WHATS_NEW = {
+  93: [
+    ['🛠️', 'Casino upgrades', 'At the Manager\'s desk: Billboards bring in more customers, Cocktail service puts a waitress on the floor (customers bet more), and Security puts a bouncer on the door (nobody ever catches your rigged tables).'],
+    ['🤑', 'Customers react', 'Customers pop little emoji bubbles when they win, lose, or catch a rigged table. Your floor gets a lot busier now too.'],
+    ['🪂', 'Royale supply drops', 'Three supply drops per Royale match, each landing inside the circle that\'s coming. Follow the gold beam.'],
+  ],
   92: [
     ['😈', 'Casino pranks', 'Friends visiting your casino? Open the Manager\'s desk and pull pranks on them: a fake million-chip jackpot, the bouncer throwing them out the door, an air horn, spinning them round, or shrinking them to bug size.'],
     ['🎟️', 'Cover charge', 'Charge friends to get into your casino. It goes straight in your vault.'],

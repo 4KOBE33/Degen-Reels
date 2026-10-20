@@ -1797,3 +1797,6 @@ body.scoped #crosshair, body.scoped #cdRing { display: none !important; }
 @media (max-width: 760px) { .bpfoot { grid-template-columns: 1fr; } }
 .mctitle .stars { color: var(--gold); letter-spacing: 2px; }
 .placebet { margin: 0; }
+.bups { display: grid; gap: 6px; margin-top: 12px; padding: 10px 12px; border-radius: 14px; background: rgba(255, 255, 255, 0.05); }
+.bups > b { font: 400 18px var(--display); color: var(--gold); letter-spacing: 0.5px; }
+.bups > div { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }

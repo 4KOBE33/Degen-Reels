@@ -60,6 +60,7 @@ export function casinoData(d = save.get()) {
     visits: c.visits || 0,
     rigWins: c.rigWins || 0,
     cover: c.cover || 0,
+    up: c.up || {},
   };
 }
 export function updateCasino(fn) { save.update((x) => { const c = casinoData(x); fn(c, x); x.casino = c; }); }
@@ -68,6 +69,14 @@ export function updateCasino(fn) { save.update((x) => { const c = casinoData(x);
 export function starsOf(c) { return Math.max(1, Math.min(5, 1 + Math.floor((appealOf(c) - 10) / 35))); }
 export const starText = (n) => '★'.repeat(n) + '☆'.repeat(5 - n);
 export const COVER_CHARGES = [0, 50, 250, 1000];
+
+// Upgrades for the whole place (bought once per level, kept forever).
+export const UPGRADES = {
+  ads: { name: '📣 Billboards', costs: [4000, 15000, 50000], blurb: '+25% more customers walking in, per level.' },
+  staff: { name: '💃 Cocktail service', costs: [6000, 25000], blurb: 'A waitress works the floor: customers bet 15% more, per level.' },
+  security: { name: '🕶️ Security', costs: [8000], blurb: 'A bouncer on the door. Customers never catch a rigged table.' },
+};
+export const upLevel = (c, k) => Math.min(UPGRADES[k].costs.length, (c.up && c.up[k]) || 0);
 
 // Things the owner can do to friends visiting. All harmless. Mostly.
 export const PRANKS = [
@@ -88,8 +97,8 @@ export function appealOf(c) {
 export function incomeRate(c) {
   const earners = Object.values(c.slots).map((s) => CASINO_ITEMS[s.id]).filter((it) => it && it.edge);
   if (!earners.length) return 0;
-  const busy = Math.min(1, 0.35 + appealOf(c) / 220);
-  return Math.round(earners.reduce((n, it) => n + it.edge, 0) * 150 * busy);
+  const busy = Math.min(1, (0.35 + appealOf(c) / 220) * (1 + upLevel(c, 'ads') * 0.25));
+  return Math.round(earners.reduce((n, it) => n + it.edge, 0) * 150 * busy * (1 + upLevel(c, 'staff') * 0.15));
 }
 export const AWAY_SHARE = 0.2;
 export const AWAY_HOURS = 6;
@@ -111,7 +120,7 @@ export function accrueAway(now = Date.now()) {
 // What goes over the wire (and to the raid) to build the place.
 export function casinoLayout(d = save.get()) {
   const c = casinoData(d);
-  return { name: c.name, slots: c.slots, rows: c.rows, cover: c.cover };
+  return { name: c.name, slots: c.slots, rows: c.rows, cover: c.cover, up: c.up };
 }
 
 // ---------- decor meshes ----------
@@ -178,6 +187,29 @@ function buildTableBase(g) {
   const top = part(new THREE.CylinderGeometry(2.4, 2.4, 0.06, 28), toon(0x1f8a4c), { ink: 0 });
   top.position.y = 1.12;
   g.add(leg, rim, top);
+}
+
+// Emoji bubbles, drawn once each.
+const BUBBLES = new Map();
+function bubbleTexture(emoji) {
+  if (BUBBLES.has(emoji)) return BUBBLES.get(emoji);
+  const tex = canvasTexture(128, 128, (c) => {
+    c.fillStyle = 'rgba(255,246,224,0.95)';
+    c.beginPath();
+    c.arc(64, 58, 50, 0, Math.PI * 2);
+    c.fill();
+    c.beginPath();
+    c.moveTo(54, 100);
+    c.lineTo(64, 124);
+    c.lineTo(76, 100);
+    c.fill();
+    c.font = '64px sans-serif';
+    c.textAlign = 'center';
+    c.textBaseline = 'middle';
+    c.fillText(emoji, 64, 62);
+  });
+  BUBBLES.set(emoji, tex);
+  return tex;
 }
 
 // A floating sign: text on a canvas, facing the door.
@@ -333,6 +365,7 @@ export class MyCasino {
     this.T.tables.forEach((t) => { t.slot = t.def.slot; });
     this.hookTables();
     this.drawMarkers();
+    this.buildStaff();
     // Customers at a game that's gone: send them home.
     for (const cu of this.customers) if (cu.slot !== null && !this.items.has(cu.slot)) this.leave(cu);
   }
@@ -421,9 +454,9 @@ export class MyCasino {
   // ---------- customers ----------
 
   maxCustomers() {
-    let n = 2;
-    for (const it of this.items.values()) if (CASINO_ITEMS[it.id].edge) n += 1;
-    return Math.min(24, n + Math.floor(appealOf(this.layout) / 40));
+    let n = 4;
+    for (const it of this.items.values()) if (CASINO_ITEMS[it.id].edge) n += 2;
+    return Math.min(32, n + Math.floor(appealOf(this.layout) / 25) + upLevel({ up: this.layout.up }, 'ads') * 2);
   }
 
   spawnCustomer() {
@@ -438,6 +471,7 @@ export class MyCasino {
     this.raid.scene.add(char.root);
     const cu = { char, pos, path: [], state: 'walk', slot: null, t: 0, yaw: Math.PI, hop: 0, after: null, vip };
     if (vip && this.owner.me) this.raid.feed('💎 A VIP high roller just walked in!');
+    if (vip) this.react(cu, '💎');
     this.customers.push(cu);
     this.pickTarget(cu);
   }
@@ -491,10 +525,14 @@ export class MyCasino {
       this.earn(-Math.round(def.edge * (2 + Math.random() * 2)), at, true);
       cu.hop = 1;
       this.raid.fx.confetti(at.clone().setY(3), 18);
+      this.react(cu, '🤑');
       return;
     }
-    let n = Math.round(def.edge * (0.3 + Math.random() * 1.4) * (rig ? 1.8 : 1) * (cu.vip ? 3 : 1));
-    if (rig && Math.random() < 0.15) {
+    const c = casinoData();
+    let n = Math.round(def.edge * (0.3 + Math.random() * 1.4) * (rig ? 1.8 : 1) * (cu.vip ? 3 : 1) * (1 + upLevel(c, 'staff') * 0.15));
+    if (Math.random() < 0.45) this.react(cu, ['😭', '😤', '🙃', '💸', '😩', '🤡'][Math.floor(Math.random() * 6)]);
+    if (rig && !upLevel(c, 'security') && Math.random() < 0.15) {
+      this.react(cu, '😠');
       // Caught it. Word gets round.
       if (this.owner.me && this.grumpy <= 0) this.raid.hud.toast('😠 A customer figured out your table is rigged! Fewer people will show up for a bit.');
       this.grumpy = 60;
@@ -509,7 +547,7 @@ export class MyCasino {
     this.spawnT -= dt;
     if (this.spawnT <= 0) {
       const appeal = appealOf(this.layout) * (this.grumpy > 0 ? 0.4 : 1);
-      this.spawnT = 9 / (1 + appeal / 70) * (0.6 + Math.random() * 0.8);
+      this.spawnT = 5 / (1 + appeal / 70) / (1 + upLevel(casinoData(), 'ads') * 0.25) * (0.6 + Math.random() * 0.8);
       if (this.customers.length < this.maxCustomers()) this.spawnCustomer();
     }
     this.grumpy = Math.max(0, this.grumpy - dt);
@@ -554,11 +592,75 @@ export class MyCasino {
           if (Math.random() < 0.45) this.pickTarget(cu); else this.leave(cu);
         }
       }
+      if (cu.bubble && (cu.bubbleT -= dt) <= 0) { cu.char.root.remove(cu.bubble); cu.bubble = null; }
       cu.hop = Math.max(0, cu.hop - dt * 1.6);
       const hopY = Math.sin(cu.hop * Math.PI * 2) * 0.6 * (cu.hop > 0 ? 1 : 0);
       cu.char.root.position.set(cu.pos.x, Math.max(0, hopY), cu.pos.z);
       cu.char.root.rotation.y = cu.yaw;
       cu.char.animate(dt, { speed, forward: speed / 6, side: 0, onGround: hopY <= 0.01, pitch: 0, dead: false, showTag: false });
+    }
+  }
+
+  // A little emoji over a customer's head for a couple of seconds.
+  react(cu, emoji) {
+    if (cu.bubble) cu.char.root.remove(cu.bubble);
+    const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: bubbleTexture(emoji), transparent: true, depthWrite: false }));
+    s.scale.set(1.1, 1.1, 1);
+    s.position.y = 3.3;
+    s.renderOrder = 8;
+    cu.char.root.add(s);
+    cu.bubble = s;
+    cu.bubbleT = 2.2;
+  }
+
+  // The staff you've hired: a bouncer on the door, a waitress working the floor.
+  buildStaff() {
+    for (const st of this.staff || []) this.raid.scene.remove(st.char.root);
+    this.staff = [];
+    const c = this.owner.me ? casinoData() : { up: this.layout.up || {} };
+    if (upLevel(c, 'security')) {
+      const char = createCharacter({ color: 0x2b2140, hat: 'none', eyes: 'angry', mouth: 'flat', glasses: 'shades', neck: 'bowtie' });
+      char.showTag(false);
+      char.root.scale.setScalar(1.35);
+      char.root.position.set(5.5, 0, 42);
+      char.root.rotation.y = Math.PI;
+      this.raid.scene.add(char.root);
+      this.staff.push({ char, still: true });
+    }
+    for (let i = 0; i < upLevel(c, 'staff'); i++) {
+      const char = createCharacter({ color: 0xff7eb6, hat: 'none', eyes: 'happy', mouth: 'smile', glasses: 'none', neck: 'bowtie' });
+      char.showTag(false);
+      const tray = part(new THREE.CylinderGeometry(0.45, 0.45, 0.06, 14), 0xd4a63a);
+      tray.position.set(0.55, 2.1, 0.2);
+      char.root.add(tray);
+      const pos = new THREE.Vector3((Math.random() - 0.5) * 6, 0, 20);
+      this.raid.scene.add(char.root);
+      this.staff.push({ char, pos, goal: null, wait: 0 });
+    }
+  }
+
+  updateStaff(dt) {
+    for (const st of this.staff || []) {
+      if (st.still) { st.char.animate(dt, { speed: 0, forward: 0, side: 0, onGround: true, pitch: 0, dead: false, showTag: false }); continue; }
+      let speed = 0;
+      if (st.wait > 0) st.wait -= dt;
+      else {
+        if (!st.goal) {
+          const [x, z] = slotXZ(Math.floor(Math.random() * this.layout.rows * CASINO_COLS.length));
+          st.goal = new THREE.Vector3(x + (Math.random() - 0.5) * 6, 0, z + 5.6);
+        }
+        const dx = st.goal.x - st.pos.x;
+        const dz = st.goal.z - st.pos.z;
+        const d = Math.hypot(dx, dz);
+        if (d < 0.4) { st.goal = null; st.wait = 2 + Math.random() * 3; } else {
+          speed = 3.2;
+          st.pos.x += (dx / d) * Math.min(d, speed * dt);
+          st.pos.z += (dz / d) * Math.min(d, speed * dt);
+          st.char.root.rotation.y = Math.atan2(dx, dz);
+        }
+      }
+      st.char.root.position.copy(st.pos);
+      st.char.animate(dt, { speed, forward: speed / 6, side: 0, onGround: true, pitch: 0, dead: false, showTag: false });
     }
   }
 
@@ -651,6 +753,7 @@ export class MyCasino {
     if (p && this.shrinkT > 0) { this.shrinkT -= dt; if (this.shrinkT <= 0) { p.char.root.scale.setScalar(1); this.raid.hud.toast('🐜 You\'re back to normal size.'); } }
     for (const c of this.raid.combatants) if (c.shrinkT > 0) { c.shrinkT -= dt; if (c.shrinkT <= 0) c.char.root.scale.setScalar(1); }
     this.updateCustomers(dt);
+    this.updateStaff(dt);
     for (const it of this.items.values()) if (it.group.userData.spin) it.group.userData.spin.position.y = 3.1 + Math.sin(performance.now() / 300) * 0.15;
     this.signT -= dt;
     if (this.signT <= 0) { this.signT = 1; this.drawSigns(); }
@@ -660,6 +763,7 @@ export class MyCasino {
     if (this.T) this.T.dispose();
     for (const it of this.items.values()) this.removeItem(it);
     for (const cu of this.customers) this.raid.scene.remove(cu.char.root);
+    for (const st of this.staff || []) this.raid.scene.remove(st.char.root);
     this.customers = [];
     this.raid.scene.remove(this.markers, this.nameSign, this.vaultSign);
     if (this.owner.me && !this.raid.isClient) updateCasino((c) => { c.lastSeen = Date.now(); });
@@ -742,6 +846,12 @@ export class MyCasino {
         <span>🪙 You have <b>${fmt(chips)}</b></span>
       </div>
       <div class="bpbody"><div class="bplan"><div class="bwall">🎰 BACK WALL</div>${rows}<div class="bdoor">🚪 DOOR</div></div><div class="bdetail">${detail}</div></div>
+      <div class="bups"><b>🛠️ Upgrades</b><div>${Object.entries(UPGRADES).map(([k, u]) => {
+        const lv = upLevel(c, k);
+        const max = lv >= u.costs.length;
+        const cost = u.costs[lv];
+        return `<button class="bitem" data-act="upgrade" data-k="${k}" ${max || chips < cost ? 'disabled' : ''} style="--c:#2ee6d6"><span>${u.name.split(' ')[0]}</span><b>${u.name.split(' ').slice(1).join(' ')} ${u.costs.length > 1 ? `· Lv ${lv}/${u.costs.length}` : lv ? '· Hired' : ''}</b><small>${u.blurb}</small><em>${max ? '✅ Maxed' : `🪙 ${fmt(cost)}`}</em></button>`;
+      }).join('')}</div></div>
       <div class="bpfoot">
         <div class="bcover"><b>🎟️ Cover charge</b><small>What friends pay to get in (into your vault).</small>
           <div>${COVER_CHARGES.map((v) => `<button class="subtab ${(c.cover || 0) === v ? 'on' : ''}" data-act="cover" data-v="${v}">${v ? `🪙 ${fmt(v)}` : 'Free'}</button>`).join('')}</div></div>
@@ -758,6 +868,17 @@ export class MyCasino {
     if (act === 'cell') this.sel = Number(b.dataset.i);
     else if (act === 'collect') { this.collect(); return; }
     else if (act === 'prank') { this.prank(b.dataset.f, b.dataset.p); return; }
+    else if (act === 'upgrade') {
+      const k = b.dataset.k;
+      const lv = upLevel(casinoData(), k);
+      const cost = UPGRADES[k] && UPGRADES[k].costs[lv];
+      if (!cost || !this.raid.casino.spend(cost)) return;
+      updateCasino((c) => { c.up = { ...(c.up || {}), [k]: lv + 1 }; });
+      sfx.cashout();
+      this.raid.hud.toast(`🛠️ ${UPGRADES[k].name} ${UPGRADES[k].costs.length > 1 ? `level ${lv + 1}` : 'hired'}!`);
+      this.changed();
+      return;
+    }
     else if (act === 'cover') { updateCasino((c) => { c.cover = Number(b.dataset.v) || 0; }); this.changed(); return; }
     else if (act === 'expand') {
       const cost = ROW_COST[casinoData().rows];
