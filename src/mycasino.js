@@ -41,10 +41,13 @@ export const CASINO_ITEMS = {
   couch: { name: 'Velvet Couch', icon: '🛋️', cost: 900, appeal: 10, color: '#c77dff', decor: true, blurb: 'Somewhere to sit and regret. +10 appeal.' },
   arch: { name: 'Neon Arch', icon: '🌈', cost: 2200, appeal: 18, color: '#ff3fa4', decor: true, blurb: 'Glows. Customers love it. +18 appeal.' },
   fountain: { name: 'Champagne Fountain', icon: '⛲', cost: 3000, appeal: 25, color: '#2ee6d6', decor: true, blurb: 'Bubbly on tap. +25 appeal.' },
+  aquarium: { name: 'Shark Tank', icon: '🦈', cost: 6500, appeal: 30, color: '#2e9bd6', decor: true, blurb: 'A giant aquarium with a (small) shark. +30 appeal.' },
+  piano: { name: 'Piano Bar', icon: '🎹', cost: 8000, appeal: 35, color: '#f1e3c8', decor: true, blurb: 'A pianist plays all night. +35 appeal.' },
+  disco: { name: 'Disco Floor', icon: '🪩', cost: 14000, appeal: 55, color: '#c77dff', decor: true, blurb: 'Flashing floor, spinning ball, customers dance. +55 appeal.' },
   statue: { name: 'Golden Bean Statue', icon: '🗿', cost: 10000, appeal: 45, color: '#ffd23f', decor: true, blurb: 'A solid gold you. +45 appeal.' },
 };
 const GAME_IDS = ['slots', 'plinko', 'roulette', 'mines', 'blackjack', 'crash', 'bar'];
-const DECOR_IDS = ['plant', 'couch', 'arch', 'fountain', 'statue'];
+const DECOR_IDS = ['plant', 'couch', 'arch', 'fountain', 'aquarium', 'piano', 'statue', 'disco'];
 
 // Your casino in the save, with anything missing filled in. New casinos come with a free slot
 // machine and a palm, so there's something to watch from the first minute.
@@ -166,6 +169,84 @@ function buildDecor(id, g) {
     const hat = part(new THREE.CylinderGeometry(0.55, 0.55, 0.9, 14), 0xffc83d);
     add(hat, 0, 4.25, 0);
     add(part(new THREE.CylinderGeometry(0.9, 0.9, 0.08, 16), 0xffc83d), 0, 3.82, 0);
+  } else if (id === 'aquarium') {
+    add(part(new THREE.BoxGeometry(5.2, 0.8, 2.4), 0x2b2140), 0, 0.4, 0);
+    const glass = new THREE.Mesh(new THREE.BoxGeometry(5, 2.6, 2.2), new THREE.MeshBasicMaterial({ color: 0x2e9bd6, transparent: true, opacity: 0.45, depthWrite: false }));
+    add(glass, 0, 2.1, 0);
+    add(part(new THREE.BoxGeometry(5.2, 0.2, 2.4), 0x2b2140), 0, 3.5, 0);
+    const fish = [];
+    for (let i = 0; i < 5; i++) {
+      const f = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.45, 6), new THREE.MeshBasicMaterial({ color: [0xff9f43, 0xffd23f, 0xff5d5d, 0x5ee27a, 0xff7eb6][i] }));
+      f.rotation.z = Math.PI / 2;
+      add(f, 0, 1.4 + (i % 3) * 0.6, -0.6 + (i % 2) * 1.2);
+      fish.push(f);
+    }
+    const shark = new THREE.Mesh(new THREE.ConeGeometry(0.3, 1.2, 8), new THREE.MeshBasicMaterial({ color: 0x8a9ba8 }));
+    shark.rotation.z = Math.PI / 2;
+    add(shark, 0, 2.6, 0);
+    fish.push(shark);
+    g.userData.tick = (t) => fish.forEach((f, i) => {
+      const k = t * (0.5 + i * 0.13) + i;
+      f.position.x = Math.sin(k) * 2.1;
+      f.rotation.z = Math.cos(k) > 0 ? -Math.PI / 2 : Math.PI / 2;
+    });
+  } else if (id === 'piano') {
+    add(part(new THREE.BoxGeometry(2.6, 1.1, 1.4), 0x111111), 0, 1, 0);
+    const keys = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.06, 0.4), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+    add(keys, 0, 1.2, 0.75);
+    const lid = part(new THREE.BoxGeometry(2.6, 0.06, 1.4), 0x111111);
+    lid.position.set(0, 1.95, -0.3);
+    lid.rotation.x = -0.6;
+    g.add(lid);
+    for (const lx of [-1.1, 1.1]) add(part(new THREE.CylinderGeometry(0.08, 0.08, 0.5, 6), 0x111111), lx, 0.25, 0);
+    const pianist = createCharacter({ color: 0x2b2140, hat: 'top', eyes: 'happy', mouth: 'smile', glasses: 'none', neck: 'bowtie' });
+    pianist.showTag(false);
+    pianist.root.position.set(0, 0, 1.7);
+    pianist.root.rotation.y = Math.PI;
+    g.add(pianist.root);
+    const note = new THREE.Sprite(new THREE.SpriteMaterial({ map: bubbleTexture('🎵'), transparent: true, depthWrite: false }));
+    note.scale.set(0.8, 0.8, 1);
+    g.add(note);
+    g.userData.tick = (t, dt) => {
+      pianist.animate(dt, { speed: 0, forward: 0, side: 0, onGround: true, pitch: 0, dead: false, showTag: false });
+      pianist.root.rotation.z = Math.sin(t * 6) * 0.06;
+      note.position.set(Math.sin(t * 1.3) * 1.2, 2.6 + ((t * 0.8) % 1.5), 0.3);
+      note.material.opacity = 1 - ((t * 0.8) % 1.5) / 1.5;
+    };
+  } else if (id === 'disco') {
+    const tiles = [];
+    for (let i = 0; i < 4; i++) {
+      for (let j = 0; j < 4; j++) {
+        const tile = new THREE.Mesh(new THREE.PlaneGeometry(1.7, 1.7), new THREE.MeshBasicMaterial({ color: 0xffffff }));
+        tile.rotation.x = -Math.PI / 2;
+        add(tile, -2.7 + i * 1.8, 0.07, -2.7 + j * 1.8);
+        tiles.push(tile);
+      }
+    }
+    const ball = new THREE.Mesh(new THREE.IcosahedronGeometry(0.8, 1), new THREE.MeshBasicMaterial({ color: 0xe5e7eb, wireframe: false }));
+    add(ball, 0, 8.5, 0);
+    const cord = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 2.4), new THREE.MeshBasicMaterial({ color: 0x222222 }));
+    add(cord, 0, 10, 0);
+    const dancers = [];
+    for (let i = 0; i < 3; i++) {
+      const d = createCharacter(randomLook());
+      d.showTag(false);
+      d.root.position.set(-1.6 + i * 1.6, 0, (i % 2) * 1.2 - 0.6);
+      g.add(d.root);
+      dancers.push(d);
+    }
+    const cols = [0xff3fa4, 0x2ee6d6, 0xffd23f, 0xc77dff, 0x5ee27a, 0xff9f43];
+    g.userData.tick = (t, dt) => {
+      const beat = Math.floor(t * 2.2);
+      tiles.forEach((tile, i) => tile.material.color.setHex(cols[(i * 7 + beat) % cols.length]));
+      ball.rotation.y = t * 1.5;
+      ball.material.color.setHSL((t * 0.2) % 1, 0.4, 0.85);
+      dancers.forEach((d, i) => {
+        d.animate(dt, { speed: 0, forward: 0, side: 0, onGround: true, pitch: 0, dead: false, showTag: false });
+        d.root.position.y = Math.abs(Math.sin(t * 4.4 + i)) * 0.35;
+        d.root.rotation.y = Math.sin(t * 2 + i * 2) * 0.9;
+      });
+    };
   } else if (id === 'bar') {
     add(part(new THREE.BoxGeometry(5, 1.2, 1.4), 0x6b3a1e), 0, 0.6, 0);
     add(part(new THREE.BoxGeometry(5.2, 0.12, 1.6), 0xd4a63a), 0, 1.25, 0);
@@ -357,6 +438,8 @@ export class MyCasino {
         else if (s.id === 'statue') colliders.push(raid.map.addCollider({ type: 'box', minX: x - 1.2, maxX: x + 1.2, minZ: z - 1.2, maxZ: z + 1.2, top: 4.5 }));
         else if (s.id === 'couch') colliders.push(raid.map.addCollider({ type: 'box', minX: x - 2.2, maxX: x + 2.2, minZ: z - 0.9, maxZ: z + 0.8, top: 1 }));
         else if (s.id === 'plant') colliders.push(raid.map.addCollider({ type: 'circle', x, z, r: 0.8, top: 1.2 }));
+        else if (s.id === 'aquarium') colliders.push(raid.map.addCollider({ type: 'box', minX: x - 2.6, maxX: x + 2.6, minZ: z - 1.2, maxZ: z + 1.2, top: 3.6 }));
+        else if (s.id === 'piano') colliders.push(raid.map.addCollider({ type: 'box', minX: x - 1.3, maxX: x + 1.3, minZ: z - 0.8, maxZ: z + 1, top: 1.6 }));
       }
       raid.scene.add(g);
       this.items.set(i, { id: s.id, rig: !!s.rig, group: g, colliders, x, z });
@@ -461,7 +544,7 @@ export class MyCasino {
 
   spawnCustomer() {
     // Now and then a VIP high roller: gold, crowned, and they bet big.
-    const vip = Math.random() < 0.05 + appealOf(this.layout) / 2500;
+    const vip = Math.random() < 0.03 + appealOf(this.layout) / 4000;
     const look = randomLook();
     if (vip) { look.color = 0xffc83d; look.hat = 'crown'; look.glasses = 'shades'; }
     const char = createCharacter(look);
@@ -470,7 +553,8 @@ export class MyCasino {
     char.root.position.copy(pos);
     this.raid.scene.add(char.root);
     const cu = { char, pos, path: [], state: 'walk', slot: null, t: 0, yaw: Math.PI, hop: 0, after: null, vip };
-    if (vip && this.owner.me) this.raid.feed('💎 A VIP high roller just walked in!');
+    const now = performance.now();
+    if (vip && this.owner.me && now - (this.vipSaid || -1e9) > 30000) { this.vipSaid = now; this.raid.feed('💎 A VIP high roller just walked in!'); }
     if (vip) this.react(cu, '💎');
     this.customers.push(cu);
     this.pickTarget(cu);
@@ -754,7 +838,11 @@ export class MyCasino {
     for (const c of this.raid.combatants) if (c.shrinkT > 0) { c.shrinkT -= dt; if (c.shrinkT <= 0) c.char.root.scale.setScalar(1); }
     this.updateCustomers(dt);
     this.updateStaff(dt);
-    for (const it of this.items.values()) if (it.group.userData.spin) it.group.userData.spin.position.y = 3.1 + Math.sin(performance.now() / 300) * 0.15;
+    const now = performance.now() / 1000;
+    for (const it of this.items.values()) {
+      if (it.group.userData.spin) it.group.userData.spin.position.y = 3.1 + Math.sin(now * 3.3) * 0.15;
+      if (it.group.userData.tick) it.group.userData.tick(now, dt);
+    }
     this.signT -= dt;
     if (this.signT <= 0) { this.signT = 1; this.drawSigns(); }
   }

@@ -187,6 +187,10 @@ function reelOdds(tier) {
 
 // The "what's new" card, shown once after an update.
 const WHATS_NEW = {
+  94: [
+    ['🪩', 'New casino decor', 'A Disco Floor with dancers and a spinning ball, a Shark Tank aquarium, and a Piano Bar with its own pianist.'],
+    ['🔁', 'Play again', 'Finished a Royale? Hit PLAY AGAIN on the results screen to go straight back in.'],
+  ],
   93: [
     ['🛠️', 'Casino upgrades', 'At the Manager\'s desk: Billboards bring in more customers, Cocktail service puts a waitress on the floor (customers bet more), and Security puts a bouncer on the door (nobody ever catches your rigged tables).'],
     ['🤑', 'Customers react', 'Customers pop little emoji bubbles when they win, lose, or catch a rigged table. Your floor gets a lot busier now too.'],

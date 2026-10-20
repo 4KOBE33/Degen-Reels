@@ -493,6 +493,12 @@ if (save.tampered) {
 // a moment to see if that happens before handing it back here.
 setTimeout(() => { if (raid.active) clearSafety(); else restoreSafety(); }, net.seat || net.resume ? 9000 : 300);
 
+// Royale: back to the lobby and straight into the next match.
+$('resultsAgain').addEventListener('click', (e) => {
+  e.stopPropagation();
+  $('resultsBack').click();
+  setTimeout(() => { if (!raid.active && !$('hub').hidden) hub.deploy(); }, 350);
+});
 hud.onLeave = () => {
   spectate(null);
   // Friends' games stop listening once they're out; the leader keeps the world going for the rest.

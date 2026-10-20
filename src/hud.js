@@ -933,6 +933,8 @@ export class Hud {
       line = `${r.by ? `${escapeHtml(r.by)} got you.` : 'You died.'} Everything you carried is gone.`;
       if (r.lostStreak >= 2) line += `<br><b class="streakline lost">💔 Your ${r.lostStreak}-raid streak is over.</b>`;
     }
+    // Solo Royale: straight back in for another one.
+    $('resultsAgain').hidden = !(r.royale && !(this.raid && this.raid.net));
     $('resultsTitle').textContent = title;
     const sb = r.sideBet;
     if (sb) line += sb.won ? `<br><b class="streakline">🎲 Side bet won! Hauled 🪙 ${sb.haul.toLocaleString('en-US')} (needed ${sb.target.toLocaleString('en-US')}): +🪙 ${sb.payout.toLocaleString('en-US')}</b>` : `<br><b class="streakline lost">🎲 Side bet lost: ${r.success ? `hauled 🪙 ${sb.haul.toLocaleString('en-US')} of the ${sb.target.toLocaleString('en-US')} you needed` : 'you didn\'t make it out'}. The House keeps 🪙 ${sb.stake.toLocaleString('en-US')}.</b>`;
