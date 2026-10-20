@@ -255,6 +255,7 @@ export class Session {
       s.d = a.downed ? 1 : 0;
       const roll = a.puppet ? a.netRoll || 0 : a.rolling ? a.rolling.t / PLAYER.rollTime : 0;
       if (roll) s.rl = r2(roll);
+      if (a.puppet ? a.netCart : a.cart) s.cr = 1;
       s.w = a.puppet ? a.netWeapon || 'fists' : a.weapon;
       s.r = a.puppet ? a.netRarity || 0 : a.rarity || 0;
       s.wn = a.puppet ? a.netWeaponName : a.weaponName;
@@ -369,6 +370,7 @@ export class Session {
       vx: r2(p.vel.x), vz: r2(p.vel.z), hp: Math.round(p.hp), mh: p.maxHp, ar: Math.round(p.armor),
       a: p.alive ? 1 : 0, d: p.downed ? 1 : 0, w: p.weapon, r: p.rarity || 0, wn: p.weaponName,
       rl: p.rolling ? r2(p.rolling.t / PLAYER.rollTime) : 0,
+      cr: p.cart ? 1 : 0,
     });
   }
 
@@ -414,6 +416,7 @@ export class Session {
         pup.netRarity = d.r;
         pup.netWeaponName = d.wn;
         pup.netRoll = d.rl || 0;
+        pup.netCart = !!d.cr;
         if (d.d && !pup.downed) raid.down(pup, null, true);
         if (!d.d && pup.downed) { pup.downed = false; pup.reviveSpot = null; }
         break;
@@ -676,6 +679,7 @@ export class Session {
         actor.armor = a.ar;
         actor.netPitch = a.p;
         actor.netRoll = a.rl || 0;
+        actor.netCart = !!a.cr;
         actor.netWeapon = a.w;
         actor.netRarity = a.r;
         if (a.wn !== undefined) actor.netWeaponName = a.wn;

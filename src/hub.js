@@ -187,6 +187,10 @@ function reelOdds(tier) {
 
 // The "what's new" card, shown once after an update.
 const WHATS_NEW = {
+  97: [
+    ['🛺', 'Golf carts on Jackpot Island', 'Pink golf carts are parked all over the island (they\'re on your map). Hold E to hop in, drive about twice as fast as you can sprint, and press E to hop out. Your friends see you cruising.'],
+    ['⭕', 'Final circle', 'After the last circle settles, it holds for 30 seconds and then closes all the way, so every match ends with a winner.'],
+  ],
   96: [
     ['🏆', 'Royale & Casino achievements', '11 new achievements: win a Royale, win five, 8 kills in one game, top 10 five times, grow your casino to 🪙 250,000, open the whole floor, rig 10 wins on friends, pull 10 pranks, and more.'],
     ['📋', 'New daily contracts', 'Contracts can now ask you to play Royales, finish top 10, get Royale kills, or collect chips from your casino\'s vault.'],

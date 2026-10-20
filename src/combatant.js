@@ -7,6 +7,7 @@ import { fullAmmo, itemInfo, isConsumable, slotsUsed, holdRoom } from './items.j
 import { smoothMove } from './netsmooth.js';
 import { sfx } from './audio.js';
 import { live } from './rules.js';
+import { CART_SPEED } from './royale.js';
 
 export class Combatant {
   constructor(raid, { name, look, isPlayer = false, team = 'raider' }) {
@@ -280,9 +281,11 @@ export class Combatant {
     if (this.stunned > 0) speed *= 0.3;
     // Downed: a slow crawl, no sprinting.
     if (this.downed) { speed = 1.4; this.isSprinting = false; }
+    // Driving a golf cart: much quicker, and it takes a moment to get going.
+    if (this.cart) speed = CART_SPEED * (this.isSprinting ? 1.2 : 1);
     const tx = canMove ? this.move.x * speed : 0;
     const tz = canMove ? this.move.y * speed : 0;
-    const accel = Math.min(1, dt * (this.onGround ? 14 : 3.5));
+    const accel = Math.min(1, dt * (this.cart ? 2.6 : this.onGround ? 14 : 3.5));
     this.vel.x += (tx - this.vel.x) * accel;
     this.vel.z += (tz - this.vel.z) * accel;
     if (this.rolling) {

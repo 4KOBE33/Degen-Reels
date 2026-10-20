@@ -10,6 +10,8 @@ const AUTO = new Set(['smg', 'fists', 'spoon']);
 const CAM_OFFSET = new THREE.Vector3(1.15, 0.6, 4.3);
 // On the party bus or under a chute: pulled way back so you can see where you're going.
 const SKY_OFFSET = new THREE.Vector3(0, 2.2, 15);
+// Driving a golf cart: back far enough to see over it.
+const CART_OFFSET = new THREE.Vector3(0.5, 2.4, 8.5);
 const AIM_OFFSET = new THREE.Vector3(0.9, 0.45, 2.4);
 const DOWN_OFFSET = new THREE.Vector3(0.8, 2.6, 3.2);
 
@@ -241,6 +243,8 @@ export class PlayerController {
         }
       }
     }
+    // In a golf cart: E hops out.
+    if (this.pressE && c.cart && raid.royale) { this.pressE = false; raid.royale.exitCart(c); }
     if (this.pressE) {
       this.pressE = false;
       if (it && it.searchTime) this.search = { target: it, t: 0 };
@@ -304,7 +308,7 @@ export class PlayerController {
     const head = c.head(new THREE.Vector3());
     const q = new THREE.Quaternion().setFromEuler(new THREE.Euler(c.pitch, c.yaw, 0, 'YXZ'));
     // Downed: always third person, from a bit higher up so you can see yourself crawl.
-    const sky = c.riding || c.gliding;
+    const sky = c.riding || c.gliding || !!c.cart;
     const fp = (this.firstPerson || this.scoped) && c.alive && !c.downed && !sky;
     c.char.firstPerson(fp);
 
@@ -326,7 +330,7 @@ export class PlayerController {
       return;
     }
 
-    const offset = (sky ? SKY_OFFSET.clone() : c.downed ? DOWN_OFFSET.clone() : CAM_OFFSET.clone().lerp(AIM_OFFSET, this.zoom)).applyQuaternion(q);
+    const offset = (c.cart ? CART_OFFSET.clone() : sky ? SKY_OFFSET.clone() : c.downed ? DOWN_OFFSET.clone() : CAM_OFFSET.clone().lerp(AIM_OFFSET, this.zoom)).applyQuaternion(q);
     const want = offset.length();
 
     // Pull the camera in if a wall is in the way.

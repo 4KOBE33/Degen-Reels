@@ -240,7 +240,7 @@ export class Hud {
     if (this.slow <= 0) {
       this.slow = 0.2;
       const ry = raid.royale ? raid.royale.state() : null;
-      this.set('timer', raid.myCasino ? `🏰 ${raid.myCasino.customers.length} customer${raid.myCasino.customers.length === 1 ? '' : 's'} on the floor` : ry ? `👥 ${raid.royale.left()} left · ${ry.phase >= 5 ? '🔴 Final circle' : ry.closing ? `🔴 Closing ${clock(ry.left)}` : `⭕ Moves in ${clock(ry.left)}`}` : `⏰ ${clock(raid.timeLeft)}`);
+      this.set('timer', raid.myCasino ? `🏰 ${raid.myCasino.customers.length} customer${raid.myCasino.customers.length === 1 ? '' : 's'} on the floor` : ry ? `👥 ${raid.royale.left()} left · ${ry.phase >= 5 && !ry.closing ? `🔴 Final circle · closes in ${clock(ry.left)}` : ry.closing ? `🔴 Closing ${clock(ry.left)}` : `⭕ Moves in ${clock(ry.left)}`}` : `⏰ ${clock(raid.timeLeft)}`);
       this.set('zone', `${escapeHtml(raid.map.zoneName(p.pos.x, p.pos.z))} <span class="tier t${raid.map.tierAt(p.pos.x, p.pos.z)}">${['', 'SAFE-ISH', 'RISKY', 'DEADLY', 'VAULT'][raid.map.tierAt(p.pos.x, p.pos.z)]}</span>${raid.rule ? ` <span class="rulechip" title="${escapeHtml(raid.rule.desc)}">${raid.rule.icon} ${escapeHtml(raid.rule.name)}</span>` : ''}${p.heatStars ? ` <span class="rulechip heat">🚨 ${'★'.repeat(p.heatStars)}${'☆'.repeat(5 - p.heatStars)}</span>` : ''}${raid.happyHour && raid.happyHour() ? ` <span class="rulechip happy">🍸 2× CHIPS ${Math.ceil(raid.timeLeft - raid.happyEnd)}s</span>` : ''}`);
       if (ry) {
         const out = Math.hypot(p.pos.x - ry.x, p.pos.z - ry.z) - ry.r;
@@ -602,6 +602,11 @@ export class Hud {
       ctx.arc(tx(s.next.x), tx(s.next.z), Math.max(1, tx(s.next.x + s.next.r) - tx(s.next.x)), 0, Math.PI * 2);
       ctx.stroke();
       ctx.restore();
+    }
+    // Royale: parked golf carts.
+    if (raid.royale && raid.royale.carts) {
+      ctx.font = '20px sans-serif';
+      for (const cart of raid.royale.carts) if (!cart.driver) ctx.fillText('🛺', tx(cart.group.position.x), tx(cart.group.position.z));
     }
     // Royale, still on the bus: where it's flying, and where it is now.
     if (raid.royale && raid.player && raid.player.riding) {

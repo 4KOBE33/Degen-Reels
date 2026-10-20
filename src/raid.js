@@ -1192,6 +1192,7 @@ export class Raid {
     const list = [...this.slots, ...this.gunWheels, ...(this.booths || []), ...this.pickups, this.vaultLock];
     if (this.duel) list.push(...this.duel.interactables());
     if (this.myCasino) list.push(...this.myCasino.interactables());
+    if (this.royale && this.player && !this.player.cart) list.push(...this.royale.interactables());
     for (const k of this.containers) if (!k.opened) list.push(k);
     for (const c of this.combatants) if (c.downed && c.alive && c.reviveSpot) list.push(c.reviveSpot);
     return list;
