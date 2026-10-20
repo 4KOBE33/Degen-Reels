@@ -810,6 +810,7 @@ export class Session {
       }
       case 'tgs': if (raid.tables) raid.tables.apply({ ...e.e, mine: false }); break;
       case 'cas': if (raid.myCasino) raid.myCasino.applyLayout(e.layout); break;
+      case 'cpromo': if (raid.myCasino) raid.myCasino.startPromo(); break;
       case 'vo': raid.openVault({ name: e.by || 'Someone' }, true); break;
       case 'th': {
         const owner = this.byId.get(e.ow) || { name: '?', alive: true, team: 'raider' };

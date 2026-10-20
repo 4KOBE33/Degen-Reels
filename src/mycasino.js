@@ -72,6 +72,8 @@ export function updateCasino(fn) { save.update((x) => { const c = casinoData(x);
 export function starsOf(c) { return Math.max(1, Math.min(5, 1 + Math.floor((appealOf(c) - 10) / 35))); }
 export const starText = (n) => '★'.repeat(n) + '☆'.repeat(5 - n);
 export const COVER_CHARGES = [0, 50, 250, 1000];
+export const PROMO_COST = 2000;
+export const PROMO_TIME = 180;
 
 // Upgrades for the whole place (bought once per level, kept forever).
 export const UPGRADES = {
@@ -101,7 +103,7 @@ export function incomeRate(c) {
   const earners = Object.values(c.slots).map((s) => CASINO_ITEMS[s.id]).filter((it) => it && it.edge);
   if (!earners.length) return 0;
   const busy = Math.min(1, (0.35 + appealOf(c) / 220) * (1 + upLevel(c, 'ads') * 0.25));
-  return Math.round(earners.reduce((n, it) => n + it.edge, 0) * 150 * busy * (1 + upLevel(c, 'staff') * 0.15));
+  return Math.round(earners.reduce((n, it) => n + it.edge, 0) * 150 * busy * (1 + upLevel(c, 'staff') * 0.15) * (this.promo > 0 ? 1.25 : 1));
 }
 export const AWAY_SHARE = 0.2;
 export const AWAY_HOURS = 6;
@@ -539,7 +541,7 @@ export class MyCasino {
   maxCustomers() {
     let n = 4;
     for (const it of this.items.values()) if (CASINO_ITEMS[it.id].edge) n += 2;
-    return Math.min(32, n + Math.floor(appealOf(this.layout) / 25) + upLevel({ up: this.layout.up }, 'ads') * 2);
+    return Math.min(this.promo > 0 ? 44 : 32, n + Math.floor(appealOf(this.layout) / 25) + upLevel({ up: this.layout.up }, 'ads') * 2 + (this.promo > 0 ? 12 : 0));
   }
 
   spawnCustomer() {
@@ -631,7 +633,7 @@ export class MyCasino {
     this.spawnT -= dt;
     if (this.spawnT <= 0) {
       const appeal = appealOf(this.layout) * (this.grumpy > 0 ? 0.4 : 1);
-      this.spawnT = 5 / (1 + appeal / 70) / (1 + upLevel(casinoData(), 'ads') * 0.25) * (0.6 + Math.random() * 0.8);
+      this.spawnT = 5 / (1 + appeal / 70) / (1 + upLevel(casinoData(), 'ads') * 0.25) / (this.promo > 0 ? 2.5 : 1) * (0.6 + Math.random() * 0.8);
       if (this.customers.length < this.maxCustomers()) this.spawnCustomer();
     }
     this.grumpy = Math.max(0, this.grumpy - dt);
@@ -748,6 +750,15 @@ export class MyCasino {
     }
   }
 
+  // Promo Night: the doors fly open.
+  startPromo() {
+    this.promo = PROMO_TIME;
+    this.spawnT = 0;
+    sfx.jackpot();
+    this.raid.hud.toast(`🎉 PROMO NIGHT at ${esc(this.layout.name)}! Customers are pouring in.`, 'big');
+    this.raid.fx.confetti(DOOR.clone().setY(4), 60);
+  }
+
   // ---------- pranks ----------
 
   // Friends in here right now (as the owner sees them).
@@ -832,6 +843,17 @@ export class MyCasino {
   update(dt) {
     if (this.T) this.T.update(dt);
     this.prankCd = Math.max(0, this.prankCd - dt);
+    // Promo Night: confetti cannons going off round the floor.
+    if (this.promo > 0) {
+      this.promo -= dt;
+      this.promoFx = (this.promoFx || 0) - dt;
+      if (this.promoFx <= 0) {
+        this.promoFx = 1.2;
+        const [x, z] = slotXZ(Math.floor(Math.random() * this.layout.rows * CASINO_COLS.length));
+        this.raid.fx.confetti(new THREE.Vector3(x, 5, z), 24);
+      }
+      if (this.promo <= 0) this.raid.hud.toast('🎉 Promo Night is over. Back to business as usual.');
+    }
     const p = this.raid.player;
     if (p && this.spinT > 0) { this.spinT -= dt; p.yaw += dt * 11; }
     if (p && this.shrinkT > 0) { this.shrinkT -= dt; if (this.shrinkT <= 0) { p.char.root.scale.setScalar(1); this.raid.hud.toast('🐜 You\'re back to normal size.'); } }
@@ -934,6 +956,7 @@ export class MyCasino {
         <span>🪙 You have <b>${fmt(chips)}</b></span>
       </div>
       <div class="bpbody"><div class="bplan"><div class="bwall">🎰 BACK WALL</div>${rows}<div class="bdoor">🚪 DOOR</div></div><div class="bdetail">${detail}</div></div>
+      <div class="bpromo">${this.promo > 0 ? `<b>🎉 Promo Night: ${Math.ceil(this.promo)}s left</b><small>Customers are pouring in and betting big.</small>` : `<button class="btn promobtn" data-act="promo" ${chips < PROMO_COST ? 'disabled' : ''}>🎉 Throw a Promo Night · 🪙 ${fmt(PROMO_COST)}</button><small>3 minutes: way more customers, +25% bets, confetti everywhere.</small>`}</div>
       <div class="bups"><b>🛠️ Upgrades</b><div>${Object.entries(UPGRADES).map(([k, u]) => {
         const lv = upLevel(c, k);
         const max = lv >= u.costs.length;
@@ -956,6 +979,13 @@ export class MyCasino {
     if (act === 'cell') this.sel = Number(b.dataset.i);
     else if (act === 'collect') { this.collect(); return; }
     else if (act === 'prank') { this.prank(b.dataset.f, b.dataset.p); return; }
+    else if (act === 'promo') {
+      if (this.promo > 0 || !this.raid.casino.spend(PROMO_COST)) return;
+      this.startPromo();
+      if (this.raid.isHost) this.raid.net.rel({ k: 'cpromo' });
+      this.raid.setOverlay(null);
+      return;
+    }
     else if (act === 'upgrade') {
       const k = b.dataset.k;
       const lv = upLevel(casinoData(), k);

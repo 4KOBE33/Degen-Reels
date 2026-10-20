@@ -18,7 +18,7 @@ const PHASES = [
   { wait: 55, shrink: 40, r: 0.32, dmg: 4 },
   { wait: 45, shrink: 35, r: 0.17, dmg: 7 },
   { wait: 35, shrink: 30, r: 0.08, dmg: 11 },
-  { wait: 25, shrink: 30, r: 0.0, dmg: 16 },
+  { wait: 25, shrink: 30, r: 0.03, dmg: 16 },
 ];
 export const ROYALE_TIME = PHASES.reduce((n, p) => n + p.wait + p.shrink, 0) + 60;
 

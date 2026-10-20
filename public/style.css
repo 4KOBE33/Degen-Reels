@@ -1801,3 +1801,12 @@ body.scoped #crosshair, body.scoped #cdRing { display: none !important; }
 .bups > b { font: 400 18px var(--display); color: var(--gold); letter-spacing: 0.5px; }
 .bups > div { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 8px; }
 .btn.again { background: var(--gold); color: var(--ink); }
+/* Royale: outside the circle, the edges of the screen glow pink */
+body.outzone #hud::after { content: ''; position: fixed; inset: 0; pointer-events: none; box-shadow: inset 0 0 140px 24px rgba(255, 63, 164, 0.5); animation: zonepulse 1s ease-in-out infinite alternate; z-index: 1; }
+@keyframes zonepulse { from { opacity: 0.55; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { body.outzone #hud::after { animation: none; } }
+.bpromo { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 12px; padding: 10px 12px; border-radius: 14px; background: linear-gradient(90deg, rgba(255, 63, 164, 0.18), rgba(255, 210, 63, 0.12)); }
+.bpromo b { font: 400 20px var(--display); color: var(--gold); }
+.bpromo small { font: 700 12px var(--body); opacity: 0.8; }
+.btn.promobtn { background: #ff3fa4; color: #fff; }
+#spectate .spbet { margin-top: 6px; font: 800 14px var(--body); color: var(--gold); }

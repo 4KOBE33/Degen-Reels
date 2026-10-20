@@ -7,7 +7,7 @@ import { Hud } from './hud.js';
 import { Hub, fixPlayMode } from './hub.js';
 import { casinoLayout } from './mycasino.js';
 import { PlayerController } from './player.js';
-import { initAudio, setVolume } from './audio.js';
+import { initAudio, setVolume, sfx } from './audio.js';
 import { save } from './save.js';
 import { keyName, renderBinds, wireBinds } from './keys.js';
 import { ITEMS, QUALITY } from './config.js';
@@ -500,6 +500,7 @@ $('resultsAgain').addEventListener('click', (e) => {
   setTimeout(() => { if (!raid.active && !$('hub').hidden) hub.deploy(); }, 350);
 });
 hud.onLeave = () => {
+  raid.royaleWatch = false;
   spectate(null);
   // Friends' games stop listening once they're out; the leader keeps the world going for the rest.
   if (session && session.client) { session.bye(); session.dispose(); session = null; }
@@ -584,7 +585,13 @@ syncPauseSliders();
 // ---------- spectating ----------
 // Out of a party raid (dead or extracted) while friends are still in it: watch them.
 let spectating = null;
-const squad = () => (session ? session.squad() : []);
+// Solo Royale: after you're out, watch whoever's still fighting (the one who got you first).
+const royaleLeft = () => {
+  const list = raid.royale ? raid.combatants.filter((c) => c.alive && c.brain && !c.human) : [];
+  const by = raid.result && raid.result.by;
+  return list.sort((a, b) => (b.name === by) - (a.name === by));
+};
+const squad = () => (session ? session.squad() : raid.royale && !raid.active ? royaleLeft() : []);
 
 function spectate(target) {
   spectating = target;
@@ -618,8 +625,36 @@ window.addEventListener('keydown', (e) => {
   if (e.code === 'Escape') { e.preventDefault(); stopSpectating(); return; }
   if (['Space', 'ArrowRight', 'KeyD', 'Enter'].includes(e.code)) { e.preventDefault(); nextSpectate(1); }
   if (['ArrowLeft', 'KeyA'].includes(e.code)) { e.preventDefault(); nextSpectate(-1); }
+  if (e.code === 'KeyB' && !session) { e.preventDefault(); placeSpecBet(); }
 });
 window.addEventListener('mousedown', (e) => { if (spectating && e.button === 0) nextSpectate(1); });
+
+// Solo Royale, watching after you're out: bet on who'll be last one standing. Pays out by how
+// many are left when you bet.
+const SPEC_STAKE = 250;
+let specBet = null;
+const specMult = (n) => Math.max(1.5, Math.round(n * 0.8 * 10) / 10);
+function placeSpecBet() {
+  if (!spectating || specBet || !raid.royale) return;
+  const n = royaleLeft().length;
+  if (n < 2) { hud.toast('Too late to bet: there\'s only one left.'); return; }
+  if (!hub.spend(SPEC_STAKE)) return;
+  specBet = { name: spectating.name, stake: SPEC_STAKE, mult: specMult(n), done: false };
+  hud.toast(`🎲 🪙 ${SPEC_STAKE} on ${spectating.name} to win. Pays ${specBet.mult}x.`);
+}
+function settleSpecBet() {
+  if (!specBet || specBet.done || !raid.royale) return;
+  const left = royaleLeft();
+  if (left.length > 1) return;
+  specBet.done = true;
+  if (left.length === 1 && left[0].name === specBet.name) {
+    const win = Math.round(specBet.stake * specBet.mult);
+    save.update((d) => { d.stash.chips += win; });
+    hud.toast(`🎲 ${specBet.name} won it! You win 🪙 ${win.toLocaleString('en-US')}!`, 'big');
+    sfx.jackpot();
+  } else if (left.length === 1) hud.toast(`🎲 ${left[0].name} won it. Your bet on ${specBet.name} is gone.`);
+  else { save.update((d) => { d.stash.chips += specBet.stake; }); hud.toast('🎲 Nobody won. Your bet is back.'); }
+}
 
 // Over the shoulder of whoever you're watching, looking where they look.
 const SPEC_OFFSET = new THREE.Vector3(1.15, 0.7, 4.6);
@@ -641,7 +676,10 @@ function spectateView(dt) {
   $('spHp').style.width = `${(hp * 100).toFixed(0)}%`;
   $('spHp').style.background = t.downed ? '#ff5d5d' : hp < 0.35 ? '#ffd23f' : '#5ee27a';
   const n = squad().length;
-  $('spInfo').textContent = `${t.downed ? '🩸 DOWNED · ' : ''}${t.weaponName || ''}${n > 1 ? ` · ${n} squadmates left` : ''}`;
+  const canBet = !session && raid.royale && !specBet && n >= 2;
+  $('spBet').hidden = session || !raid.royale;
+  $('spBet').textContent = specBet ? `🎲 Your bet: 🪙 ${specBet.stake} on ${specBet.name} (${specBet.mult}x)${specBet.done ? ' · settled' : ''}` : canBet ? `Press B to bet 🪙 ${SPEC_STAKE} on ${t.name} to win · pays ${specMult(n)}x` : '';
+  $('spInfo').textContent = `${t.downed ? '🩸 DOWNED · ' : ''}${t.weaponName || ''}${session ? (n > 1 ? ` · ${n} squadmates left` : '') : ` · 👥 ${n} left${n === 1 ? ' · 👑 last one standing!' : ''}`}`;
 }
 
 // When a raid ends, let go of the mouse so you can click through the results.
@@ -739,14 +777,19 @@ function step(now, draw = true) {
 
   const kc = raid.killcam && !raid.killcam.over ? raid.killcam : null;
   document.body.classList.toggle('killcam', !!kc);
+  settleSpecBet();
+  if (raid.active && specBet) specBet = null;
   // Spectating: follow your squadmate until they're out too.
-  if (spectating && (!spectating.alive || !raid.combatants.includes(spectating) || !session || session.ended)) {
+  if (spectating && (!spectating.alive || !raid.combatants.includes(spectating) || (session ? session.ended : !raid.royale))) {
     const left = squad();
     if (left.length) spectate(left[0]);
-    else stopSpectating('Your squad is out. Raid over.');
+    else stopSpectating(session ? 'Your squad is out. Raid over.' : 'Everyone\'s out.');
   }
   // Offer it on the results screen while someone's still in there.
-  if (!$('results').hidden) $('resultsSpectate').hidden = !squad().length;
+  if (!$('results').hidden) {
+    $('resultsSpectate').hidden = !squad().length;
+    $('resultsSpectate').textContent = session ? '👁 SPECTATE SQUAD' : '👁 WATCH THE REST';
+  }
   // The Lounge table camera shifts the picture up; put it back once we're up from the table.
   if (!seated && camera.view && camera.view.enabled) camera.clearViewOffset();
   if (spectating && $('hub').hidden) {

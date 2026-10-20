@@ -371,6 +371,7 @@ export class Raid {
   deploy({ name, look, loadout, opts = {} }) {
     if (this.royale) { this.royale.dispose(); this.royale = null; }
     this.royaleLeft = 0;
+    this.royaleWatch = false;
     this.royaleMode = !!opts.royale && !this.map.safe;
     // Reset the map.
     for (const p of this.pickups) p.remove();
@@ -579,6 +580,7 @@ export class Raid {
     });
     r.progress.xp = save.get().xp - before || prize.xp;
     this.royale.over = true;
+    this.royaleWatch = !this.net;
   }
 
   // ---------- emotes ----------
@@ -2254,7 +2256,8 @@ export class Raid {
     if (this.myCasino) this.myCasino.update(dt);
 
     // The host keeps the world running for friends even after they're done themselves.
-    const world = this.active || (this.isHost && this.net.worldAlive());
+    // Solo Royale: after you're out, the rest fight on while you watch (until you head back).
+    const world = this.active || (this.isHost && this.net.worldAlive()) || (this.royaleWatch && this.royale && this.royale.left() > 1);
     if (!world) {
       if (this.isHost && !this.net.ended) this.net.endWorld();
       return;

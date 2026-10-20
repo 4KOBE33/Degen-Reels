@@ -245,10 +245,14 @@ export class Hud {
       if (ry) {
         const out = Math.hypot(p.pos.x - ry.x, p.pos.z - ry.z) - ry.r;
         const toNext = Math.hypot(p.pos.x - ry.next.x, p.pos.z - ry.next.z) - ry.next.r;
+        document.body.classList.toggle('outzone', out > 0 && p.alive && !p.riding && !p.gliding);
         const bus = p.riding ? Math.max(0, Math.ceil((0.97 - raid.royale.busK()) * BUS_TIME)) : null;
-        if (bus !== null) this.set('exits', `<div class="busjump">🎈 Press <kbd>${keyName('jump')}</kbd> to jump off the bus · last stop in ${bus}s</div>`);
+        if (bus !== null) this.set('exits', `<div class="busjump">🎈 Press <kbd>${keyName('jump')}</kbd> to jump off the bus · last stop in ${bus}s</div><div>🗺️ <kbd>${keyName('map')}</kbd> shows the bus route</div>`);
         else this.set('exits', `${out > 0 ? `<div class="zoneout">☠️ OUTSIDE THE CIRCLE · ${Math.round(out)}m back in ${bearing(p, ry.x, ry.z)} · −${ry.dmg}/s</div>` : toNext > 0 ? `<div>⚪ Next circle ${Math.round(toNext)}m ${bearing(p, ry.next.x, ry.next.z)}</div>` : '<div>✅ Inside the next circle</div>'}<div>💀 ${raid.royaleKills || raid.run.raiders || 0} kills</div>`);
-      } else this.set('exits', raid.extracts.filter((e) => e.active).map((e) => `<div>🟢 ${e.name} · ${Math.round(Math.hypot(e.x - p.pos.x, e.z - p.pos.z))}m ${bearing(p, e.x, e.z)}</div>`).join(''));
+      } else {
+        document.body.classList.remove('outzone');
+        this.set('exits', raid.extracts.filter((e) => e.active).map((e) => `<div>🟢 ${e.name} · ${Math.round(Math.hypot(e.x - p.pos.x, e.z - p.pos.z))}m ${bearing(p, e.x, e.z)}</div>`).join(''));
+      }
       const now = performance.now();
       this.feedItems = this.feedItems.filter((f) => now - f.t < 7000);
       this.set('feed', this.feedItems.map((f) => `<div>${escapeHtml(f.text)}</div>`).join(''));
@@ -599,6 +603,22 @@ export class Hud {
       ctx.stroke();
       ctx.restore();
     }
+    // Royale, still on the bus: where it's flying, and where it is now.
+    if (raid.royale && raid.player && raid.player.riding) {
+      const L = raid.royale.dropLine;
+      const b = raid.royale.bus.position;
+      ctx.save();
+      ctx.setLineDash([14, 10]);
+      ctx.strokeStyle = '#ffd23f';
+      ctx.lineWidth = 5;
+      ctx.beginPath();
+      ctx.moveTo(tx(L.from.x), tx(L.from.z));
+      ctx.lineTo(tx(L.to.x), tx(L.to.z));
+      ctx.stroke();
+      ctx.restore();
+      ctx.font = '34px sans-serif';
+      ctx.fillText('🎈', tx(b.x), tx(b.z));
+    }
     if (raid.bountyTip) {
       const bx = tx(raid.bountyTip.x);
       const by = tx(raid.bountyTip.z);
@@ -895,6 +915,7 @@ export class Hud {
   }
 
   raidOver(r) {
+    document.body.classList.remove('outzone');
     $('downed').hidden = true;
     document.body.classList.remove('isdowned');
     const el = $('results');

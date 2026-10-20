@@ -187,6 +187,12 @@ function reelOdds(tier) {
 
 // The "what's new" card, shown once after an update.
 const WHATS_NEW = {
+  95: [
+    ['👁', 'Watch the rest', 'Out of a solo Royale? Hit WATCH THE REST and follow whoever\'s still fighting until there\'s a winner. Press B to bet on the one you\'re watching: the more people left, the bigger the payout.'],
+    ['🗺️', 'Bus route on the map', 'On the party bus, press M to see the route and where the bus is, so you can pick your landing.'],
+    ['⭕', 'Zone warning', 'The edges of your screen glow pink while you\'re outside the circle. The last circle now leaves a small safe spot, so there\'s always a winner.'],
+    ['🎉', 'Promo Night', 'Throw a Promo Night in your casino from the Manager\'s desk: 3 minutes of packed floors, bigger bets and confetti cannons.'],
+  ],
   94: [
     ['🪩', 'New casino decor', 'A Disco Floor with dancers and a spinning ball, a Shark Tank aquarium, and a Piano Bar with its own pianist.'],
     ['🔁', 'Play again', 'Finished a Royale? Hit PLAY AGAIN on the results screen to go straight back in.'],
