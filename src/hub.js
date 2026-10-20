@@ -20,7 +20,8 @@ import {
 } from './looks.js';
 import { LookPreview } from './preview.js';
 import { LobbyStage } from './lobby.js';
-import { casinoData, casinoLayout, updateCasino, accrueAway, appealOf, incomeRate, CASINO_ITEMS, CASINO_COLS, CASINO_ROWS, AWAY_SHARE, AWAY_HOURS } from './mycasino.js';
+import { PLACE_BETS, PLACE_STAKES } from './royale.js';
+import { casinoData, casinoLayout, updateCasino, accrueAway, appealOf, incomeRate, starsOf, starText, CASINO_ITEMS, CASINO_COLS, CASINO_ROWS, AWAY_SHARE, AWAY_HOURS } from './mycasino.js';
 import { BUILD } from './version.js';
 import { Shoe, RANKS, SUITS, cardValue, handValue, isNatural } from './cards.js';
 import { MOB_MIN, MOB_MAX, mobDebt, borrow, repay } from './mob.js';
@@ -186,6 +187,12 @@ function reelOdds(tier) {
 
 // The "what's new" card, shown once after an update.
 const WHATS_NEW = {
+  92: [
+    ['😈', 'Casino pranks', 'Friends visiting your casino? Open the Manager\'s desk and pull pranks on them: a fake million-chip jackpot, the bouncer throwing them out the door, an air horn, spinning them round, or shrinking them to bug size.'],
+    ['🎟️', 'Cover charge', 'Charge friends to get into your casino. It goes straight in your vault.'],
+    ['💎', 'VIP high rollers', 'Gold, crowned customers who bet three times as much. Nicer casinos get more of them, and a star rating now shows how nice yours is.'],
+    ['🎲', 'Bet on yourself in Royale', 'In the Royale lobby, bet you\'ll finish top 10 (2x), top 3 (4x) or win the whole thing (10x).'],
+  ],
   91: [
     ['🏰', 'NEW: Your Casino', 'Pick MY CASINO on the Loadout screen. Buy slot machines, roulette, blackjack, crash, a cocktail bar and decor with chips, and place them on your casino floor at the Manager\'s desk. Customers come in, gamble, and lose (mostly) to you. Collect your vault at the Cashier. It even earns a little while you\'re away.'],
     ['😈', 'Rig it on your friends', 'Make a party in MY CASINO mode and your friends come to your place. Rig any table: when a friend is about to win there, the win vanishes and they find out who did it. Everything they lose goes in your vault.'],
@@ -669,6 +676,7 @@ export class Hub {
           <button class="btn lobbyplay" id="lobbyPlay" data-act="lobbyplay">PLAY</button></div>
         <div class="lobbyside">
           ${this.renderParty()}
+          ${this.renderPlaceBet()}
           <section class="royalecard">
             <h3>⚔️ How Royale works</h3>
             <ul>
@@ -703,7 +711,7 @@ export class Hub {
     const games = Object.values(c.slots).filter((s) => CASINO_ITEMS[s.id] && CASINO_ITEMS[s.id].edge).length;
     return `<section class="mycas">
         <div class="mcmain">
-          <div class="mctitle"><small>${visiting ? 'VISITING' : 'YOUR CASINO'}</small><b>${visiting ? `${escapeHtml(leader)}'s casino` : `🏰 ${escapeHtml(c.name)}`}</b></div>
+          <div class="mctitle"><small>${visiting ? 'VISITING' : `YOUR CASINO · <span class="stars">${starText(starsOf(c))}</span>`}</small><b>${visiting ? `${escapeHtml(leader)}'s casino` : `🏰 ${escapeHtml(c.name)}`}</b></div>
           ${visiting ? `<p class="mcnote">${escapeHtml(leader)} is taking the party to their casino. Play the tables for real chips... and watch out: any of them could be rigged. 😈</p>` : `
           <div class="mcstats">
             <div><small>💰 In the vault</small><b>🪙 ${fmt(c.vault)}</b><button class="btn" data-act="cascollect" ${c.vault > 0 ? '' : 'disabled'}>Collect</button></div>
@@ -724,6 +732,17 @@ export class Hub {
           </ul></section>
         </div>
       </section>`;
+  }
+
+  // Bet on yourself before you drop: top 10, top 3, or the whole thing.
+  renderPlaceBet() {
+    const b = this.placeBet || (this.placeBet = { stake: 0, top: 10 });
+    const chips = this.data.stash.chips;
+    const [, label, mult] = PLACE_BETS.find(([t]) => t === b.top) || PLACE_BETS[0];
+    return `<section class="sidebet placebet"><b>🎲 Bet on yourself</b><small>Pick how well you'll do. Make it and you get paid; miss and the House keeps it.</small>
+      <div class="minecount"><small>STAKE</small>${PLACE_STAKES.filter((v) => v === 0 || v <= chips).map((v) => `<button class="subtab ${b.stake === v ? 'on' : ''}" data-act="pbstake" data-v="${v}">${v ? `🪙 ${chipLabel(v)}` : 'No bet'}</button>`).join('')}</div>
+      ${b.stake ? `<div class="minecount"><small>FINISH</small>${PLACE_BETS.map(([t, n, x]) => `<button class="subtab ${b.top === t ? 'on' : ''}" data-act="pbtop" data-v="${t}">${n} pays ${x}x</button>`).join('')}</div>
+      <p class="sbline">Bet 🪙 ${fmt(b.stake)} on finishing ${label.toLowerCase()} to win 🪙 ${fmt(b.stake * mult)}.</p>` : ''}</section>`;
   }
 
   // Who's on the lobby stage: you, plus everyone in your party.
@@ -2018,6 +2037,8 @@ export class Hub {
       case 'backmaps': this.loStage = 'maps'; break;
       case 'playmode': if (b.dataset.v !== playOf(d)) this.setPlay(b.dataset.v); break;
       case 'lobbyplay': this.deploy(); return;
+      case 'pbstake': (this.placeBet || (this.placeBet = { stake: 0, top: 10 })).stake = Number(b.dataset.v) || 0; break;
+      case 'pbtop': (this.placeBet || (this.placeBet = { stake: 0, top: 10 })).top = Number(b.dataset.v) || 10; break;
       case 'cascollect': {
         const v = casinoData().vault;
         if (v > 0) { updateCasino((c, x) => { x.stash.chips += c.vault; c.vault = 0; }); sfx.cashout(); this.toast(`💰 Collected 🪙 ${fmt(v)} from your casino's vault!`); }
@@ -2588,6 +2609,13 @@ export class Hub {
     }
     const royale = party ? !!party.royale : isRoyale(d);
     if (royale) {
+      const pb = this.placeBet;
+      save.update((x) => { delete x.royaleBet; });
+      if (pb && pb.stake > 0 && this.spend(pb.stake)) {
+        const [top, label, mult] = PLACE_BETS.find(([t]) => t === pb.top) || PLACE_BETS[0];
+        save.update((x) => { x.royaleBet = { stake: pb.stake, top, label, mult }; });
+        pb.stake = 0;
+      }
       this.loStage = 'maps';
       this.onDeploy({
         party,

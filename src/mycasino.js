@@ -59,9 +59,24 @@ export function casinoData(d = save.get()) {
     earned: c.earned || 0,
     visits: c.visits || 0,
     rigWins: c.rigWins || 0,
+    cover: c.cover || 0,
   };
 }
 export function updateCasino(fn) { save.update((x) => { const c = casinoData(x); fn(c, x); x.casino = c; }); }
+
+// One to five stars, from how nice the place is.
+export function starsOf(c) { return Math.max(1, Math.min(5, 1 + Math.floor((appealOf(c) - 10) / 35))); }
+export const starText = (n) => '★'.repeat(n) + '☆'.repeat(5 - n);
+export const COVER_CHARGES = [0, 50, 250, 1000];
+
+// Things the owner can do to friends visiting. All harmless. Mostly.
+export const PRANKS = [
+  ['jackpot', '💎 Fake jackpot', 'A million chips! For about two seconds.'],
+  ['boot', '🚪 Bouncer', 'Thrown out the front door.'],
+  ['horn', '📯 Air horn', 'HOOOONK.'],
+  ['spin', '🌀 Dizzy', 'Round and round they go.'],
+  ['shrink', '🐜 Tiny', 'Shrunk to bug size for 20 seconds.'],
+];
 
 export function appealOf(c) {
   let a = 10;
@@ -96,7 +111,7 @@ export function accrueAway(now = Date.now()) {
 // What goes over the wire (and to the raid) to build the place.
 export function casinoLayout(d = save.get()) {
   const c = casinoData(d);
-  return { name: c.name, slots: c.slots, rows: c.rows };
+  return { name: c.name, slots: c.slots, rows: c.rows, cover: c.cover };
 }
 
 // ---------- decor meshes ----------
@@ -211,6 +226,15 @@ export class MyCasino {
     ];
     // Hooks into the games: rigged tables and the owner's cut of what friends lose.
     this.hookTables();
+    // Visiting: pay the cover charge at the door, straight into the owner's vault.
+    const cover = this.layout.cover || 0;
+    if (!this.owner.me && cover > 0 && raid.isClient) {
+      if (save.get().stash.chips >= cover && raid.casino.spend(cover)) {
+        raid.net.send({ k: 'cvault', n: cover, cover: 1 });
+        raid.hud.toast(`🎟️ ${esc(this.owner.name)} charged you a 🪙 ${fmt(cover)} cover to get in.`);
+      } else raid.hud.toast(`🎟️ You couldn't pay ${esc(this.owner.name)}'s 🪙 ${fmt(cover)} cover. The bouncer lets it slide. This time.`);
+    }
+    this.prankCd = 0;
     if (this.owner.me && !raid.isClient) {
       const got = accrueAway();
       if (got > 0) raid.hud.toast(`🏰 While you were out, your casino made 🪙 ${fmt(got)}. It's in the vault at the cashier.`, 'big');
@@ -365,10 +389,11 @@ export class MyCasino {
   }
 
   // Host: a friend lost chips in our casino.
-  friendLost(n, rigged, who) {
+  friendLost(n, rigged, who, cover = false) {
     if (!this.owner.me) return;
     updateCasino((c) => { c.vault += n; c.earned += n; if (rigged) c.rigWins += 1; });
     this.drawSigns();
+    if (cover) this.raid.feed(`🎟️ ${who} paid the 🪙 ${fmt(n)} cover`);
     if (rigged) this.raid.feed(`😈 Your rigged table just ate ${who}'s win (+🪙 ${fmt(n)})`);
   }
 
@@ -402,12 +427,17 @@ export class MyCasino {
   }
 
   spawnCustomer() {
-    const char = createCharacter(randomLook());
+    // Now and then a VIP high roller: gold, crowned, and they bet big.
+    const vip = Math.random() < 0.05 + appealOf(this.layout) / 2500;
+    const look = randomLook();
+    if (vip) { look.color = 0xffc83d; look.hat = 'crown'; look.glasses = 'shades'; }
+    const char = createCharacter(look);
     char.showTag(false);
     const pos = DOOR.clone().add(new THREE.Vector3((Math.random() - 0.5) * 4, 0, 0));
     char.root.position.copy(pos);
     this.raid.scene.add(char.root);
-    const cu = { char, pos, path: [], state: 'walk', slot: null, t: 0, yaw: Math.PI, hop: 0, after: null };
+    const cu = { char, pos, path: [], state: 'walk', slot: null, t: 0, yaw: Math.PI, hop: 0, after: null, vip };
+    if (vip && this.owner.me) this.raid.feed('💎 A VIP high roller just walked in!');
     this.customers.push(cu);
     this.pickTarget(cu);
   }
@@ -463,7 +493,7 @@ export class MyCasino {
       this.raid.fx.confetti(at.clone().setY(3), 18);
       return;
     }
-    let n = Math.round(def.edge * (0.3 + Math.random() * 1.4) * (rig ? 1.8 : 1));
+    let n = Math.round(def.edge * (0.3 + Math.random() * 1.4) * (rig ? 1.8 : 1) * (cu.vip ? 3 : 1));
     if (rig && Math.random() < 0.15) {
       // Caught it. Word gets round.
       if (this.owner.me && this.grumpy <= 0) this.raid.hud.toast('😠 A customer figured out your table is rigged! Fewer people will show up for a bit.');
@@ -532,12 +562,94 @@ export class MyCasino {
     }
   }
 
+  // ---------- pranks ----------
+
+  // Friends in here right now (as the owner sees them).
+  guests() { return this.raid.combatants.filter((c) => c.human && c.alive && c.owner); }
+
+  // Owner: pull one on a friend.
+  prank(id, kind) {
+    const raid = this.raid;
+    if (!this.owner.me || !raid.isHost) return;
+    if (this.prankCd > 0) { raid.hud.toast('😈 Give it a second...'); return; }
+    const f = this.guests().find((c) => String(c.owner) === String(id));
+    if (!f) return;
+    this.prankCd = 2;
+    raid.net.net.to(f.owner, { k: 'prank', p: kind, by: this.owner.name });
+    // What everyone in the room sees happen to them.
+    const at = f.pos.clone().setY(f.pos.y + 3);
+    raid.fx.number(at, '😈', '#ff3fa4', 1.8);
+    if (kind === 'jackpot') raid.fx.confetti(at, 30);
+    if (kind === 'horn') sfx.siren();
+    if (kind === 'shrink') { f.char.root.scale.setScalar(0.4); f.shrinkT = 20; }
+    const label = (PRANKS.find(([k]) => k === kind) || [])[1] || 'Prank';
+    raid.feed(`😈 You pulled ${label} on ${f.name}`);
+  }
+
+  // Friend: the owner just pranked us.
+  pranked(kind, by) {
+    const raid = this.raid;
+    const p = raid.player;
+    if (!p) return;
+    const who = esc(by || 'The owner');
+    if (kind === 'jackpot') {
+      const el = this.banner();
+      el.innerHTML = '<b>💎💎💎 JACKPOT! 💎💎💎</b><span>🪙 1,000,000</span>';
+      el.className = 'prankbanner win';
+      el.hidden = false;
+      sfx.jackpot();
+      raid.fx.confetti(p.pos.clone().setY(2.5), 60);
+      clearTimeout(this.bannerT);
+      this.bannerT = setTimeout(() => {
+        el.innerHTML = `<b>😈 JUST KIDDING</b><span>Pranked by ${who}</span>`;
+        el.className = 'prankbanner kid';
+        sfx.deny();
+        this.bannerT = setTimeout(() => { el.hidden = true; }, 2600);
+      }, 2400);
+    } else if (kind === 'boot') {
+      if (raid.tables && raid.tables.seat) raid.setOverlay(null);
+      p.pos.set((Math.random() - 0.5) * 4, 0, 44);
+      p.vel.set(0, 0, 0);
+      p.yaw = 0;
+      raid.shake = Math.max(raid.shake, 0.5);
+      sfx.bonk();
+      raid.hud.toast(`🚪 ${who} had the bouncer throw you out!`, 'big');
+    } else if (kind === 'horn') {
+      sfx.siren();
+      raid.shake = Math.max(raid.shake, 0.7);
+      raid.hud.toast(`📯 HOOOOOONK! (courtesy of ${who})`, 'big');
+    } else if (kind === 'spin') {
+      this.spinT = 1.4;
+      raid.hud.toast(`🌀 ${who} spun you around!`);
+    } else if (kind === 'shrink') {
+      p.char.root.scale.setScalar(0.4);
+      this.shrinkT = 20;
+      raid.hud.toast(`🐜 ${who} shrank you! Back to normal in 20 seconds.`, 'big');
+    }
+  }
+
+  banner() {
+    let el = $('prankBanner');
+    if (!el) {
+      el = document.createElement('div');
+      el.id = 'prankBanner';
+      el.hidden = true;
+      document.body.appendChild(el);
+    }
+    return el;
+  }
+
   // ---------- each frame ----------
 
   interactables() { return [...this.spots, ...(this.T ? this.T.interactables() : [])]; }
 
   update(dt) {
     if (this.T) this.T.update(dt);
+    this.prankCd = Math.max(0, this.prankCd - dt);
+    const p = this.raid.player;
+    if (p && this.spinT > 0) { this.spinT -= dt; p.yaw += dt * 11; }
+    if (p && this.shrinkT > 0) { this.shrinkT -= dt; if (this.shrinkT <= 0) { p.char.root.scale.setScalar(1); this.raid.hud.toast('🐜 You\'re back to normal size.'); } }
+    for (const c of this.raid.combatants) if (c.shrinkT > 0) { c.shrinkT -= dt; if (c.shrinkT <= 0) c.char.root.scale.setScalar(1); }
     this.updateCustomers(dt);
     for (const it of this.items.values()) if (it.group.userData.spin) it.group.userData.spin.position.y = 3.1 + Math.sin(performance.now() / 300) * 0.15;
     this.signT -= dt;
@@ -553,6 +665,9 @@ export class MyCasino {
     if (this.owner.me && !this.raid.isClient) updateCasino((c) => { c.lastSeen = Date.now(); });
     const el = $('buildPanel');
     if (el) el.hidden = true;
+    if ($('prankBanner')) $('prankBanner').hidden = true;
+    clearTimeout(this.bannerT);
+    if (this.raid.player) this.raid.player.char.root.scale.setScalar(1);
   }
 
   // ---------- the build panel ----------
@@ -580,6 +695,7 @@ export class MyCasino {
     const c = casinoData();
     const chips = save.get().stash.chips;
     const open = c.rows * CASINO_COLS.length;
+    const guests = this.raid.isHost ? this.guests() : [];
     const cell = (i) => {
       const s = c.slots[i];
       const locked = i >= open;
@@ -622,9 +738,15 @@ export class MyCasino {
         <span>🧑‍🤝‍🧑 Customers <b>${this.customers.length}</b></span>
         <span>📈 ~🪙 <b>${fmt(incomeRate(c))}</b>/hr</span>
         <span>🏦 Made <b>🪙 ${fmt(c.earned)}</b></span>
+        <span>🏅 Rating <b class="stars">${starText(starsOf(c))}</b></span>
         <span>🪙 You have <b>${fmt(chips)}</b></span>
       </div>
-      <div class="bpbody"><div class="bplan"><div class="bwall">🎰 BACK WALL</div>${rows}<div class="bdoor">🚪 DOOR</div></div><div class="bdetail">${detail}</div></div>`;
+      <div class="bpbody"><div class="bplan"><div class="bwall">🎰 BACK WALL</div>${rows}<div class="bdoor">🚪 DOOR</div></div><div class="bdetail">${detail}</div></div>
+      <div class="bpfoot">
+        <div class="bcover"><b>🎟️ Cover charge</b><small>What friends pay to get in (into your vault).</small>
+          <div>${COVER_CHARGES.map((v) => `<button class="subtab ${(c.cover || 0) === v ? 'on' : ''}" data-act="cover" data-v="${v}">${v ? `🪙 ${fmt(v)}` : 'Free'}</button>`).join('')}</div></div>
+        <div class="bpranks"><b>😈 Pranks</b>${guests.length ? guests.map((g) => `<div class="bprow"><span>${esc(g.name)}</span>${PRANKS.map(([k, n, t]) => `<button class="subtab" data-act="prank" data-f="${esc(g.owner)}" data-p="${k}" title="${esc(t)}">${n}</button>`).join('')}</div>`).join('') : '<small>Make a party and bring friends in to prank them.</small>'}</div>
+      </div>`;
   }
 
   onClick(e) {
@@ -635,6 +757,8 @@ export class MyCasino {
     if (act === 'close') { this.raid.setOverlay(null); return; }
     if (act === 'cell') this.sel = Number(b.dataset.i);
     else if (act === 'collect') { this.collect(); return; }
+    else if (act === 'prank') { this.prank(b.dataset.f, b.dataset.p); return; }
+    else if (act === 'cover') { updateCasino((c) => { c.cover = Number(b.dataset.v) || 0; }); this.changed(); return; }
     else if (act === 'expand') {
       const cost = ROW_COST[casinoData().rows];
       if (!this.raid.casino.spend(cost)) return;

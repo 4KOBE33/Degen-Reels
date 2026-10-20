@@ -1778,3 +1778,22 @@ body.scoped #crosshair, body.scoped #cdRing { display: none !important; }
 .bitem[disabled] { opacity: 0.4; cursor: default; }
 .bitem:hover:not([disabled]) { background: rgba(255, 255, 255, 0.12); }
 @media (max-width: 760px) { .bpbody { grid-template-columns: 1fr; } }
+/* Your Casino: cover charge, pranks, and the fake jackpot */
+.bpfoot { display: grid; grid-template-columns: 1fr 1.6fr; gap: 14px; margin-top: 12px; }
+.bcover, .bpranks { display: grid; gap: 6px; align-content: start; padding: 10px 12px; border-radius: 14px; background: rgba(255, 255, 255, 0.05); }
+.bcover b, .bpranks > b { font: 400 18px var(--display); color: var(--gold); letter-spacing: 0.5px; }
+.bcover small, .bpranks small { font: 700 12px var(--body); opacity: 0.75; }
+.bcover div { display: flex; flex-wrap: wrap; gap: 6px; }
+.bprow { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.bprow span { font: 800 14px var(--body); min-width: 90px; }
+.bpstats .stars { color: var(--gold); letter-spacing: 1px; }
+#prankBanner { position: fixed; left: 50%; top: 30%; transform: translate(-50%, -50%); z-index: 40; display: grid; justify-items: center; gap: 4px; padding: 22px 40px; border-radius: 24px; border: 5px solid var(--gold); background: rgba(27, 15, 43, 0.92); pointer-events: none; text-align: center; }
+#prankBanner[hidden] { display: none; }
+#prankBanner b { font: 400 clamp(30px, 6vw, 64px)/1 var(--display); color: var(--gold); letter-spacing: 1px; }
+#prankBanner span { font: 400 clamp(22px, 4vw, 44px) var(--display); color: var(--cream); }
+#prankBanner.win { animation: jpGlow 0.4s ease-in-out infinite alternate; }
+#prankBanner.kid { border-color: #ff3fa4; }
+#prankBanner.kid b { color: #ff3fa4; }
+@media (max-width: 760px) { .bpfoot { grid-template-columns: 1fr; } }
+.mctitle .stars { color: var(--gold); letter-spacing: 2px; }
+.placebet { margin: 0; }

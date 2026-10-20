@@ -560,8 +560,12 @@ export class Raid {
     const kills = this.run.raiders || 0;
     const prize = placementPrize(place, kills);
     r.royale = { place, of: ROYALE_SIZE, kills, prize };
+    // The bet on yourself from the lobby.
+    const bet = save.get().royaleBet;
+    if (bet && bet.stake > 0) r.royale.bet = { ...bet, won: place <= bet.top, pay: place <= bet.top ? bet.stake * bet.mult : 0 };
     const before = save.get().xp;
     r.progress = progress((d) => {
+      if (r.royale.bet) { d.stash.chips += r.royale.bet.pay; delete d.royaleBet; }
       d.stash.chips += prize.chips;
       d.xp += prize.xp;
       d.stats.royaleGames = (d.stats.royaleGames || 0) + 1;

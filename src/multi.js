@@ -469,7 +469,7 @@ export class Session {
         break;
       case 'cvault':
         // A friend lost chips in our casino: they go in the vault.
-        if (raid.myCasino) raid.myCasino.friendLost(Math.max(0, Math.min(1e7, Number(d.n) || 0)), !!d.rig, pup ? pup.name : 'A friend');
+        if (raid.myCasino) raid.myCasino.friendLost(Math.max(0, Math.min(1e7, Number(d.n) || 0)), !!d.rig, pup ? pup.name : 'A friend', !!d.cover);
         break;
       case 'gm': {
         // A friend paid at a dice table or coin flip: we roll it.
@@ -621,6 +621,8 @@ export class Session {
       case 'toast':
         raid.hud.toast(d.text, d.big ? 'big' : '');
         break;
+      // The casino owner pulled a prank on us.
+      case 'prank': if (raid.myCasino) raid.myCasino.pranked(d.p, d.by); break;
       // Our heat, kept by the host: a star up or down, or a crew on its way.
       case 'heat':
         if (d.crew) raid.hud.toast(`🚨 The House sent a crew after you (${d.crew})!`);

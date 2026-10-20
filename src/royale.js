@@ -22,6 +22,10 @@ const PHASES = [
 ];
 export const ROYALE_TIME = PHASES.reduce((n, p) => n + p.wait + p.shrink, 0) + 60;
 
+// Bets on yourself before the drop: finish in the top N and it pays.
+export const PLACE_BETS = [[10, 'Top 10', 2], [3, 'Top 3', 4], [1, 'Win it', 10]];
+export const PLACE_STAKES = [0, 100, 500, 2500, 10000];
+
 // Chips (and XP) by where you finish.
 export function placementPrize(place, kills) {
   const base = place === 1 ? 3000 : place <= 3 ? 1400 : place <= 5 ? 800 : place <= 10 ? 400 : 150;
