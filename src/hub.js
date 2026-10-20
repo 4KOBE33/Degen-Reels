@@ -187,6 +187,11 @@ function reelOdds(tier) {
 
 // The "what's new" card, shown once after an update.
 const WHATS_NEW = {
+  96: [
+    ['🏆', 'Royale & Casino achievements', '11 new achievements: win a Royale, win five, 8 kills in one game, top 10 five times, grow your casino to 🪙 250,000, open the whole floor, rig 10 wins on friends, pull 10 pranks, and more.'],
+    ['📋', 'New daily contracts', 'Contracts can now ask you to play Royales, finish top 10, get Royale kills, or collect chips from your casino\'s vault.'],
+    ['🎉', 'Victory lap', 'Win a Royale and you get a few seconds of confetti and a little celebration before the results.'],
+  ],
   95: [
     ['👁', 'Watch the rest', 'Out of a solo Royale? Hit WATCH THE REST and follow whoever\'s still fighting until there\'s a winner. Press B to bet on the one you\'re watching: the more people left, the bigger the payout.'],
     ['🗺️', 'Bus route on the map', 'On the party bus, press M to see the route and where the bus is, so you can pick your landing.'],
@@ -2056,7 +2061,7 @@ export class Hub {
       case 'pbtop': (this.placeBet || (this.placeBet = { stake: 0, top: 10 })).top = Number(b.dataset.v) || 10; break;
       case 'cascollect': {
         const v = casinoData().vault;
-        if (v > 0) { updateCasino((c, x) => { x.stash.chips += c.vault; c.vault = 0; }); sfx.cashout(); this.toast(`💰 Collected 🪙 ${fmt(v)} from your casino's vault!`); }
+        if (v > 0) { updateCasino((c, x) => { x.stash.chips += c.vault; x.stats.casinoCollected = (x.stats.casinoCollected || 0) + c.vault; c.vault = 0; }); this.announce(progress(() => {})); sfx.cashout(); this.toast(`💰 Collected 🪙 ${fmt(v)} from your casino's vault!`); }
         break;
       }
       case 'freelocked': this.toast('That\'s free gear. Put the whole free loadout back to pack your own.'); return;

@@ -24,6 +24,10 @@ const KINDS = {
   bounty: { icon: '💰', stat: 'bounties', text: () => 'Claim a bounty on a WANTED raider', tiers: [[1, 1200, 180], [1, 1200, 180], [1, 1200, 180]], hardOnly: true },
   drops: { icon: '🪂', stat: 'supplyDrops', text: (n) => `Crack open ${n} supply drop${n > 1 ? 's' : ''}`, tiers: [[1, 600, 120], [1, 600, 120], [2, 1500, 220]] },
   boss: { icon: '👑', stat: 'bossKills', text: () => 'Bust a casino boss', tiers: [[1, 3500, 350], [1, 3500, 350], [1, 3500, 350]], hardOnly: true },
+  royale: { icon: '🪂', stat: 'royaleGames', text: (n) => `Play ${n} Royale${n > 1 ? 's' : ''}`, tiers: [[1, 300, 80], [3, 800, 150], [5, 1600, 240]] },
+  royaleTop: { icon: '🔟', stat: 'royaleTop10', text: (n) => `Finish top 10 in Royale${n > 1 ? ` ${n} times` : ''}`, tiers: [[1, 500, 110], [2, 1100, 180], [4, 2400, 280]] },
+  royaleKills: { icon: '💀', stat: 'royaleKills', text: (n) => `Get ${n} kills in Royale`, tiers: [[3, 400, 100], [8, 1000, 170], [15, 2200, 270]] },
+  casino: { icon: '🏰', stat: 'casinoCollected', text: (n) => `Collect 🪙 ${fmt(n)} from your casino's vault`, tiers: [[1000, 400, 100], [5000, 1000, 170], [15000, 2200, 270]] },
   map: { icon: '🗺️', stat: 'map', text: (n, m) => `Extract from ${MAPS[m] ? MAPS[m].name : m}`, tiers: [[1, 600, 120], [1, 600, 120], [1, 600, 120]] },
 };
 const RAID_MAPS = Object.keys(MAPS).filter((id) => !MAPS[id].safe && !MAPS[id].tutorial && !MAPS[id].royaleOnly);

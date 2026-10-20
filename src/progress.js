@@ -122,6 +122,19 @@ export const ACHIEVEMENTS = [
   { id: 'rules5', group: 'Survival', icon: '🎲', tier: 2, name: 'Rules Lawyer', desc: 'Extract under all five House Rules', prog: (d) => [Math.min(Object.keys(S(d).rulesWon || {}).length, 5), 5] },
   { id: 'hilo10', group: 'Gambling', icon: '🂠', tier: 2, name: 'Card Sharp', desc: 'Call 10 cards in a row in Hi-Lo', prog: (d) => [Math.min(S(d).hiloBest || 0, 10), 10] },
   { id: 'jackpot1', group: 'Gambling', icon: '💎', tier: 3, name: 'Diamond Hands', desc: 'Hit the Lucky Slots jackpot', prog: (d) => [Math.min(S(d).jackpots || 0, 1), 1] },
+  // Royale
+  { id: 'royale1', group: 'Royale', icon: '🪂', tier: 0, name: 'First Drop', desc: 'Play a Royale', prog: (d) => [Math.min(S(d).royaleGames || 0, 1), 1] },
+  { id: 'royaletop10', group: 'Royale', icon: '🔟', tier: 1, name: 'Top Ten', desc: 'Finish in the top 10 of a Royale 5 times', prog: (d) => [Math.min(S(d).royaleTop10 || 0, 5), 5] },
+  { id: 'royalewin', group: 'Royale', icon: '👑', tier: 2, name: 'Winner Winner', desc: 'Win a Royale', prog: (d) => [Math.min(S(d).royaleWins || 0, 1), 1] },
+  { id: 'royalewin5', group: 'Royale', icon: '🏆', tier: 3, name: 'Island Royalty', desc: 'Win 5 Royales', prog: (d) => [Math.min(S(d).royaleWins || 0, 5), 5] },
+  { id: 'royalekills8', group: 'Royale', icon: '💀', tier: 2, name: 'Thinning the Herd', desc: 'Get 8 kills in one Royale', prog: (d) => [Math.min(S(d).royaleBestKills || 0, 8), 8] },
+  { id: 'royalekills100', group: 'Royale', icon: '☠️', tier: 2, name: 'Body Count', desc: 'Get 100 Royale kills in total', prog: (d) => [Math.min(S(d).royaleKills || 0, 100), 100] },
+  // Your Casino
+  { id: 'casino10k', group: 'Casino', icon: '🏰', tier: 1, name: 'Open for Business', desc: 'Your casino makes 🪙 10,000', prog: (d) => [Math.min((d.casino && d.casino.earned) || 0, 10000), 10000] },
+  { id: 'casino250k', group: 'Casino', icon: '🏦', tier: 3, name: 'Casino Mogul', desc: 'Your casino makes 🪙 250,000', prog: (d) => [Math.min((d.casino && d.casino.earned) || 0, 250000), 250000] },
+  { id: 'casinofull', group: 'Casino', icon: '🏗️', tier: 2, name: 'Full House', desc: 'Open every row of your casino floor', prog: (d) => [Math.min((d.casino && d.casino.rows) || 1, 4), 4] },
+  { id: 'casinorig10', group: 'Casino', icon: '😈', tier: 2, name: 'The House Always Wins', desc: 'Your rigged tables eat 10 of your friends\' wins', prog: (d) => [Math.min((d.casino && d.casino.rigWins) || 0, 10), 10] },
+  { id: 'casinopranks', group: 'Casino', icon: '🤡', tier: 1, name: 'Prankster', desc: 'Pull 10 pranks on friends in your casino', prog: (d) => [Math.min(S(d).pranks || 0, 10), 10] },
   // Levels
   { id: 'level5', group: 'Levels', icon: '⭐', tier: 0, name: 'Getting Started', desc: 'Reach level 5', prog: (d) => [Math.min(levelInfo(d.xp).level, 5), 5] },
   { id: 'level15', group: 'Levels', icon: '🌟', tier: 1, name: 'Seasoned', desc: 'Reach level 15', prog: (d) => [Math.min(levelInfo(d.xp).level, 15), 15] },

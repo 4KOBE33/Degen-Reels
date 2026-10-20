@@ -13,6 +13,7 @@ import { part, toon, canvasTexture } from './toon.js';
 import { keyName } from './keys.js';
 import { sfx } from './audio.js';
 import { LoungeTables, CABINET_GAMES } from './tables.js';
+import { progress } from './progress.js';
 
 const $ = (id) => document.getElementById(id);
 const fmt = (n) => Math.round(n).toLocaleString('en-US');
@@ -513,6 +514,7 @@ export class MyCasino {
     this.drawSigns();
     if (cover) this.raid.feed(`🎟️ ${who} paid the 🪙 ${fmt(n)} cover`);
     if (rigged) this.raid.feed(`😈 Your rigged table just ate ${who}'s win (+🪙 ${fmt(n)})`);
+    if (rigged) this.raid.casino.announce(progress(() => {}));
   }
 
   // ---------- money ----------
@@ -520,10 +522,11 @@ export class MyCasino {
   collect() {
     const v = casinoData().vault;
     if (v <= 0) { this.raid.hud.toast('The vault is empty. Give the customers a minute.'); return; }
-    updateCasino((c, x) => { x.stash.chips += c.vault; c.vault = 0; });
+    updateCasino((c, x) => { x.stash.chips += c.vault; x.stats.casinoCollected = (x.stats.casinoCollected || 0) + c.vault; c.vault = 0; });
     sfx.cashout();
     this.raid.fx.confetti(new THREE.Vector3(this.L.cage.x, 2.5, this.L.cage.z));
     this.raid.hud.toast(`💰 Collected 🪙 ${fmt(v)} from the vault!`, 'big');
+    this.raid.casino.announce(progress(() => {}));
     this.drawSigns();
     if (this.panelOpen()) this.renderPanel();
   }
@@ -781,6 +784,7 @@ export class MyCasino {
     if (kind === 'shrink') { f.char.root.scale.setScalar(0.4); f.shrinkT = 20; }
     const label = (PRANKS.find(([k]) => k === kind) || [])[1] || 'Prank';
     raid.feed(`😈 You pulled ${label} on ${f.name}`);
+    this.raid.casino.announce(progress((d) => { d.stats.pranks = (d.stats.pranks || 0) + 1; }));
   }
 
   // Friend: the owner just pranked us.
@@ -1004,6 +1008,7 @@ export class MyCasino {
       updateCasino((c) => { c.rows += 1; });
       sfx.cashout();
       this.raid.hud.toast('🏗️ The floor just got bigger!');
+      this.raid.casino.announce(progress(() => {}));
       this.changed();
     } else if (act === 'buy') {
       const def = CASINO_ITEMS[b.dataset.id];

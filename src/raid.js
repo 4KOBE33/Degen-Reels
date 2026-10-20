@@ -372,6 +372,7 @@ export class Raid {
     if (this.royale) { this.royale.dispose(); this.royale = null; }
     this.royaleLeft = 0;
     this.royaleWatch = false;
+    this.victoryT = 0;
     this.royaleMode = !!opts.royale && !this.map.safe;
     // Reset the map.
     for (const p of this.pickups) p.remove();
@@ -552,10 +553,14 @@ export class Raid {
   royaleWin() {
     if (!this.active) return;
     this.royalePlace = 1;
+    if (this.victoryT > 0) return;
     this.hud.toast('👑 WINNER WINNER, CASINO DINNER!', 'big');
     sfx.jackpot();
     if (this.isHost) this.net.rel({ k: 'rwin' });
-    this.finish({ success: true, where: 'the last circle', items: [], chips: 0, value: 0, royale: true });
+    // A few seconds to soak it in (confetti, a little dance) before the results.
+    this.victoryT = 4;
+    this.victoryFx = 0;
+    if (this.player) this.emote(this.player, 0);
   }
 
   // Placement, prize, XP and stats. Nothing you picked up comes home: everyone starts fresh.
@@ -577,6 +582,8 @@ export class Raid {
       if (place === 1) d.stats.royaleWins = (d.stats.royaleWins || 0) + 1;
       d.stats.royaleBest = Math.min(d.stats.royaleBest || 99, place);
       d.stats.royaleKills = (d.stats.royaleKills || 0) + kills;
+      if (place <= 10) d.stats.royaleTop10 = (d.stats.royaleTop10 || 0) + 1;
+      d.stats.royaleBestKills = Math.max(d.stats.royaleBestKills || 0, kills);
     });
     r.progress.xp = save.get().xp - before || prize.xp;
     this.royale.over = true;
@@ -2191,6 +2198,18 @@ export class Raid {
     this.updateAirdrop(dt);
     this.updateHeat(dt);
     if (this.royale) this.royale.update(dt);
+    if (this.victoryT > 0) {
+      this.victoryT -= dt;
+      this.victoryFx -= dt;
+      const p = this.player;
+      if (p && this.victoryFx <= 0) {
+        this.victoryFx = 0.35;
+        const a = Math.random() * Math.PI * 2;
+        this.fx.confetti(p.pos.clone().add(new THREE.Vector3(Math.cos(a) * 3, 3 + Math.random() * 2, Math.sin(a) * 3)), 30);
+        if (Math.random() < 0.4) sfx.win();
+      }
+      if (this.victoryT <= 0 && this.active) this.finish({ success: true, where: 'the last circle', items: [], chips: 0, value: 0, royale: true });
+    }
     this.updateEmotes();
     // Where's the bounty? A tip every so often.
     const bt = this.bountyOn;
