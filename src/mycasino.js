@@ -317,6 +317,8 @@ export class MyCasino {
     this.items = new Map(); // slot -> { id, group, colliders }
     this.customers = [];
     this.spawnT = 2;
+    // Every few minutes the Gaming Commission sends someone round (only to your own place).
+    this.inspectT = 150 + Math.random() * 150;
     this.signT = 0;
     this.grumpy = 0; // seconds of bad word-of-mouth after a customer caught a rigged table
     this.sel = null; // the spot picked in the build panel
@@ -652,6 +654,8 @@ export class MyCasino {
             this.customers.splice(i, 1);
             continue;
           }
+          // The inspector's done his rounds: off he goes.
+          if (cu.inspector) { this.leave(cu); continue; }
           cu.state = 'use';
           cu.t = cu.kind === 'game' ? 8 + Math.random() * 10 : cu.kind === 'bar' ? 6 + Math.random() * 6 : 3 + Math.random() * 4;
           if (cu.slot !== null) {
@@ -662,7 +666,7 @@ export class MyCasino {
           const dx = wp.x - cu.pos.x;
           const dz = wp.z - cu.pos.z;
           const d = Math.hypot(dx, dz);
-          if (d < 0.3) cu.path.shift();
+          if (d < 0.3) { const done = cu.path.shift(); if (cu.inspector && done.slot !== undefined) this.inspect(cu, done.slot); }
           else {
             speed = 4;
             const step = Math.min(d, speed * dt);
@@ -688,6 +692,50 @@ export class MyCasino {
       cu.char.root.rotation.y = cu.yaw;
       cu.char.animate(dt, { speed, forward: speed / 6, side: 0, onGround: hopY <= 0.01, pitch: 0, dead: false, showTag: false });
     }
+  }
+
+  // The Gaming Commission: walks the floor checking every game. Rigged ones cost you.
+  spawnInspector() {
+    const char = createCharacter({ color: 0x6b7280, hat: 'none', eyes: 'sleepy', mouth: 'flat', glasses: 'nerd', neck: 'bowtie' });
+    char.showTag(false);
+    const board = part(new THREE.BoxGeometry(0.5, 0.7, 0.06), 0xd4a63a);
+    board.position.set(0.55, 1.5, -0.3);
+    char.root.add(board);
+    const pos = DOOR.clone();
+    char.root.position.copy(pos);
+    this.raid.scene.add(char.root);
+    const path = [];
+    const games = this.T ? [...this.T.tables].sort((a, b) => b.seatPos.z - a.seatPos.z) : [];
+    for (const t of games) {
+      const az = t.seatPos.z + 2.2;
+      path.push(new THREE.Vector3(0, 0, az), new THREE.Vector3(t.seatPos.x, 0, az));
+      const look = t.seatPos.clone();
+      look.slot = t.slot;
+      path.push(look, new THREE.Vector3(t.seatPos.x, 0, az));
+    }
+    const cu = { char, pos, path, state: 'walk', slot: null, t: 0, yaw: Math.PI, hop: 0, inspector: true, kind: 'inspect' };
+    this.customers.push(cu);
+    this.react(cu, '🕵️');
+    const rigged = Object.values(this.layout.slots).filter((x) => x.rig).length;
+    this.raid.hud.toast(`🕵️ A Gaming Commission inspector just walked in!${rigged ? ` You have ${rigged} rigged table${rigged > 1 ? 's' : ''}: un-rig them at the Manager's desk before he gets there!` : ' Good thing everything\'s on the level.'}`, 'big');
+    sfx.alert();
+  }
+
+  inspect(cu, slot) {
+    const s = this.layout.slots[slot];
+    const it = this.items.get(slot);
+    if (!it) return;
+    const at = new THREE.Vector3(it.x, 0, it.z);
+    if (!s || !s.rig) { this.react(cu, '👍'); return; }
+    // Caught. A fine out of the vault, and the table gets fixed.
+    const fine = 2500;
+    let paid = 0;
+    updateCasino((c) => { paid = Math.min(c.vault, fine); c.vault -= paid; if (c.slots[slot]) c.slots[slot].rig = false; });
+    this.react(cu, '🚨');
+    this.raid.fx.number(at.clone().setY(5), `🚨 FINED -🪙${fmt(fine)}`, '#ff5d5d', 1.8);
+    sfx.siren();
+    this.raid.hud.toast(`🚨 The inspector caught a rigged ${CASINO_ITEMS[it.id].name}! Fined 🪙 ${fmt(fine)}${paid < fine ? ` (the vault only had 🪙 ${fmt(paid)})` : ''}, and he un-rigged it.`, 'big');
+    this.changed();
   }
 
   // A little emoji over a customer's head for a couple of seconds.
@@ -864,6 +912,10 @@ export class MyCasino {
     for (const c of this.raid.combatants) if (c.shrinkT > 0) { c.shrinkT -= dt; if (c.shrinkT <= 0) c.char.root.scale.setScalar(1); }
     this.updateCustomers(dt);
     this.updateStaff(dt);
+    if (this.owner.me && !this.raid.isClient && this.items.size) {
+      this.inspectT -= dt;
+      if (this.inspectT <= 0) { this.inspectT = 240 + Math.random() * 180; this.spawnInspector(); }
+    }
     const now = performance.now() / 1000;
     for (const it of this.items.values()) {
       if (it.group.userData.spin) it.group.userData.spin.position.y = 3.1 + Math.sin(now * 3.3) * 0.15;

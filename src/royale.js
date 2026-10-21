@@ -33,6 +33,17 @@ export const PLACE_BETS = [[10, 'Top 10', 2], [3, 'Top 3', 4], [1, 'Win it', 10]
 export const PLACE_STAKES = [0, 100, 500, 2500, 10000];
 
 // Chips (and XP) by where you finish.
+// A parachute over someone's head (made once, shown while gliding).
+function chuteFor(c, i = Math.floor(Math.random() * 4)) {
+  if (c.chute) return c.chute;
+  const chute = new THREE.Mesh(new THREE.SphereGeometry(1.6, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshBasicMaterial({ color: [0xff3fa4, 0xffd23f, 0x2ee6d6, 0xc77dff][i % 4], side: THREE.DoubleSide }));
+  chute.position.y = 4.2;
+  chute.scale.set(1.3, 0.8, 1.3);
+  c.char.root.add(chute);
+  c.chute = chute;
+  return chute;
+}
+
 // A pink golf cart: parked out on the island, or carrying whoever's driving it.
 export function buildCart(roofless = false) {
   const g = new THREE.Group();
@@ -112,6 +123,7 @@ export class Royale {
     this.over = false;
     this.buildVisuals();
     this.buildCarts(rnd);
+    this.buildPads(rnd);
     this.rainAt = 150 + rnd() * 60;
   }
 
@@ -204,13 +216,7 @@ export class Royale {
     c.leaveBus = false;
     c.seat = c.isPlayer || c.human ? (i % 5) - 2 : 0;
     if (!c.isPlayer && !c.human) c.jumpAt = 0.06 + Math.pow(Math.random(), 0.9) * 0.86;
-    if (!c.chute) {
-      const chute = new THREE.Mesh(new THREE.SphereGeometry(1.6, 12, 6, 0, Math.PI * 2, 0, Math.PI / 2), new THREE.MeshBasicMaterial({ color: [0xff3fa4, 0xffd23f, 0x2ee6d6, 0xc77dff][i % 4], side: THREE.DoubleSide }));
-      chute.position.y = 4.2;
-      chute.scale.set(1.3, 0.8, 1.3);
-      c.char.root.add(chute);
-      c.chute = chute;
-    }
+    chuteFor(c, i);
     c.chute.visible = false;
     this.seatOn(c);
   }
@@ -276,6 +282,60 @@ export class Royale {
         open: (by) => { if (by.isPlayer && !cart.driver && !by.cart) this.enterCart(by, cart); },
       };
       this.carts.push(cart);
+    }
+  }
+
+  // Launch pads: glowing springboards that fling you into the sky, then you glide down.
+  buildPads(rnd) {
+    const raid = this.raid;
+    const half = raid.map.half;
+    this.pads = [];
+    for (let i = 0; i < 12; i++) {
+      const a = (i / 12) * Math.PI * 2 + rnd() * 0.4;
+      const d = half * (0.25 + rnd() * 0.5);
+      let x = Math.cos(a) * d;
+      let z = Math.sin(a) * d;
+      for (let k = 0; k < 12 && !raid.map.isFree(x, z, 2.5); k++) { x += (rnd() - 0.5) * 24; z += (rnd() - 0.5) * 24; }
+      if (!raid.map.isFree(x, z, 2.5)) continue;
+      const g = new THREE.Group();
+      const base = new THREE.Mesh(new THREE.CylinderGeometry(1.8, 2, 0.3, 24), new THREE.MeshLambertMaterial({ color: 0x2b1640 }));
+      base.position.y = 0.15;
+      const top = new THREE.Mesh(new THREE.CircleGeometry(1.5, 24), new THREE.MeshBasicMaterial({ color: 0x5ee27a }));
+      top.rotation.x = -Math.PI / 2;
+      top.position.y = 0.32;
+      const ring = new THREE.Mesh(new THREE.TorusGeometry(1.75, 0.1, 8, 32), new THREE.MeshBasicMaterial({ color: 0xffd23f }));
+      ring.rotation.x = Math.PI / 2;
+      ring.position.y = 0.33;
+      const arrow = new THREE.Mesh(new THREE.ConeGeometry(0.6, 1.2, 4), new THREE.MeshBasicMaterial({ color: 0x5ee27a, transparent: true, opacity: 0.8 }));
+      arrow.position.y = 2;
+      g.add(base, top, ring, arrow);
+      g.position.set(x, 0, z);
+      raid.scene.add(g);
+      this.pads.push({ x, z, g, arrow, top });
+    }
+  }
+
+  updatePads(dt) {
+    const raid = this.raid;
+    const now = performance.now() / 1000;
+    for (const pad of this.pads || []) {
+      pad.arrow.position.y = 2 + Math.sin(now * 3 + pad.x) * 0.35;
+      pad.arrow.rotation.y = now * 2;
+      for (const c of raid.combatants) {
+        if (!c.alive || c.downed || c.riding || c.gliding || c.launched || c.cart || !c.onGround) continue;
+        // Only the bodies this game moves (yours, and bots on the host).
+        if (!c.isPlayer && (raid.isClient || c.human || c.puppet)) continue;
+        if (Math.hypot(c.pos.x - pad.x, c.pos.z - pad.z) > 1.7) continue;
+        c.vel.y = 40;
+        c.onGround = false;
+        c.launched = true;
+        chuteFor(c).visible = true;
+        if (!c.isPlayer && c.brain) {
+          const a = Math.random() * Math.PI * 2;
+          c.glideTo = new THREE.Vector3(c.pos.x + Math.cos(a) * 60, 0, c.pos.z + Math.sin(a) * 60);
+        }
+        if (c.isPlayer) { sfx.jump(); raid.hud.toast('🎆 WHEEE! Steer with WASD on the way down.'); }
+      }
     }
   }
 
@@ -347,6 +407,7 @@ export class Royale {
       if (go) this.jumpOut(c);
       else this.seatOn(c);
     }
+    this.updatePads(dt);
     // Whoever's driving rides in a cart (friends' too, from what they tell us).
     for (const c of raid.combatants) {
       if (c.cart && (!c.alive || c.downed)) this.exitCart(c);
@@ -355,7 +416,7 @@ export class Royale {
       if (c.cartMesh) c.cartMesh.visible = on;
     }
     // Chutes away once people land.
-    for (const c of raid.combatants) if (c.chute && !c.gliding) c.chute.visible = false;
+    for (const c of raid.combatants) if (c.chute && !c.gliding && !c.launched) c.chute.visible = false;
     // The House Edge hurts: you in every game, bots (and anything else) only where they're run.
     this.hurtT -= dt;
     if (this.hurtT <= 0) {
@@ -419,6 +480,7 @@ export class Royale {
 
   dispose() {
     for (const o of [this.wall, this.ring, this.edge, this.bus, this.rainBeam]) if (o) this.raid.scene.remove(o);
+    for (const pad of this.pads || []) this.raid.scene.remove(pad.g);
     for (const cart of this.carts || []) this.raid.scene.remove(cart.group);
     for (const c of this.raid.combatants) { if (c.cartMesh) { c.char.root.remove(c.cartMesh); c.cartMesh = null; } c.cart = null; }
   }

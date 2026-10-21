@@ -334,6 +334,8 @@ export class Combatant {
         }
         this.vel.y = -7;
       } else this.vel.y -= PLAYER.gravity * live.gravity * dt;
+      // Off a launch pad: once you start coming down, the chute opens.
+      if (this.launched && this.vel.y < 0) { this.launched = false; this.gliding = true; }
       this.pos.addScaledVector(this.vel, dt);
       const wasOnGround = this.onGround;
       const r = resolve(this.pos, this.vel, PLAYER.radius, this.raid.map);

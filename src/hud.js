@@ -607,6 +607,7 @@ export class Hud {
     if (raid.royale && raid.royale.carts) {
       ctx.font = '20px sans-serif';
       for (const cart of raid.royale.carts) if (!cart.driver) ctx.fillText('🛺', tx(cart.group.position.x), tx(cart.group.position.z));
+      for (const pad of raid.royale.pads || []) ctx.fillText('🎆', tx(pad.x), tx(pad.z));
     }
     // Royale, still on the bus: where it's flying, and where it is now.
     if (raid.royale && raid.player && raid.player.riding) {

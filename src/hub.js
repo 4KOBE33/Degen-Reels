@@ -187,6 +187,10 @@ function reelOdds(tier) {
 
 // The "what's new" card, shown once after an update.
 const WHATS_NEW = {
+  99: [
+    ['🎆', 'Launch pads', 'Glowing green pads all over Jackpot Island (they\'re on your map). Step on one and you\'re flung 30 meters up, then your chute opens and you glide about 90 meters. Bots use them too.'],
+    ['🕵️', 'The Gaming Commission', 'Every few minutes an inspector walks through your casino checking every game. Any rigged table he catches costs you a 🪙 2,500 fine out of the vault (and he un-rigs it). You get a warning when he walks in, so you can un-rig fast at the Manager\'s desk.'],
+  ],
   98: [
     ['💸', 'Money Rain', 'Once a Royale, chips start falling from the sky somewhere inside the next circle. Follow the green beam.'],
     ['🪙', 'Keep what you grab', 'Chips you pick up during a Royale are now yours to keep, on top of your placement prize, however the match ends.'],
