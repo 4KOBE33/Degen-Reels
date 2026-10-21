@@ -1810,3 +1810,9 @@ body.outzone #hud::after { content: ''; position: fixed; inset: 0; pointer-event
 .bpromo small { font: 700 12px var(--body); opacity: 0.8; }
 .btn.promobtn { background: #ff3fa4; color: #fff; }
 #spectate .spbet { margin-top: 6px; font: 800 14px var(--body); color: var(--gold); }
+.rhist { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; }
+.rhist small { font: 800 11px var(--body); letter-spacing: 1px; opacity: 0.7; margin-right: 4px; }
+.rhist span { display: grid; justify-items: center; min-width: 40px; padding: 4px 6px; border-radius: 10px; background: rgba(255, 255, 255, 0.07); font: 400 16px var(--display); }
+.rhist span i { font: 700 10px var(--body); font-style: normal; opacity: 0.75; }
+.rhist span.top { background: rgba(46, 230, 214, 0.18); }
+.rhist span.win { background: rgba(255, 210, 63, 0.3); }

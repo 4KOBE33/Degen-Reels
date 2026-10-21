@@ -569,14 +569,17 @@ export class Raid {
     const place = this.royalePlace || Math.max(1, this.royale ? this.royale.left() + (this.player && this.player.alive ? 0 : 1) : 1);
     const kills = this.run.raiders || 0;
     const prize = placementPrize(place, kills);
-    r.royale = { place, of: ROYALE_SIZE, kills, prize };
+    // Chips you picked up out there are yours to keep, however it ended.
+    const found = Math.round((this.player && this.player.chips) || 0);
+    r.royale = { place, of: ROYALE_SIZE, kills, prize, found };
     // The bet on yourself from the lobby.
     const bet = save.get().royaleBet;
     if (bet && bet.stake > 0) r.royale.bet = { ...bet, won: place <= bet.top, pay: place <= bet.top ? bet.stake * bet.mult : 0 };
     const before = save.get().xp;
     r.progress = progress((d) => {
       if (r.royale.bet) { d.stash.chips += r.royale.bet.pay; delete d.royaleBet; }
-      d.stash.chips += prize.chips;
+      d.stash.chips += prize.chips + found;
+      d.stats.royaleHistory = [...(d.stats.royaleHistory || []), { place, kills }].slice(-8);
       d.xp += prize.xp;
       d.stats.royaleGames = (d.stats.royaleGames || 0) + 1;
       if (place === 1) d.stats.royaleWins = (d.stats.royaleWins || 0) + 1;

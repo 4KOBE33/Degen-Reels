@@ -187,6 +187,12 @@ function reelOdds(tier) {
 
 // The "what's new" card, shown once after an update.
 const WHATS_NEW = {
+  98: [
+    ['💸', 'Money Rain', 'Once a Royale, chips start falling from the sky somewhere inside the next circle. Follow the green beam.'],
+    ['🪙', 'Keep what you grab', 'Chips you pick up during a Royale are now yours to keep, on top of your placement prize, however the match ends.'],
+    ['👥', 'Countdown calls', 'Big callouts when it gets down to 10, 5, 3 and the final two.'],
+    ['📜', 'Recent games', 'The Royale lobby shows how your last 8 games went.'],
+  ],
   97: [
     ['🛺', 'Golf carts on Jackpot Island', 'Pink golf carts are parked all over the island (they\'re on your map). Hold E to hop in, drive about twice as fast as you can sprint, and press E to hop out. Your friends see you cruising.'],
     ['⭕', 'Final circle', 'After the last circle settles, it holds for 30 seconds and then closes all the way, so every match ends with a winner.'],
@@ -710,6 +716,7 @@ export class Hub {
               <li>💰 Chips and XP by placement and kills. <b>Your stash stays home</b>: nothing is at risk.</li>
             </ul>
             <div class="royalestats"><span>🏆 Wins <b>${fmt(s.royaleWins || 0)}</b></span><span>🎯 Best <b>${s.royaleBest ? `#${s.royaleBest}` : '-'}</b></span><span>💀 Kills <b>${fmt(s.royaleKills || 0)}</b></span><span>🎮 Games <b>${fmt(s.royaleGames || 0)}</b></span></div>
+            ${(s.royaleHistory || []).length ? `<div class="rhist"><small>Last games</small>${s.royaleHistory.slice().reverse().map((g) => `<span class="${g.place === 1 ? 'win' : g.place <= 10 ? 'top' : ''}">${g.place === 1 ? '👑' : `#${g.place}`}<i>${g.kills}💀</i></span>`).join('')}</div>` : ''}
           </section>
         </div>
       </section>`;

@@ -6,6 +6,7 @@
 import * as THREE from 'three';
 import { buildPartyBus } from './lobby.js';
 import { keyName } from './keys.js';
+import { sfx } from './audio.js';
 
 export const ROYALE_SIZE = 40;
 // How long the party bus takes to cross the island, and how high it flies.
@@ -111,6 +112,7 @@ export class Royale {
     this.over = false;
     this.buildVisuals();
     this.buildCarts(rnd);
+    this.rainAt = 150 + rnd() * 60;
   }
 
   // Where the circle is right now (and where it's heading), from the raid clock.
@@ -366,6 +368,45 @@ export class Royale {
         if (c.isPlayer) raid.hud.hurtFlash && raid.hud.hurtFlash();
       }
     }
+    // Big moments as the field thins out.
+    const n = this.left();
+    if (this.lastLeft !== undefined && raid.player && raid.player.alive) {
+      for (const mark of [10, 5, 3, 2]) {
+        if (this.lastLeft > mark && n <= mark) {
+          raid.hud.toast(mark === 2 ? '⚔️ FINAL TWO! It\'s you or them.' : `👥 ${mark} left${mark === 10 ? ': you made the top 10!' : mark === 3 ? '. Top 3!' : '!'}`, 'big');
+          sfx.alert();
+          break;
+        }
+      }
+    }
+    this.lastLeft = n;
+    // Money Rain: once a match, a pile of chips comes down somewhere inside the next circle.
+    if (!raid.isClient && !this.rained && t >= this.rainAt) {
+      this.rained = true;
+      const ring = s.next;
+      const a = Math.random() * Math.PI * 2;
+      const d = Math.sqrt(Math.random()) * ring.r * 0.6;
+      const x = ring.x + Math.cos(a) * d;
+      const z = ring.z + Math.sin(a) * d;
+      this.rain = { x, z, left: 6, t: 0 };
+      const zn = raid.map.zones.find((q) => Math.abs(x - q.x) < q.w / 2 + 20 && Math.abs(z - q.z) < q.d / 2 + 20);
+      raid.hud.toast(`💸 MONEY RAIN${zn ? ` near ${zn.name}` : ''}! Chips are falling from the sky.`, 'big');
+      raid.feed(`💸 Money Rain${zn ? ` near ${zn.name}` : ''}: follow the green beam`);
+      const beam = new THREE.Mesh(new THREE.CylinderGeometry(1.4, 1.4, 120, 16, 1, true), new THREE.MeshBasicMaterial({ color: 0x5ee27a, transparent: true, opacity: 0.25, depthWrite: false, side: THREE.DoubleSide }));
+      beam.position.set(x, 60, z);
+      raid.scene.add(beam);
+      this.rainBeam = beam;
+    }
+    if (this.rain && this.rain.left > 0) {
+      this.rain.t -= dt;
+      if (this.rain.t <= 0) {
+        this.rain.t = 1;
+        this.rain.left -= 1;
+        const at = new THREE.Vector3(this.rain.x + (Math.random() - 0.5) * 8, 12, this.rain.z + (Math.random() - 0.5) * 8);
+        raid.chips.spawnBurst(at, 350 + Math.floor(Math.random() * 300), null, { speed: 7 });
+        if (this.rain.left === 0 && this.rainBeam) setTimeout(() => { if (this.rainBeam) raid.scene.remove(this.rainBeam); }, 20000);
+      }
+    }
     if (this.over || raid.isClient) return;
     // Last one (or one team) standing.
     const alive = raid.combatants.filter((c) => c.alive && (c.isPlayer || c.human || c.brain));
@@ -377,7 +418,7 @@ export class Royale {
   }
 
   dispose() {
-    for (const o of [this.wall, this.ring, this.edge, this.bus]) if (o) this.raid.scene.remove(o);
+    for (const o of [this.wall, this.ring, this.edge, this.bus, this.rainBeam]) if (o) this.raid.scene.remove(o);
     for (const cart of this.carts || []) this.raid.scene.remove(cart.group);
     for (const c of this.raid.combatants) { if (c.cartMesh) { c.char.root.remove(c.cartMesh); c.cartMesh = null; } c.cart = null; }
   }

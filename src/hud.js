@@ -931,6 +931,7 @@ export class Hud {
       const R = r.royale;
       title = R.place === 1 ? '👑 WINNER WINNER, CASINO DINNER!' : `#${R.place} OF ${R.of}`;
       line = `${R.place === 1 ? 'Last one standing. The House pays out.' : r.by ? `${escapeHtml(r.by)} got you.` : 'The House Edge got you.'} <b>${R.kills} kill${R.kills === 1 ? '' : 's'}</b> · prize <b>🪙 ${R.prize.chips.toLocaleString('en-US')}</b>`;
+      if (R.found) line += `<br><b class="streakline">🪙 +${R.found.toLocaleString('en-US')} in chips you picked up on the island</b>`;
       if (R.bet) line += `<br><b class="streakline ${R.bet.won ? '' : 'lost'}">🎲 ${R.bet.won ? `Your ${R.bet.label} bet hit! +🪙 ${R.bet.pay.toLocaleString('en-US')}` : `Your ${R.bet.label} bet missed (🪙 ${R.bet.stake.toLocaleString('en-US')} to the House)`}</b>`;
     } else if (r.tutorial && r.success) {
       title = '🎓 TUTORIAL COMPLETE!';
