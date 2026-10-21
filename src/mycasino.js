@@ -75,6 +75,7 @@ export const starText = (n) => '★'.repeat(n) + '☆'.repeat(5 - n);
 export const COVER_CHARGES = [0, 50, 250, 1000];
 export const PROMO_COST = 2000;
 export const PROMO_TIME = 180;
+export const BRIBE = 1500;
 
 // Upgrades for the whole place (bought once per level, kept forever).
 export const UPGRADES = {
@@ -645,17 +646,20 @@ export class MyCasino {
     const seated = this.T && this.T.seat ? this.T.seat.slot : null;
     for (let i = this.customers.length - 1; i >= 0; i--) {
       const cu = this.customers[i];
+      if (cu.robber && cu.bouncerT !== undefined && (cu.bouncerT -= dt) <= 0) { this.catchRobber(cu); continue; }
       let speed = 0;
       if (cu.state === 'walk' || cu.state === 'leave') {
         const wp = cu.path[0];
         if (!wp) {
           if (cu.state === 'leave') {
+            if (cu.robber && cu.stole) this.raid.hud.toast(`🦹 The robber got away with 🪙 ${fmt(cu.stole)}. Get Security, or be quicker next time!`);
             this.raid.scene.remove(cu.char.root);
             this.customers.splice(i, 1);
             continue;
           }
           // The inspector's done his rounds: off he goes.
           if (cu.inspector) { this.leave(cu); continue; }
+          if (cu.robber) { this.rob(cu); continue; }
           cu.state = 'use';
           cu.t = cu.kind === 'game' ? 8 + Math.random() * 10 : cu.kind === 'bar' ? 6 + Math.random() * 6 : 3 + Math.random() * 4;
           if (cu.slot !== null) {
@@ -668,7 +672,7 @@ export class MyCasino {
           const d = Math.hypot(dx, dz);
           if (d < 0.3) { const done = cu.path.shift(); if (cu.inspector && done.slot !== undefined) this.inspect(cu, done.slot); }
           else {
-            speed = 4;
+            speed = cu.speed || 4;
             const step = Math.min(d, speed * dt);
             cu.pos.x += (dx / d) * step;
             cu.pos.z += (dz / d) * step;
@@ -717,8 +721,67 @@ export class MyCasino {
     this.customers.push(cu);
     this.react(cu, '🕵️');
     const rigged = Object.values(this.layout.slots).filter((x) => x.rig).length;
-    this.raid.hud.toast(`🕵️ A Gaming Commission inspector just walked in!${rigged ? ` You have ${rigged} rigged table${rigged > 1 ? 's' : ''}: un-rig them at the Manager's desk before he gets there!` : ' Good thing everything\'s on the level.'}`, 'big');
+    this.raid.hud.toast(`🕵️ A Gaming Commission inspector just walked in!${rigged ? ` You have ${rigged} rigged table${rigged > 1 ? 's' : ''}: un-rig them (or bribe him) at the Manager's desk before he gets there!` : ' Good thing everything\'s on the level.'}`, 'big');
     sfx.alert();
+  }
+
+  // A robber makes a run for the vault. Tackle him (hold E) before he gets there, or after.
+  spawnRobber() {
+    const char = createCharacter({ color: 0x2b2140, hat: 'beanie', eyes: 'angry', mouth: 'grin', glasses: 'shades', neck: 'none' });
+    char.showTag(false);
+    const bag = part(new THREE.SphereGeometry(0.45, 10, 8), 0xf1e3c8);
+    bag.position.set(-0.4, 1.4, 0.45);
+    char.root.add(bag);
+    const pos = DOOR.clone();
+    char.root.position.copy(pos);
+    this.raid.scene.add(char.root);
+    const cage = new THREE.Vector3(this.L.cage.x, 0, this.L.cage.z + 1);
+    const cu = { char, pos, path: [new THREE.Vector3(-8, 0, 40), cage], state: 'walk', slot: null, t: 0, yaw: Math.PI, hop: 0, robber: true, kind: 'rob', stole: 0, speed: 3.4 };
+    cu.robSpot = {
+      spot: cu.pos, range: 2.8, searchTime: 0.35, searchLabel: 'Tackling…',
+      prompt: () => `<b>Hold ${keyName('use')}</b> 🦹 Tackle the robber!`,
+      open: (by) => { if (by.isPlayer) this.catchRobber(cu, by.name); },
+    };
+    this.customers.push(cu);
+    this.react(cu, '💰');
+    sfx.siren();
+    this.raid.hud.toast('🦹 A ROBBER is running for your vault! Catch him: run up and hold E.', 'big');
+    // A bouncer on the door grabs him before he gets far.
+    if (upLevel(casinoData(), 'security')) cu.bouncerT = 5;
+  }
+
+  // He got there: grab a quarter of the vault and run.
+  rob(cu) {
+    let took = 0;
+    updateCasino((c) => { took = Math.floor(c.vault * 0.25); c.vault -= took; });
+    cu.stole = took;
+    cu.speed = 5.5;
+    this.react(cu, '🤑');
+    this.raid.hud.toast(`🦹 The robber grabbed 🪙 ${fmt(took)} from the vault! Catch him before he's out the door!`, 'big');
+    this.leave(cu);
+  }
+
+  catchRobber(cu, by = 'You') {
+    if (!this.customers.includes(cu)) return;
+    const back = cu.stole + 300;
+    updateCasino((c) => { c.vault += back; });
+    this.raid.fx.confetti(cu.pos.clone().setY(2), 40);
+    this.raid.fx.number(cu.pos.clone().setY(3.5), `+🪙${fmt(back)}`, '#5ee27a', 1.6);
+    sfx.win();
+    this.raid.hud.toast(`🦹 ${by === 'You' ? 'Your bouncer' : esc(by)} tackled the robber!${cu.stole ? ` The 🪙 ${fmt(cu.stole)} is back` : ''} (+🪙 300 reward in the vault).`, 'big');
+    this.raid.scene.remove(cu.char.root);
+    this.customers.splice(this.customers.indexOf(cu), 1);
+    this.drawSigns();
+  }
+
+  // The inspector can be... persuaded.
+  bribe() {
+    const ins = this.customers.find((c) => c.inspector && c.state === 'walk');
+    if (!ins || !this.raid.casino.spend(BRIBE)) return;
+    this.react(ins, '💼');
+    this.leave(ins);
+    ins.inspector = false;
+    this.raid.hud.toast('💼 The inspector suddenly remembers another appointment.');
   }
 
   inspect(cu, slot) {
@@ -890,7 +953,7 @@ export class MyCasino {
 
   // ---------- each frame ----------
 
-  interactables() { return [...this.spots, ...(this.T ? this.T.interactables() : [])]; }
+  interactables() { return [...this.spots, ...this.customers.filter((c) => c.robber && c.robSpot).map((c) => c.robSpot), ...(this.T ? this.T.interactables() : [])]; }
 
   update(dt) {
     if (this.T) this.T.update(dt);
@@ -915,6 +978,8 @@ export class MyCasino {
     if (this.owner.me && !this.raid.isClient && this.items.size) {
       this.inspectT -= dt;
       if (this.inspectT <= 0) { this.inspectT = 240 + Math.random() * 180; this.spawnInspector(); }
+      this.robT = (this.robT ?? 200 + Math.random() * 200) - dt;
+      if (this.robT <= 0) { this.robT = 300 + Math.random() * 240; if (casinoData().vault > 500) this.spawnRobber(); }
     }
     const now = performance.now() / 1000;
     for (const it of this.items.values()) {
@@ -1012,6 +1077,7 @@ export class MyCasino {
         <span>🪙 You have <b>${fmt(chips)}</b></span>
       </div>
       <div class="bpbody"><div class="bplan"><div class="bwall">🎰 BACK WALL</div>${rows}<div class="bdoor">🚪 DOOR</div></div><div class="bdetail">${detail}</div></div>
+      ${this.customers.some((x) => x.inspector && x.state === 'walk') ? `<div class="bpromo bribe"><button class="btn" data-act="bribe" ${chips < BRIBE ? 'disabled' : ''}>💼 Bribe the inspector · 🪙 ${fmt(BRIBE)}</button><small>He's on the floor right now. Make him... leave early.</small></div>` : ''}
       <div class="bpromo">${this.promo > 0 ? `<b>🎉 Promo Night: ${Math.ceil(this.promo)}s left</b><small>Customers are pouring in and betting big.</small>` : `<button class="btn promobtn" data-act="promo" ${chips < PROMO_COST ? 'disabled' : ''}>🎉 Throw a Promo Night · 🪙 ${fmt(PROMO_COST)}</button><small>3 minutes: way more customers, +25% bets, confetti everywhere.</small>`}</div>
       <div class="bups"><b>🛠️ Upgrades</b><div>${Object.entries(UPGRADES).map(([k, u]) => {
         const lv = upLevel(c, k);
@@ -1035,6 +1101,7 @@ export class MyCasino {
     if (act === 'cell') this.sel = Number(b.dataset.i);
     else if (act === 'collect') { this.collect(); return; }
     else if (act === 'prank') { this.prank(b.dataset.f, b.dataset.p); return; }
+    else if (act === 'bribe') { this.bribe(); this.renderPanel(); return; }
     else if (act === 'promo') {
       if (this.promo > 0 || !this.raid.casino.spend(PROMO_COST)) return;
       this.startPromo();

@@ -187,6 +187,10 @@ function reelOdds(tier) {
 
 // The "what's new" card, shown once after an update.
 const WHATS_NEW = {
+  100: [
+    ['🦹', 'Vault robbers', 'Every so often a masked robber makes a run for your casino\'s vault. Run him down and hold E to tackle him. If he gets there he grabs a quarter of the vault, and you can still tackle him on his way out to get it back (plus a 🪙 300 reward). Hire Security and your bouncer handles it.'],
+    ['💼', 'Bribe the inspector', 'Inspector on the floor and your tables are rigged? 🪙 1,500 at the Manager\'s desk and he suddenly has somewhere else to be.'],
+  ],
   99: [
     ['🎆', 'Launch pads', 'Glowing green pads all over Jackpot Island (they\'re on your map). Step on one and you\'re flung 30 meters up, then your chute opens and you glide about 90 meters. Bots use them too.'],
     ['🕵️', 'The Gaming Commission', 'Every few minutes an inspector walks through your casino checking every game. Any rigged table he catches costs you a 🪙 2,500 fine out of the vault (and he un-rigs it). You get a warning when he walks in, so you can un-rig fast at the Manager\'s desk.'],

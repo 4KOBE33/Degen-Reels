@@ -1816,3 +1816,4 @@ body.outzone #hud::after { content: ''; position: fixed; inset: 0; pointer-event
 .rhist span i { font: 700 10px var(--body); font-style: normal; opacity: 0.75; }
 .rhist span.top { background: rgba(46, 230, 214, 0.18); }
 .rhist span.win { background: rgba(255, 210, 63, 0.3); }
+.bpromo.bribe { background: rgba(212, 166, 58, 0.18); }
